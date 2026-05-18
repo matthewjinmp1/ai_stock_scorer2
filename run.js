@@ -1,5 +1,6 @@
 const params = new URLSearchParams(window.location.search);
 const runSelect = document.querySelector("#runSelect");
+const rerunButton = document.querySelector("#rerunButton");
 const runTitle = document.querySelector("#runTitle");
 const runPrompt = document.querySelector("#runPrompt");
 const runStatus = document.querySelector("#runStatus");
@@ -9,6 +10,7 @@ const resultRows = document.querySelector("#resultRows");
 
 let currentRunId = params.get("id");
 let pollTimer = null;
+let currentRun = null;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -46,9 +48,11 @@ async function loadRunList() {
     history.replaceState(null, "", `/run.html?id=${currentRunId}`);
   }
   if (currentRunId) runSelect.value = currentRunId;
+  rerunButton.disabled = !currentRunId;
 }
 
 function renderRun(run) {
+  currentRun = run;
   runTitle.textContent = `Run #${run.id}`;
   runPrompt.textContent = run.prompt;
   runStatus.textContent = `${run.status} ${progress(run)}`;
@@ -85,6 +89,8 @@ function renderRun(run) {
 
 async function loadCurrentRun() {
   if (!currentRunId) {
+    currentRun = null;
+    rerunButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
     resultRows.innerHTML = '<tr><td colspan="7">Create a scoring run first.</td></tr>';
     return;
@@ -100,12 +106,44 @@ async function loadCurrentRun() {
   }
 }
 
+async function rerunCurrentPrompt() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before rerunning.";
+    return;
+  }
+
+  rerunButton.disabled = true;
+  statusEl.textContent = "Starting rerun...";
+
+  try {
+    const response = await fetch("/api/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: currentRun.prompt }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not start rerun");
+
+    currentRunId = String(payload.runId);
+    history.replaceState(null, "", `/run.html?id=${currentRunId}`);
+    if (pollTimer) window.clearTimeout(pollTimer);
+    await loadRunList();
+    await loadCurrentRun();
+  } catch (error) {
+    statusEl.textContent = error.message;
+  } finally {
+    rerunButton.disabled = !currentRun;
+  }
+}
+
 runSelect.addEventListener("change", () => {
   currentRunId = runSelect.value;
   history.replaceState(null, "", `/run.html?id=${currentRunId}`);
   if (pollTimer) window.clearTimeout(pollTimer);
   loadCurrentRun();
 });
+
+rerunButton.addEventListener("click", rerunCurrentPrompt);
 
 if ("EventSource" in window) {
   const events = new EventSource("/events");

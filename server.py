@@ -336,6 +336,27 @@ def parse_numeric_score(text):
     return float(match.group(0))
 
 
+class FatalScoringError(RuntimeError):
+    pass
+
+
+def openrouter_error_message(error):
+    try:
+        body = error.read().decode("utf-8", "replace")
+    except Exception:
+        body = ""
+    message = f"OpenRouter HTTP {error.code}: {error.reason}"
+    if body:
+        try:
+            payload = json.loads(body)
+            detail = payload.get("error", {}).get("message") or payload.get("message")
+            if detail:
+                message = f"{message} - {detail}"
+        except json.JSONDecodeError:
+            message = f"{message} - {body[:300]}"
+    return message
+
+
 def call_openrouter(prompt, company, model):
     api_key = os.environ.get("OPENROUTER_KEY")
     if not api_key:
@@ -378,8 +399,14 @@ def call_openrouter(prompt, company, model):
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=60) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        message = openrouter_error_message(exc)
+        if exc.code in (401, 403):
+            raise FatalScoringError(message) from exc
+        raise RuntimeError(message) from exc
     return payload["choices"][0]["message"]["content"].strip()
 
 
@@ -443,6 +470,9 @@ def score_run_worker(run_id):
             try:
                 raw_response = call_openrouter(run["prompt"], company, run["model"])
                 score = parse_numeric_score(raw_response)
+            except FatalScoringError as exc:
+                fatal_error = str(exc)
+                break
             except Exception as exc:
                 error = str(exc)
 
