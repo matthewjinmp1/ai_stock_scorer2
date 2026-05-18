@@ -357,32 +357,20 @@ def openrouter_error_message(error):
     return message
 
 
+def prompt_for_company(prompt, company):
+    return prompt.strip().replace("COMPANY", company["name"])
+
+
 def call_openrouter(prompt, company, model):
     api_key = os.environ.get("OPENROUTER_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_KEY is not set")
 
-    user_prompt = (
-        f"{prompt.strip()}\n\n"
-        "Return only one numeric score. Do not include explanation, labels, punctuation, or units.\n\n"
-        "Company data:\n"
-        f"Name: {company['name']}\n"
-        f"Ticker: {company['ticker']}\n"
-        f"Market cap: {company['marketCap']}\n"
-        f"Market cap numeric USD: {company['marketCapValue']}\n"
-        f"Share price: {company['price']}\n"
-        f"Country: {company['country']}\n"
-        f"CompaniesMarketCap rank: {company['rank']}\n"
-    )
     body = json.dumps(
         {
             "model": model,
             "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a quantitative stock scoring engine. Return only a number.",
-                },
-                {"role": "user", "content": user_prompt},
+                {"role": "user", "content": prompt_for_company(prompt, company)},
             ],
             "temperature": 0,
             "max_tokens": 20,
