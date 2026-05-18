@@ -1,0 +1,120 @@
+const params = new URLSearchParams(window.location.search);
+const runSelect = document.querySelector("#runSelect");
+const runTitle = document.querySelector("#runTitle");
+const runPrompt = document.querySelector("#runPrompt");
+const runStatus = document.querySelector("#runStatus");
+const runCount = document.querySelector("#runCount");
+const statusEl = document.querySelector("#status");
+const resultRows = document.querySelector("#resultRows");
+
+let currentRunId = params.get("id");
+let pollTimer = null;
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatScore(score) {
+  if (score === null || score === undefined) return "";
+  return Number(score).toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function progress(run) {
+  return `${run.completed_count + run.failed_count}/${run.company_count}`;
+}
+
+async function loadRunList() {
+  const response = await fetch("/api/runs");
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "Could not load runs");
+
+  runSelect.innerHTML = "";
+  for (const run of payload.runs) {
+    const option = document.createElement("option");
+    option.value = run.id;
+    option.textContent = `#${run.id} - ${run.status} - ${run.prompt.slice(0, 80)}`;
+    runSelect.append(option);
+  }
+
+  if (!currentRunId && payload.runs[0]) {
+    currentRunId = String(payload.runs[0].id);
+    history.replaceState(null, "", `/run.html?id=${currentRunId}`);
+  }
+  if (currentRunId) runSelect.value = currentRunId;
+}
+
+function renderRun(run) {
+  runTitle.textContent = `Run #${run.id}`;
+  runPrompt.textContent = run.prompt;
+  runStatus.textContent = `${run.status} ${progress(run)}`;
+  runCount.textContent = String(run.results.length);
+  statusEl.textContent = run.error || `Model: ${run.model}`;
+
+  if (!run.results.length) {
+    resultRows.innerHTML = '<tr><td colspan="7">Waiting for scores...</td></tr>';
+    return;
+  }
+
+  resultRows.innerHTML = run.results
+    .map((result, index) => {
+      const error = result.error ? escapeHtml(result.error) : "";
+      return `
+        <tr>
+          <td>${index + 1}</td>
+          <td><strong>${formatScore(result.score)}</strong></td>
+          <td>
+            <div>
+              <strong>${escapeHtml(result.company_name)}</strong>
+              <span class="ticker">${escapeHtml(result.ticker)}</span>
+            </div>
+          </td>
+          <td>${result.rank}</td>
+          <td>${escapeHtml(result.market_cap)}</td>
+          <td>${escapeHtml(result.country)}</td>
+          <td class="error-cell">${error}</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+async function loadCurrentRun() {
+  if (!currentRunId) {
+    statusEl.textContent = "No saved runs yet.";
+    resultRows.innerHTML = '<tr><td colspan="7">Create a scoring run first.</td></tr>';
+    return;
+  }
+
+  const response = await fetch(`/api/runs/${currentRunId}`);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "Could not load run");
+  renderRun(payload.run);
+
+  if (payload.run.status === "queued" || payload.run.status === "running") {
+    pollTimer = window.setTimeout(loadCurrentRun, 2500);
+  }
+}
+
+runSelect.addEventListener("change", () => {
+  currentRunId = runSelect.value;
+  history.replaceState(null, "", `/run.html?id=${currentRunId}`);
+  if (pollTimer) window.clearTimeout(pollTimer);
+  loadCurrentRun();
+});
+
+if ("EventSource" in window) {
+  const events = new EventSource("/events");
+  events.addEventListener("reload", () => window.location.reload());
+}
+
+try {
+  await loadRunList();
+  await loadCurrentRun();
+} catch (error) {
+  statusEl.textContent = error.message;
+}

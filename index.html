@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Stock Scorer</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">AI Stock Scorer</p>
+          <h1>Score the top 100 stocks with one prompt</h1>
+          <p class="lede">Enter a quantitative scoring prompt. The server runs it against the stored company universe and saves the ranking for later.</p>
+        </div>
+        <div class="hero-stat">
+          <span id="updatedLabel">Stored universe</span>
+          <strong id="countLabel">0</strong>
+          <small>companies ready</small>
+        </div>
+      </section>
+
+      <section class="prompt-panel" aria-label="Run stock scoring prompt">
+        <label>
+          <span>Prompt</span>
+          <textarea id="promptInput" rows="5" placeholder="Example: Give this company a competitive moat score from 0 to 100. Return only the number."></textarea>
+        </label>
+        <div class="actions">
+          <button id="runButton" type="button">Run score</button>
+          <a class="secondary-link" href="/run.html">Open saved rankings</a>
+        </div>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+
+      <section class="table-wrap" aria-label="Saved scoring runs">
+        <table>
+          <thead>
+            <tr>
+              <th>Run</th>
+              <th>Prompt</th>
+              <th>Status</th>
+              <th>Progress</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="runRows"></tbody>
+        </table>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

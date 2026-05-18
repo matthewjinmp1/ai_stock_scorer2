@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stock Score Ranking</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero compact-hero">
+        <div>
+          <p class="eyebrow">Saved Ranking</p>
+          <h1 id="runTitle">Stock Score Ranking</h1>
+          <p id="runPrompt" class="lede"></p>
+        </div>
+        <div class="hero-stat">
+          <span id="runStatus">Loading...</span>
+          <strong id="runCount">0</strong>
+          <small>results</small>
+        </div>
+      </section>
+
+      <section class="toolbar result-toolbar" aria-label="Ranking controls">
+        <label class="search">
+          <span>Saved runs</span>
+          <select id="runSelect"></select>
+        </label>
+        <a class="secondary-link" href="/">New prompt</a>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+
+      <section class="table-wrap" aria-label="Stock score ranking">
+        <table>
+          <thead>
+            <tr>
+              <th>Score Rank</th>
+              <th>Score</th>
+              <th>Company</th>
+              <th>Market Cap Rank</th>
+              <th>Market Cap</th>
+              <th>Country</th>
+              <th>Error</th>
+            </tr>
+          </thead>
+          <tbody id="resultRows"></tbody>
+        </table>
+      </section>
+    </main>
+    <script src="/run.js" type="module"></script>
+  </body>
+</html>

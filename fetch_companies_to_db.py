@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+import argparse
+import sqlite3
+import time
+from pathlib import Path
+
+from server import SOURCE_URL, _fetch_html, _parse_companies
+
+
+ROOT = Path(__file__).resolve().parent
+DEFAULT_DB_PATH = ROOT / "companies.db"
+
+
+def connect(db_path):
+    connection = sqlite3.connect(db_path)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def create_schema(connection):
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS companies (
+            ticker TEXT PRIMARY KEY,
+            rank INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            market_cap TEXT NOT NULL,
+            market_cap_value INTEGER NOT NULL,
+            price TEXT NOT NULL,
+            today TEXT NOT NULL,
+            country TEXT NOT NULL,
+            logo TEXT NOT NULL,
+            source_url TEXT NOT NULL,
+            fetched_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_companies_rank ON companies(rank);
+        CREATE INDEX IF NOT EXISTS idx_companies_market_cap_value ON companies(market_cap_value DESC);
+
+        CREATE TABLE IF NOT EXISTS fetch_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_url TEXT NOT NULL,
+            company_count INTEGER NOT NULL,
+            fetched_at INTEGER NOT NULL
+        );
+        """
+    )
+    connection.commit()
+
+
+def upsert_companies(connection, companies, fetched_at):
+    rows = [
+        (
+            company["ticker"],
+            company["rank"],
+            company["name"],
+            company["marketCap"],
+            company["marketCapValue"],
+            company["price"],
+            company["today"],
+            company["country"],
+            company["logo"],
+            SOURCE_URL,
+            fetched_at,
+            fetched_at,
+        )
+        for company in companies
+    ]
+
+    with connection:
+        connection.executemany(
+            """
+            INSERT INTO companies (
+                ticker, rank, name, market_cap, market_cap_value, price, today,
+                country, logo, source_url, fetched_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(ticker) DO UPDATE SET
+                rank = excluded.rank,
+                name = excluded.name,
+                market_cap = excluded.market_cap,
+                market_cap_value = excluded.market_cap_value,
+                price = excluded.price,
+                today = excluded.today,
+                country = excluded.country,
+                logo = excluded.logo,
+                source_url = excluded.source_url,
+                fetched_at = excluded.fetched_at,
+                updated_at = excluded.updated_at
+            """,
+            rows,
+        )
+        connection.execute(
+            """
+            INSERT INTO fetch_runs (source_url, company_count, fetched_at)
+            VALUES (?, ?, ?)
+            """,
+            (SOURCE_URL, len(companies), fetched_at),
+        )
+
+
+def fetch_top_companies(limit):
+    companies = _parse_companies(_fetch_html(SOURCE_URL))[:limit]
+    if len(companies) < limit:
+        raise RuntimeError(f"Expected {limit} companies, fetched {len(companies)}")
+    return companies
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Fetch top companies from CompaniesMarketCap.com into SQLite."
+    )
+    parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="SQLite database path.")
+    parser.add_argument("--limit", type=int, default=100, help="Number of companies to fetch.")
+    args = parser.parse_args()
+
+    db_path = Path(args.db).expanduser().resolve()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fetched_at = int(time.time())
+    companies = fetch_top_companies(args.limit)
+
+    with connect(db_path) as connection:
+        create_schema(connection)
+        upsert_companies(connection, companies, fetched_at)
+
+    print(f"Stored {len(companies)} companies in {db_path}")
+    print(f"Source: {SOURCE_URL}")
+
+
+if __name__ == "__main__":
+    main()
