@@ -19,6 +19,7 @@ CACHE_SECONDS = 60 * 15
 DB_PATH = ROOT / "companies.db"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
+SCORING_COMPANY_LIMIT = 10
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
@@ -244,13 +245,17 @@ def db_companies():
     return [row_to_company(row) for row in rows]
 
 
+def scoring_companies():
+    return db_companies()[:SCORING_COMPANY_LIMIT]
+
+
 def create_scoring_run(prompt, model):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
     if not prompt_has_company_keyword(prompt):
         raise ValueError("Prompt must include the COMPANY keyword.")
 
-    companies = db_companies()
+    companies = scoring_companies()
     if not companies:
         raise RuntimeError("No companies found. Run ./fetch_companies_to_db.py first.")
 
@@ -456,7 +461,7 @@ def score_run_worker(run_id):
 
     fatal_error = None
     try:
-        companies = db_companies()
+        companies = scoring_companies()
         for company in companies:
             raw_response = None
             score = None
