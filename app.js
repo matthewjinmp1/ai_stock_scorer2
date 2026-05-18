@@ -74,6 +74,11 @@ async function createRun() {
     promptInput.focus();
     return;
   }
+  if (!prompt.includes("COMPANY")) {
+    statusEl.textContent = "Your prompt must include the COMPANY keyword.";
+    promptInput.focus();
+    return;
+  }
 
   runButton.disabled = true;
   statusEl.textContent = "Creating scoring run...";

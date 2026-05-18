@@ -43,6 +43,10 @@ def openrouter_model():
     return os.environ.get("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
 
 
+def prompt_has_company_keyword(prompt):
+    return "COMPANY" in prompt
+
+
 def _clean(value):
     value = re.sub(r"<[^>]+>", " ", value)
     value = html.unescape(value)
@@ -243,6 +247,8 @@ def db_companies():
 def create_scoring_run(prompt, model):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
+    if not prompt_has_company_keyword(prompt):
+        raise ValueError("Prompt must include the COMPANY keyword.")
 
     companies = db_companies()
     if not companies:
@@ -586,6 +592,9 @@ class Handler(SimpleHTTPRequestHandler):
                 prompt = (payload.get("prompt") or "").strip()
                 if not prompt:
                     self.send_json({"error": "Prompt is required"}, 400)
+                    return
+                if not prompt_has_company_keyword(prompt):
+                    self.send_json({"error": "Prompt must include the COMPANY keyword."}, 400)
                     return
                 run_id = create_scoring_run(prompt, openrouter_model())
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
