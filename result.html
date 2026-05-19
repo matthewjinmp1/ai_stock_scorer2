@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="shell">
+    <main class="shell detail-shell">
       <section class="hero compact-hero">
         <div>
           <p class="eyebrow">AI Request Detail</p>
@@ -15,7 +15,7 @@
           <p id="subtitle" class="lede"></p>
         </div>
         <div class="hero-stat">
-          <span id="scoreLabel">Score</span>
+          <span>Score</span>
           <strong id="scoreValue">--</strong>
           <small id="tickerLabel"></small>
         </div>
@@ -27,25 +27,77 @@
 
       <p id="status" class="status" role="status"></p>
 
+      <section class="metric-grid" aria-label="Request summary">
+        <article class="metric-card">
+          <span>Total Tokens</span>
+          <strong id="totalTokens">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Prompt Tokens</span>
+          <strong id="promptTokens">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Completion Tokens</span>
+          <strong id="completionTokens">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Cost</span>
+          <strong id="costValue">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Latency</span>
+          <strong id="latencyValue">--</strong>
+        </article>
+      </section>
+
+      <section class="detail-grid">
+        <article class="detail-panel readable-panel">
+          <div class="panel-heading">
+            <h2>Prompt Sent</h2>
+            <span id="promptLength"></span>
+          </div>
+          <p id="promptSent" class="text-block"></p>
+        </article>
+
+        <article class="detail-panel response-panel">
+          <div class="panel-heading">
+            <h2>AI Response</h2>
+            <span id="finishReason"></span>
+          </div>
+          <div class="response-score" id="responseContent">--</div>
+          <p id="responseError" class="error-cell"></p>
+        </article>
+      </section>
+
       <section class="detail-grid">
         <article class="detail-panel">
-          <h2>Prompt Sent</h2>
-          <pre id="promptSent"></pre>
-        </article>
-
-        <article class="detail-panel">
-          <h2>AI Response</h2>
-          <pre id="aiResponse"></pre>
-        </article>
-
-        <article class="detail-panel">
-          <h2>Token Stats</h2>
-          <pre id="tokenStats"></pre>
+          <h2>Token Breakdown</h2>
+          <div class="token-bars">
+            <div class="token-row">
+              <div><span>Prompt</span><strong id="promptTokenLabel">--</strong></div>
+              <div class="bar"><span id="promptTokenBar"></span></div>
+            </div>
+            <div class="token-row">
+              <div><span>Completion</span><strong id="completionTokenLabel">--</strong></div>
+              <div class="bar"><span id="completionTokenBar"></span></div>
+            </div>
+            <div class="token-row">
+              <div><span>Reasoning</span><strong id="reasoningTokenLabel">--</strong></div>
+              <div class="bar"><span id="reasoningTokenBar"></span></div>
+            </div>
+          </div>
         </article>
 
         <article class="detail-panel">
           <h2>Request Metadata</h2>
-          <pre id="metadata"></pre>
+          <dl class="metadata-list">
+            <div><dt>Run</dt><dd id="runIdValue">--</dd></div>
+            <div><dt>Request Model</dt><dd id="requestModel">--</dd></div>
+            <div><dt>Response Model</dt><dd id="responseModel">--</dd></div>
+            <div><dt>HTTP Status</dt><dd id="httpStatus">--</dd></div>
+            <div><dt>Reasoning Setting</dt><dd id="reasoningSetting">--</dd></div>
+            <div><dt>Created</dt><dd id="createdAt">--</dd></div>
+          </dl>
         </article>
       </section>
     </main>

@@ -2,26 +2,80 @@ const params = new URLSearchParams(window.location.search);
 const runId = params.get("run");
 const ticker = params.get("ticker");
 
-const titleEl = document.querySelector("#title");
-const subtitleEl = document.querySelector("#subtitle");
-const scoreValue = document.querySelector("#scoreValue");
-const tickerLabel = document.querySelector("#tickerLabel");
-const backLink = document.querySelector("#backLink");
-const statusEl = document.querySelector("#status");
-const promptSent = document.querySelector("#promptSent");
-const aiResponse = document.querySelector("#aiResponse");
-const tokenStats = document.querySelector("#tokenStats");
-const metadata = document.querySelector("#metadata");
+const els = {
+  title: document.querySelector("#title"),
+  subtitle: document.querySelector("#subtitle"),
+  scoreValue: document.querySelector("#scoreValue"),
+  tickerLabel: document.querySelector("#tickerLabel"),
+  backLink: document.querySelector("#backLink"),
+  status: document.querySelector("#status"),
+  totalTokens: document.querySelector("#totalTokens"),
+  promptTokens: document.querySelector("#promptTokens"),
+  completionTokens: document.querySelector("#completionTokens"),
+  costValue: document.querySelector("#costValue"),
+  latencyValue: document.querySelector("#latencyValue"),
+  promptSent: document.querySelector("#promptSent"),
+  promptLength: document.querySelector("#promptLength"),
+  responseContent: document.querySelector("#responseContent"),
+  finishReason: document.querySelector("#finishReason"),
+  responseError: document.querySelector("#responseError"),
+  promptTokenLabel: document.querySelector("#promptTokenLabel"),
+  completionTokenLabel: document.querySelector("#completionTokenLabel"),
+  reasoningTokenLabel: document.querySelector("#reasoningTokenLabel"),
+  promptTokenBar: document.querySelector("#promptTokenBar"),
+  completionTokenBar: document.querySelector("#completionTokenBar"),
+  reasoningTokenBar: document.querySelector("#reasoningTokenBar"),
+  runIdValue: document.querySelector("#runIdValue"),
+  requestModel: document.querySelector("#requestModel"),
+  responseModel: document.querySelector("#responseModel"),
+  httpStatus: document.querySelector("#httpStatus"),
+  reasoningSetting: document.querySelector("#reasoningSetting"),
+  createdAt: document.querySelector("#createdAt"),
+};
 
-function pretty(value) {
-  if (value === undefined || value === null || value === "") return "--";
-  if (typeof value === "string") return value;
-  return JSON.stringify(value, null, 2);
+function text(value, fallback = "--") {
+  return value === undefined || value === null || value === "" ? fallback : String(value);
 }
 
-function formatScore(score) {
-  if (score === null || score === undefined) return "--";
-  return Number(score).toLocaleString(undefined, { maximumFractionDigits: 4 });
+function formatNumber(value) {
+  if (value === null || value === undefined) return "--";
+  return Number(value).toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function formatCost(value) {
+  if (value === null || value === undefined) return "--";
+  return `$${Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: 6,
+    maximumFractionDigits: 8,
+  })}`;
+}
+
+function formatMs(value) {
+  if (value === null || value === undefined) return "--";
+  return `${Number(value).toLocaleString()} ms`;
+}
+
+function formatDate(timestamp) {
+  if (!timestamp) return "--";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(timestamp * 1000));
+}
+
+function setBar(el, value, total) {
+  const width = total > 0 ? Math.max(2, Math.round((value / total) * 100)) : 0;
+  el.style.width = `${width}%`;
+}
+
+function reasoningText(reasoning) {
+  if (!reasoning) return "Not logged";
+  const effort = reasoning.effort ? `effort: ${reasoning.effort}` : "";
+  const exclude = reasoning.exclude !== undefined ? `exclude: ${reasoning.exclude}` : "";
+  return [effort, exclude].filter(Boolean).join(", ") || "Configured";
 }
 
 async function loadDetail() {
@@ -29,7 +83,7 @@ async function loadDetail() {
     throw new Error("Missing run or ticker.");
   }
 
-  backLink.href = `/run.html?id=${encodeURIComponent(runId)}`;
+  els.backLink.href = `/run.html?id=${encodeURIComponent(runId)}`;
 
   const response = await fetch(
     `/api/runs/${encodeURIComponent(runId)}/results/${encodeURIComponent(ticker)}`
@@ -38,34 +92,50 @@ async function loadDetail() {
   if (!response.ok) throw new Error(payload.error || "Could not load result detail");
 
   const { run, result, aiRequest } = payload.detail;
-  const request = aiRequest?.request;
-  const aiResponseData = aiRequest?.response;
+  const request = aiRequest?.request || {};
+  const responseData = aiRequest?.response || {};
+  const tokens = aiRequest?.token_stats || {};
+  const completionDetails = tokens.completion_tokens_details || {};
 
-  titleEl.textContent = result.company_name;
-  subtitleEl.textContent = `Run #${run.id} • ${result.ticker} • ${run.model}`;
-  scoreValue.textContent = formatScore(result.score);
-  tickerLabel.textContent = result.ticker;
-  statusEl.textContent = result.error || run.error || "Loaded request detail.";
+  const prompt = request.prompt_sent || "";
+  const visibleResponse = responseData.visible_content ?? result.raw_response;
+  const error = responseData.error?.message || responseData.error || result.error || "";
+  const total = Number(tokens.total_tokens || 0);
+  const promptTokenCount = Number(tokens.prompt_tokens || 0);
+  const completionTokenCount = Number(tokens.completion_tokens || 0);
+  const reasoningTokenCount = Number(completionDetails.reasoning_tokens || 0);
 
-  promptSent.textContent = pretty(request?.prompt_sent);
-  aiResponse.textContent = pretty({
-    visible_content: aiResponseData?.visible_content ?? result.raw_response,
-    finish_reason: aiResponseData?.finish_reason,
-    error: aiResponseData?.error ?? result.error,
-  });
-  tokenStats.textContent = pretty(aiRequest?.token_stats);
-  metadata.textContent = pretty({
-    run_id: run.id,
-    ticker: result.ticker,
-    company_name: result.company_name,
-    score: result.score,
-    request_model: request?.model,
-    response_model: aiResponseData?.model,
-    http_status: aiResponseData?.http_status,
-    timing: aiRequest?.timing,
-    reasoning: request?.reasoning,
-    created_at: result.created_at,
-  });
+  els.title.textContent = result.company_name;
+  els.subtitle.textContent = `Run #${run.id} • ${result.ticker} • ${run.model}`;
+  els.scoreValue.textContent = formatNumber(result.score);
+  els.tickerLabel.textContent = result.ticker;
+  els.status.textContent = error ? "Request completed with an error." : "Request completed successfully.";
+
+  els.totalTokens.textContent = formatNumber(total);
+  els.promptTokens.textContent = formatNumber(promptTokenCount);
+  els.completionTokens.textContent = formatNumber(completionTokenCount);
+  els.costValue.textContent = formatCost(tokens.cost);
+  els.latencyValue.textContent = formatMs(aiRequest?.timing?.duration_ms);
+
+  els.promptSent.textContent = prompt || "--";
+  els.promptLength.textContent = prompt ? `${prompt.length.toLocaleString()} chars` : "";
+  els.responseContent.textContent = text(visibleResponse);
+  els.finishReason.textContent = responseData.finish_reason ? `finish: ${responseData.finish_reason}` : "";
+  els.responseError.textContent = typeof error === "string" ? error : JSON.stringify(error);
+
+  els.promptTokenLabel.textContent = formatNumber(promptTokenCount);
+  els.completionTokenLabel.textContent = formatNumber(completionTokenCount);
+  els.reasoningTokenLabel.textContent = formatNumber(reasoningTokenCount);
+  setBar(els.promptTokenBar, promptTokenCount, total);
+  setBar(els.completionTokenBar, completionTokenCount, total);
+  setBar(els.reasoningTokenBar, reasoningTokenCount, total);
+
+  els.runIdValue.textContent = `#${run.id}`;
+  els.requestModel.textContent = text(request.model);
+  els.responseModel.textContent = text(responseData.model);
+  els.httpStatus.textContent = text(responseData.http_status);
+  els.reasoningSetting.textContent = reasoningText(request.reasoning);
+  els.createdAt.textContent = formatDate(result.created_at);
 }
 
 if ("EventSource" in window) {
@@ -76,5 +146,5 @@ if ("EventSource" in window) {
 try {
   await loadDetail();
 } catch (error) {
-  statusEl.textContent = error.message;
+  els.status.textContent = error.message;
 }
