@@ -475,6 +475,7 @@ def ai_log_entry(run_id, company, request_payload, started_at, response_payload=
             "messages": request_payload.get("messages"),
             "temperature": request_payload.get("temperature"),
             "max_tokens": request_payload.get("max_tokens"),
+            "reasoning": request_payload.get("reasoning"),
             "prompt_sent": request_payload["messages"][0]["content"],
         },
         "response": {
@@ -509,6 +510,10 @@ def call_openrouter(prompt, company, model, run_id=None):
         ],
         "temperature": 0,
         "max_tokens": openrouter_max_tokens(),
+        "reasoning": {
+            "effort": "none",
+            "exclude": True,
+        },
     }
     body = json.dumps(request_payload).encode("utf-8")
     request = urllib.request.Request(

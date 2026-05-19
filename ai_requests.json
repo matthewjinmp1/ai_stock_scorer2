@@ -2873,5 +2873,459 @@
       },
       "total_tokens": 131
     }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 1,
+      "name": "NVIDIA",
+      "ticker": "NVDA"
+    },
+    "request": {
+      "max_tokens": 20,
+      "messages": [
+        {
+          "content": "score NVIDIA from 0 to 100 based on how innovative the company is. only return the number score.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "score NVIDIA from 0 to 100 based on how innovative the company is. only return the number score.",
+      "provider": "openrouter",
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779211204,
+      "error": {
+        "message": "'NoneType' object has no attribute 'strip'",
+        "type": "AttributeError"
+      },
+      "finish_reason": "length",
+      "http_status": 200,
+      "id": "gen-1779211204-Jr337llqNKytRBNK2JhV",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": null,
+              "reasoning": "We need to score NVIDIA from 0 to 100 based on innovation. NVIDIA is a leader in",
+              "reasoning_details": [
+                {
+                  "format": "unknown",
+                  "index": 0,
+                  "text": "We need to score NVIDIA from 0 to 100 based on innovation. NVIDIA is a leader in",
+                  "type": "reasoning.text"
+                }
+              ],
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "length"
+          }
+        ],
+        "created": 1779211204,
+        "id": "gen-1779211204-Jr337llqNKytRBNK2JhV",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "GMICloud",
+        "system_fingerprint": "fp_8b330d02d0_prod0820_fp8_kvcache_20260402",
+        "usage": {
+          "completion_tokens": 20,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 20
+          },
+          "cost": 7.31808e-06,
+          "cost_details": {
+            "upstream_inference_completions_cost": 4.48e-06,
+            "upstream_inference_cost": 7.392e-06,
+            "upstream_inference_prompt_cost": 2.912e-06
+          },
+          "is_byok": false,
+          "prompt_tokens": 26,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 46
+        }
+      },
+      "success": false,
+      "visible_content": null
+    },
+    "run_id": 11,
+    "timestamp": 1779211209,
+    "timing": {
+      "duration_ms": 4519
+    },
+    "token_stats": {
+      "completion_tokens": 20,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 20
+      },
+      "cost": 7.31808e-06,
+      "cost_details": {
+        "upstream_inference_completions_cost": 4.48e-06,
+        "upstream_inference_cost": 7.392e-06,
+        "upstream_inference_prompt_cost": 2.912e-06
+      },
+      "is_byok": false,
+      "prompt_tokens": 26,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 46
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 2,
+      "name": "Alphabet (Google)",
+      "ticker": "GOOG"
+    },
+    "request": {
+      "max_tokens": 20,
+      "messages": [
+        {
+          "content": "score Alphabet (Google) from 0 to 100 based on how innovative the company is. only return the number score.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "score Alphabet (Google) from 0 to 100 based on how innovative the company is. only return the number score.",
+      "provider": "openrouter",
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779211209,
+      "error": {
+        "message": "'NoneType' object has no attribute 'strip'",
+        "type": "AttributeError"
+      },
+      "finish_reason": "length",
+      "http_status": 200,
+      "id": "gen-1779211209-zTexMRUDo93UitpctLlX",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": null,
+              "reasoning": "We need to score Alphabet (Google) on innovation from 0 to 100. Only return number",
+              "reasoning_details": [
+                {
+                  "format": "unknown",
+                  "index": 0,
+                  "text": "We need to score Alphabet (Google) on innovation from 0 to 100. Only return number",
+                  "type": "reasoning.text"
+                }
+              ],
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "length"
+          }
+        ],
+        "created": 1779211209,
+        "id": "gen-1779211209-zTexMRUDo93UitpctLlX",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "Baidu",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 20,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 20
+          },
+          "cost": 7.309764e-06,
+          "cost_details": {
+            "upstream_inference_completions_cost": 5.04e-06,
+            "upstream_inference_cost": 7.3836e-06,
+            "upstream_inference_prompt_cost": 2.3436e-06
+          },
+          "is_byok": false,
+          "prompt_tokens": 29,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 13,
+            "video_tokens": 0
+          },
+          "total_tokens": 49
+        }
+      },
+      "success": false,
+      "visible_content": null
+    },
+    "run_id": 11,
+    "timestamp": 1779211211,
+    "timing": {
+      "duration_ms": 2578
+    },
+    "token_stats": {
+      "completion_tokens": 20,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 20
+      },
+      "cost": 7.309764e-06,
+      "cost_details": {
+        "upstream_inference_completions_cost": 5.04e-06,
+        "upstream_inference_cost": 7.3836e-06,
+        "upstream_inference_prompt_cost": 2.3436e-06
+      },
+      "is_byok": false,
+      "prompt_tokens": 29,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 13,
+        "video_tokens": 0
+      },
+      "total_tokens": 49
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 3,
+      "name": "Apple",
+      "ticker": "AAPL"
+    },
+    "request": {
+      "max_tokens": 20,
+      "messages": [
+        {
+          "content": "score Apple from 0 to 100 based on how innovative the company is. only return the number score.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "score Apple from 0 to 100 based on how innovative the company is. only return the number score.",
+      "provider": "openrouter",
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779211211,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779211211-zQKzzS1TZXWRRpW266wm",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "75",
+              "reasoning": null,
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779211211,
+        "id": "gen-1779211211-zQKzzS1TZXWRRpW266wm",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "AkashML",
+        "system_fingerprint": "vllm-0.21.1rc1.dev98+g6e889b582-dp4-ep-a2e28142",
+        "usage": {
+          "completion_tokens": 2,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 4.158e-06,
+          "cost_details": {
+            "upstream_inference_completions_cost": 5.6e-07,
+            "upstream_inference_cost": 4.2e-06,
+            "upstream_inference_prompt_cost": 3.64e-06
+          },
+          "is_byok": false,
+          "prompt_tokens": 26,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 28
+        }
+      },
+      "success": true,
+      "visible_content": "75"
+    },
+    "run_id": 11,
+    "timestamp": 1779211212,
+    "timing": {
+      "duration_ms": 952
+    },
+    "token_stats": {
+      "completion_tokens": 2,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 4.158e-06,
+      "cost_details": {
+        "upstream_inference_completions_cost": 5.6e-07,
+        "upstream_inference_cost": 4.2e-06,
+        "upstream_inference_prompt_cost": 3.64e-06
+      },
+      "is_byok": false,
+      "prompt_tokens": 26,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 28
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 4,
+      "name": "Microsoft",
+      "ticker": "MSFT"
+    },
+    "request": {
+      "max_tokens": 20,
+      "messages": [
+        {
+          "content": "score Microsoft from 0 to 100 based on how innovative the company is. only return the number score.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "score Microsoft from 0 to 100 based on how innovative the company is. only return the number score.",
+      "provider": "openrouter",
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779211212,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779211212-3wBIObU9hbStQfWLsuer",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "90",
+              "reasoning": "We need to score Microsoft from 0 to 100 based on innovation. Microsoft is a major tech company",
+              "reasoning_details": [
+                {
+                  "format": "unknown",
+                  "index": 0,
+                  "text": "We need to score Microsoft from 0 to 100 based on innovation. Microsoft is a major tech company",
+                  "type": "reasoning.text"
+                }
+              ],
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779211212,
+        "id": "gen-1779211212-3wBIObU9hbStQfWLsuer",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "AtlasCloud",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 26,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 21
+          },
+          "cost": 1.08108e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 7.28e-06,
+            "upstream_inference_cost": 1.092e-05,
+            "upstream_inference_prompt_cost": 3.64e-06
+          },
+          "is_byok": false,
+          "prompt_tokens": 26,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 52
+        }
+      },
+      "success": true,
+      "visible_content": "90"
+    },
+    "run_id": 11,
+    "timestamp": 1779211214,
+    "timing": {
+      "duration_ms": 1428
+    },
+    "token_stats": {
+      "completion_tokens": 26,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 21
+      },
+      "cost": 1.08108e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 7.28e-06,
+        "upstream_inference_cost": 1.092e-05,
+        "upstream_inference_prompt_cost": 3.64e-06
+      },
+      "is_byok": false,
+      "prompt_tokens": 26,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 52
+    }
   }
 ]
