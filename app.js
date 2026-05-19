@@ -60,7 +60,7 @@ async function loadRuns() {
           <td><span class="${statusClass(run.status)}">${escapeHtml(run.status)}</span></td>
           <td>${progress(run)}</td>
           <td>${formatDate(run.created_at)}</td>
-          <td><a class="row-link" href="/run.html?id=${run.id}" target="_blank" rel="noreferrer">Open</a></td>
+          <td><a class="row-link" href="/run.html?id=${run.id}">Open</a></td>
         </tr>
       `
     )
@@ -92,9 +92,8 @@ async function createRun() {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not create run");
 
-    statusEl.textContent = `Run #${payload.runId} started. Opening ranking tab...`;
-    window.open(payload.url, "_blank", "noopener,noreferrer");
-    await loadRuns();
+    statusEl.textContent = `Run #${payload.runId} started. Opening ranking...`;
+    window.location.href = payload.url;
   } catch (error) {
     statusEl.textContent = error.message;
   } finally {

@@ -21,6 +21,7 @@ AI_REQUEST_LOG_PATH = ROOT / "ai_requests.json"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
 SCORING_COMPANY_LIMIT = 10
+OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
@@ -44,6 +45,10 @@ load_env_file()
 
 def openrouter_model():
     return os.environ.get("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
+
+
+def openrouter_max_tokens():
+    return int(os.environ.get("OPENROUTER_MAX_TOKENS", str(OPENROUTER_MAX_TOKENS)))
 
 
 def prompt_has_company_keyword(prompt):
@@ -503,7 +508,7 @@ def call_openrouter(prompt, company, model, run_id=None):
             {"role": "user", "content": prompt_for_company(prompt, company)},
         ],
         "temperature": 0,
-        "max_tokens": 20,
+        "max_tokens": openrouter_max_tokens(),
     }
     body = json.dumps(request_payload).encode("utf-8")
     request = urllib.request.Request(
@@ -551,7 +556,14 @@ def call_openrouter(prompt, company, model, run_id=None):
         raise
 
     try:
-        content = payload["choices"][0]["message"]["content"].strip()
+        message = payload["choices"][0].get("message", {})
+        content = message.get("content")
+        if content is None:
+            raise ValueError(
+                "Model returned no visible content. It likely used the response token budget "
+                "without producing an answer."
+            )
+        content = content.strip()
     except Exception as exc:
         append_ai_request_log(
             ai_log_entry(
