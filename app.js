@@ -83,6 +83,7 @@ async function renameRun(runId, currentName) {
 
 async function deleteRun(runId, currentName) {
   const label = currentName || `Run #${runId}`;
+  const scrollY = window.scrollY;
   statusEl.textContent = `Archiving ${label}...`;
 
   try {
@@ -93,8 +94,10 @@ async function deleteRun(runId, currentName) {
     if (!response.ok) throw new Error(payload.error || "Could not archive run");
     statusEl.textContent = `Archived ${label}.`;
     await loadRuns();
+    requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0 }));
   } catch (error) {
     statusEl.textContent = error.message;
+    requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0 }));
   }
 }
 
@@ -198,12 +201,14 @@ runButton.addEventListener("click", createRun);
 runRows.addEventListener("click", (event) => {
   const renameButton = event.target.closest("[data-rename-run]");
   if (renameButton) {
+    event.preventDefault();
     renameRun(renameButton.dataset.renameRun, renameButton.dataset.runName);
     return;
   }
 
   const deleteButton = event.target.closest("[data-delete-run]");
   if (deleteButton) {
+    event.preventDefault();
     deleteRun(deleteButton.dataset.deleteRun, deleteButton.dataset.runName);
   }
 });
