@@ -241,7 +241,7 @@ function renderRun(run) {
   runPrompt.textContent = run.prompt;
   runStatus.textContent = `${run.status} ${progress(run)}`;
   runCount.textContent = String(run.results.length);
-  statusEl.textContent = run.error || `Model: ${run.model}`;
+  statusEl.textContent = run.error || "";
   renderRunStats(run);
   stopButton.disabled = !canStop(run);
   stopButton.textContent = run.status === "stop_requested" ? "Stopping..." : "Stop";
