@@ -403,6 +403,7 @@ def get_run(run_id):
         ).fetchall()
     payload = dict(run)
     payload["results"] = [dict(row) for row in results]
+    payload["stats"] = ai_request_stats_for_run(run_id)
     return payload
 
 
@@ -440,6 +441,50 @@ def ai_request_costs_by_run():
             cost = 0
         costs[run_id] = costs.get(run_id, 0) + cost
     return costs
+
+
+def ai_request_stats_for_run(run_id):
+    stats = {
+        "cost": 0,
+        "total_tokens": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "reasoning_tokens": 0,
+        "request_count": 0,
+        "successful_request_count": 0,
+        "failed_request_count": 0,
+        "total_latency_ms": 0,
+        "average_latency_ms": None,
+    }
+    for entry in ai_request_entries():
+        if entry.get("run_id") != run_id:
+            continue
+
+        stats["request_count"] += 1
+        if entry.get("response", {}).get("success"):
+            stats["successful_request_count"] += 1
+        else:
+            stats["failed_request_count"] += 1
+
+        token_stats = entry.get("token_stats") or {}
+        completion_details = token_stats.get("completion_tokens_details") or {}
+        for key in ("cost", "total_tokens", "prompt_tokens", "completion_tokens"):
+            try:
+                stats[key] += float(token_stats.get(key) or 0)
+            except (TypeError, ValueError):
+                pass
+        try:
+            stats["reasoning_tokens"] += int(completion_details.get("reasoning_tokens") or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            stats["total_latency_ms"] += int((entry.get("timing") or {}).get("duration_ms") or 0)
+        except (TypeError, ValueError):
+            pass
+
+    if stats["request_count"]:
+        stats["average_latency_ms"] = round(stats["total_latency_ms"] / stats["request_count"])
+    return stats
 
 
 def get_result_detail(run_id, ticker):

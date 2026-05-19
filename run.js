@@ -15,6 +15,14 @@ const runStatus = document.querySelector("#runStatus");
 const runCount = document.querySelector("#runCount");
 const statusEl = document.querySelector("#status");
 const resultRows = document.querySelector("#resultRows");
+const statModel = document.querySelector("#statModel");
+const statProgress = document.querySelector("#statProgress");
+const statCost = document.querySelector("#statCost");
+const statTokens = document.querySelector("#statTokens");
+const statLatency = document.querySelector("#statLatency");
+const statScoreRange = document.querySelector("#statScoreRange");
+const statAverageScore = document.querySelector("#statAverageScore");
+const statRequests = document.querySelector("#statRequests");
 
 let currentRunId = params.get("id");
 let pollTimer = null;
@@ -61,6 +69,25 @@ function formatScore(score) {
   return Number(score).toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+function formatCents(value) {
+  const cents = Number(value || 0) * 100;
+  if (!cents) return "0.0000 cents";
+  return `${cents.toLocaleString(undefined, {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  })} cents`;
+}
+
+function formatNumber(value) {
+  if (value === null || value === undefined) return "--";
+  return Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function formatMs(value) {
+  if (value === null || value === undefined) return "--";
+  return `${Number(value).toLocaleString()} ms`;
+}
+
 function resultUrl(result) {
   return `/result.html?run=${encodeURIComponent(currentRunId)}&ticker=${encodeURIComponent(result.ticker)}`;
 }
@@ -71,6 +98,36 @@ function progress(run) {
 
 function canStop(run) {
   return run && ["queued", "running", "stop_requested"].includes(run.status);
+}
+
+function numericScores(run) {
+  return run.results
+    .map((result) => result.score)
+    .filter((score) => score !== null && score !== undefined)
+    .map(Number)
+    .filter((score) => Number.isFinite(score));
+}
+
+function renderRunStats(run) {
+  const stats = run.stats || {};
+  const scores = numericScores(run);
+  const minScore = scores.length ? Math.min(...scores) : null;
+  const maxScore = scores.length ? Math.max(...scores) : null;
+  const averageScore = scores.length
+    ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+    : null;
+
+  statModel.textContent = run.model;
+  statProgress.textContent = progress(run);
+  statCost.textContent = formatCents(stats.cost);
+  statTokens.textContent = formatNumber(stats.total_tokens);
+  statLatency.textContent = formatMs(stats.average_latency_ms);
+  statScoreRange.textContent =
+    minScore === null ? "--" : `${formatScore(minScore)}-${formatScore(maxScore)}`;
+  statAverageScore.textContent = averageScore === null ? "--" : formatScore(averageScore);
+  statRequests.textContent = `${formatNumber(stats.successful_request_count || 0)} ok / ${formatNumber(
+    stats.failed_request_count || 0
+  )} failed`;
 }
 
 async function renameCurrentRun() {
@@ -213,6 +270,7 @@ function renderRun(run) {
   runStatus.textContent = `${run.status} ${progress(run)}`;
   runCount.textContent = String(run.results.length);
   statusEl.textContent = run.error || `Model: ${run.model}`;
+  renderRunStats(run);
   stopButton.disabled = !canStop(run);
   stopButton.textContent = run.status === "stop_requested" ? "Stopping..." : "Stop";
   rerunButton.disabled = false;
