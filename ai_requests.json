@@ -5486,5 +5486,1125 @@
       },
       "total_tokens": 374
     }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 1,
+      "name": "NVIDIA",
+      "ticker": "NVDA"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (NVIDIA) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (NVIDIA) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216904,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216904-yTQIBLyhUjbApy8d8kwr",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "95",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216904,
+        "id": "gen-1779216904-yTQIBLyhUjbApy8d8kwr",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "DeepSeek",
+        "system_fingerprint": "fp_8b330d02d0_prod0820_fp8_kvcache_20260402",
+        "usage": {
+          "completion_tokens": 1,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 5.21136e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 2.8e-07,
+            "upstream_inference_cost": 5.264e-05,
+            "upstream_inference_prompt_cost": 5.236e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 374,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 375
+        }
+      },
+      "success": true,
+      "visible_content": "95"
+    },
+    "run_id": 15,
+    "timestamp": 1779216905,
+    "timing": {
+      "duration_ms": 1095
+    },
+    "token_stats": {
+      "completion_tokens": 1,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 5.21136e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 2.8e-07,
+        "upstream_inference_cost": 5.264e-05,
+        "upstream_inference_prompt_cost": 5.236e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 374,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 375
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 2,
+      "name": "Alphabet (Google)",
+      "ticker": "GOOG"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (Alphabet (Google)) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (Alphabet (Google)) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216905,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216905-HSGi8Rr5nzU6yQtbFcb9",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "85",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216905,
+        "id": "gen-1779216905-HSGi8Rr5nzU6yQtbFcb9",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "Novita",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 2,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 5.2668e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 5.6e-07,
+            "upstream_inference_cost": 5.32e-05,
+            "upstream_inference_prompt_cost": 5.264e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 376,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 378
+        }
+      },
+      "success": true,
+      "visible_content": "85"
+    },
+    "run_id": 15,
+    "timestamp": 1779216906,
+    "timing": {
+      "duration_ms": 959
+    },
+    "token_stats": {
+      "completion_tokens": 2,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 5.2668e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 5.6e-07,
+        "upstream_inference_cost": 5.32e-05,
+        "upstream_inference_prompt_cost": 5.264e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 376,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 378
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 3,
+      "name": "Apple",
+      "ticker": "AAPL"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (Apple) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (Apple) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216906,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216906-ieVa4EpKnBwgGM8xoX36",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "85",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216906,
+        "id": "gen-1779216906-ieVa4EpKnBwgGM8xoX36",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "DeepSeek",
+        "system_fingerprint": "fp_8b330d02d0_prod0820_fp8_kvcache_20260402",
+        "usage": {
+          "completion_tokens": 1,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 5.1975e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 2.8e-07,
+            "upstream_inference_cost": 5.25e-05,
+            "upstream_inference_prompt_cost": 5.222e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 373,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 374
+        }
+      },
+      "success": true,
+      "visible_content": "85"
+    },
+    "run_id": 15,
+    "timestamp": 1779216907,
+    "timing": {
+      "duration_ms": 903
+    },
+    "token_stats": {
+      "completion_tokens": 1,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 5.1975e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 2.8e-07,
+        "upstream_inference_cost": 5.25e-05,
+        "upstream_inference_prompt_cost": 5.222e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 373,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 374
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 4,
+      "name": "Microsoft",
+      "ticker": "MSFT"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (Microsoft) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (Microsoft) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216907,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216907-Soavd13cvxbEA41HdoD5",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "85",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216907,
+        "id": "gen-1779216907-Soavd13cvxbEA41HdoD5",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "Baidu",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 2,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 2.956338e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 5.04e-07,
+            "upstream_inference_cost": 2.9862e-05,
+            "upstream_inference_prompt_cost": 2.9358e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 373,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 175,
+            "video_tokens": 0
+          },
+          "total_tokens": 375
+        }
+      },
+      "success": true,
+      "visible_content": "85"
+    },
+    "run_id": 15,
+    "timestamp": 1779216908,
+    "timing": {
+      "duration_ms": 1744
+    },
+    "token_stats": {
+      "completion_tokens": 2,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 2.956338e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 5.04e-07,
+        "upstream_inference_cost": 2.9862e-05,
+        "upstream_inference_prompt_cost": 2.9358e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 373,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 175,
+        "video_tokens": 0
+      },
+      "total_tokens": 375
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 5,
+      "name": "Amazon",
+      "ticker": "AMZN"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (Amazon) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (Amazon) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216909,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216909-TPDF0Ax8PqyHh6kAE186",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "95",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216909,
+        "id": "gen-1779216909-TPDF0Ax8PqyHh6kAE186",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "GMICloud",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 1,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 4.158e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 2.24e-07,
+            "upstream_inference_cost": 4.2e-05,
+            "upstream_inference_prompt_cost": 4.1776e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 373,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 374
+        }
+      },
+      "success": true,
+      "visible_content": "95"
+    },
+    "run_id": 15,
+    "timestamp": 1779216911,
+    "timing": {
+      "duration_ms": 2085
+    },
+    "token_stats": {
+      "completion_tokens": 1,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 4.158e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 2.24e-07,
+        "upstream_inference_cost": 4.2e-05,
+        "upstream_inference_prompt_cost": 4.1776e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 373,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 374
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 6,
+      "name": "TSMC",
+      "ticker": "TSM"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (TSMC) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (TSMC) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216911,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216911-tf9W1savMpBa8P8S0QR1",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "92",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216911,
+        "id": "gen-1779216911-tf9W1savMpBa8P8S0QR1",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "GMICloud",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 229,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 226
+          },
+          "cost": 9.225216e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 5.1296e-05,
+            "upstream_inference_cost": 9.3184e-05,
+            "upstream_inference_prompt_cost": 4.1888e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 374,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 603
+        }
+      },
+      "success": true,
+      "visible_content": "92"
+    },
+    "run_id": 15,
+    "timestamp": 1779216914,
+    "timing": {
+      "duration_ms": 3472
+    },
+    "token_stats": {
+      "completion_tokens": 229,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 226
+      },
+      "cost": 9.225216e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 5.1296e-05,
+        "upstream_inference_cost": 9.3184e-05,
+        "upstream_inference_prompt_cost": 4.1888e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 374,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 603
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 7,
+      "name": "Broadcom",
+      "ticker": "AVGO"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (Broadcom) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (Broadcom) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216914,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216914-GzmsA0vfSxeXwtJsHhx7",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "75",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216914,
+        "id": "gen-1779216914-GzmsA0vfSxeXwtJsHhx7",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "AtlasCloud",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 1,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 5.21136e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 2.8e-07,
+            "upstream_inference_cost": 5.264e-05,
+            "upstream_inference_prompt_cost": 5.236e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 374,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 375
+        }
+      },
+      "success": true,
+      "visible_content": "75"
+    },
+    "run_id": 15,
+    "timestamp": 1779216915,
+    "timing": {
+      "duration_ms": 1127
+    },
+    "token_stats": {
+      "completion_tokens": 1,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 5.21136e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 2.8e-07,
+        "upstream_inference_cost": 5.264e-05,
+        "upstream_inference_prompt_cost": 5.236e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 374,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 375
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 8,
+      "name": "Saudi Aramco",
+      "ticker": "2222.SR"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (Saudi Aramco) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (Saudi Aramco) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216915,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216915-0n2Owj3Nbf1y3GDlpNlr",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "65",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216915,
+        "id": "gen-1779216915-0n2Owj3Nbf1y3GDlpNlr",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "DeepSeek",
+        "system_fingerprint": "fp_8b330d02d0_prod0820_fp8_kvcache_20260402",
+        "usage": {
+          "completion_tokens": 1,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 5.23908e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 2.8e-07,
+            "upstream_inference_cost": 5.292e-05,
+            "upstream_inference_prompt_cost": 5.264e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 376,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 377
+        }
+      },
+      "success": true,
+      "visible_content": "65"
+    },
+    "run_id": 15,
+    "timestamp": 1779216916,
+    "timing": {
+      "duration_ms": 899
+    },
+    "token_stats": {
+      "completion_tokens": 1,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 5.23908e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 2.8e-07,
+        "upstream_inference_cost": 5.292e-05,
+        "upstream_inference_prompt_cost": 5.264e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 376,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 377
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 9,
+      "name": "Meta Platforms (Facebook)",
+      "ticker": "META"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (Meta Platforms (Facebook)) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (Meta Platforms (Facebook)) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216916,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216916-tCcpoD03L6TCQVfXtqT1",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "85",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216916,
+        "id": "gen-1779216916-tCcpoD03L6TCQVfXtqT1",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "Baidu",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 2,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 2.9837808e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 5.04e-07,
+            "upstream_inference_cost": 3.01392e-05,
+            "upstream_inference_prompt_cost": 2.96352e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 376,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 176,
+            "video_tokens": 0
+          },
+          "total_tokens": 378
+        }
+      },
+      "success": true,
+      "visible_content": "85"
+    },
+    "run_id": 15,
+    "timestamp": 1779216919,
+    "timing": {
+      "duration_ms": 2830
+    },
+    "token_stats": {
+      "completion_tokens": 2,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 2.9837808e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 5.04e-07,
+        "upstream_inference_cost": 3.01392e-05,
+        "upstream_inference_prompt_cost": 2.96352e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 376,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 176,
+        "video_tokens": 0
+      },
+      "total_tokens": 378
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 10,
+      "name": "Tesla",
+      "ticker": "TSLA"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (Tesla) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (Tesla) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile). \n\nONLY RETURN THE NUMBER SCORE.",
+      "provider": "openrouter",
+      "provider_preferences": {
+        "require_parameters": true
+      },
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779216919,
+      "error": null,
+      "finish_reason": "stop",
+      "http_status": 200,
+      "id": "gen-1779216919-GSZ5wkSt23cNuJgOMNW7",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "92",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "stop"
+          }
+        ],
+        "created": 1779216919,
+        "id": "gen-1779216919-GSZ5wkSt23cNuJgOMNW7",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "GMICloud",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 253,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 250
+          },
+          "cost": 9.75744e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 5.6672e-05,
+            "upstream_inference_cost": 9.856e-05,
+            "upstream_inference_prompt_cost": 4.1888e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 374,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 627
+        }
+      },
+      "success": true,
+      "visible_content": "92"
+    },
+    "run_id": 15,
+    "timestamp": 1779216922,
+    "timing": {
+      "duration_ms": 3252
+    },
+    "token_stats": {
+      "completion_tokens": 253,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 250
+      },
+      "cost": 9.75744e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 5.6672e-05,
+        "upstream_inference_cost": 9.856e-05,
+        "upstream_inference_prompt_cost": 4.1888e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 374,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 627
+    }
   }
 ]
