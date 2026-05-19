@@ -19,7 +19,14 @@ CACHE_SECONDS = 60 * 15
 DB_PATH = ROOT / "companies.db"
 AI_REQUEST_LOG_PATH = ROOT / "ai_requests.json"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
+MODEL_OPTIONS = [
+    {
+        "id": "deepseek/deepseek-v4-flash",
+        "label": "DeepSeek V4 Flash (non-reasoning)",
+        "reasoning": {"effort": "none", "exclude": True},
+    }
+]
+DEFAULT_OPENROUTER_MODEL = MODEL_OPTIONS[0]["id"]
 DEFAULT_SCORING_COMPANY_COUNT = 10
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
 
@@ -43,8 +50,25 @@ def load_env_file():
 load_env_file()
 
 
+def openrouter_model_options():
+    return MODEL_OPTIONS
+
+
 def openrouter_model():
-    return OPENROUTER_MODEL
+    return DEFAULT_OPENROUTER_MODEL
+
+
+def normalize_model(model):
+    requested = (model or DEFAULT_OPENROUTER_MODEL).strip()
+    allowed = {option["id"] for option in MODEL_OPTIONS}
+    if requested not in allowed:
+        raise ValueError("Selected model is not available.")
+    return requested
+
+
+def model_config(model):
+    normalized = normalize_model(model)
+    return next(option for option in MODEL_OPTIONS if option["id"] == normalized)
 
 
 def openrouter_max_tokens():
@@ -331,6 +355,7 @@ def create_scoring_run(name, prompt, model, company_count):
 
     name = normalize_run_name(name)
     prompt = normalize_scoring_prompt(prompt)
+    model = normalize_model(model)
     company_count = normalize_company_count(company_count)
     companies = scoring_companies(company_count)
     if not companies:
@@ -662,6 +687,7 @@ def ai_log_entry(run_id, company, request_payload, started_at, response_payload=
             "temperature": request_payload.get("temperature"),
             "max_tokens": request_payload.get("max_tokens"),
             "reasoning": request_payload.get("reasoning"),
+            "provider_preferences": request_payload.get("provider"),
             "prompt_sent": request_payload["messages"][0]["content"],
         },
         "response": {
@@ -714,16 +740,17 @@ def call_openrouter(prompt, company, model, run_id=None):
     if not api_key:
         raise RuntimeError("OPENROUTER_KEY is not set")
 
+    config = model_config(model)
     request_payload = {
-        "model": model,
+        "model": config["id"],
         "messages": [
             {"role": "user", "content": prompt_for_company(prompt, company)},
         ],
         "temperature": 0,
         "max_tokens": openrouter_max_tokens(),
-        "reasoning": {
-            "effort": "none",
-            "exclude": True,
+        "reasoning": config["reasoning"],
+        "provider": {
+            "require_parameters": True,
         },
     }
     body = json.dumps(request_payload).encode("utf-8")
@@ -992,6 +1019,10 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({"error": str(exc), "companies": []}, 502)
             return
 
+        if parsed.path == "/api/models":
+            self.send_json({"models": openrouter_model_options(), "default": openrouter_model()})
+            return
+
         if parsed.path == "/api/runs":
             ensure_scoring_schema()
             self.send_json({"runs": list_runs()})
@@ -1062,8 +1093,9 @@ class Handler(SimpleHTTPRequestHandler):
                     self.send_json({"error": "Run name is required."}, 400)
                     return
                 prompt = normalize_scoring_prompt(payload.get("prompt"))
+                model = normalize_model(payload.get("model"))
                 company_count = normalize_company_count(payload.get("companyCount"))
-                run_id = create_scoring_run(name, prompt, openrouter_model(), company_count)
+                run_id = create_scoring_run(name, prompt, model, company_count)
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)

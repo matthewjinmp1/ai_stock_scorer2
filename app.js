@@ -1,5 +1,6 @@
 const promptInput = document.querySelector("#promptInput");
 const runNameInput = document.querySelector("#runNameInput");
+const modelSelect = document.querySelector("#modelSelect");
 const companyCountInput = document.querySelector("#companyCountInput");
 const companyCountHelp = document.querySelector("#companyCountHelp");
 const runButton = document.querySelector("#runButton");
@@ -118,6 +119,18 @@ async function loadCompanies() {
   companyCountHelp.textContent = `Choose 1-${companiesAvailable}. Scoring starts from the largest companies by market cap.`;
 }
 
+async function loadModels() {
+  const payload = await fetchJson("/api/models");
+  modelSelect.innerHTML = "";
+  for (const model of payload.models) {
+    const option = document.createElement("option");
+    option.value = model.id;
+    option.textContent = model.label;
+    modelSelect.append(option);
+  }
+  modelSelect.value = payload.default;
+}
+
 async function loadRuns() {
   setRunRows("Loading saved scoring runs...");
   const payload = await fetchJson("/api/runs");
@@ -178,6 +191,12 @@ async function createRun() {
     return;
   }
   const companyCount = Number(companyCountInput.value);
+  const model = modelSelect.value;
+  if (!model) {
+    statusEl.textContent = "Choose a model first.";
+    modelSelect.focus();
+    return;
+  }
   if (!Number.isInteger(companyCount) || companyCount < 1 || companyCount > companiesAvailable) {
     statusEl.textContent = `Choose a stock count from 1 to ${companiesAvailable}.`;
     companyCountInput.focus();
@@ -191,7 +210,7 @@ async function createRun() {
     const response = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, prompt, companyCount }),
+      body: JSON.stringify({ name, prompt, companyCount, model }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not create run");
@@ -244,6 +263,7 @@ if ("EventSource" in window) {
 try {
   setRunRows("Loading saved scoring runs...");
   await loadCompanies();
+  await loadModels();
   await loadRuns();
   statusEl.textContent = "Ready.";
 } catch (error) {
