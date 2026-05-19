@@ -121,7 +121,7 @@ async function loadRuns() {
   runRows.innerHTML = payload.runs
     .map(
       (run) => `
-        <tr>
+        <tr class="clickable-row" data-run-id="${run.id}">
           <td>#${run.id}</td>
           <td><strong>${escapeHtml(run.name || `Run #${run.id}`)}</strong></td>
           <td class="prompt-cell">${escapeHtml(run.prompt)}</td>
@@ -130,7 +130,6 @@ async function loadRuns() {
           <td>${formatDate(run.created_at)}</td>
           <td class="row-actions">
             <div class="row-actions-inner">
-              <a class="row-link" href="/run.html?id=${run.id}">Open</a>
               <button
                 class="link-button"
                 type="button"
@@ -210,6 +209,12 @@ runRows.addEventListener("click", (event) => {
   if (deleteButton) {
     event.preventDefault();
     deleteRun(deleteButton.dataset.deleteRun, deleteButton.dataset.runName);
+    return;
+  }
+
+  const row = event.target.closest("tr[data-run-id]");
+  if (row) {
+    window.location.href = `/run.html?id=${encodeURIComponent(row.dataset.runId)}`;
   }
 });
 

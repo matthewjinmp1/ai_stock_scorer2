@@ -529,6 +529,10 @@ tbody tr:hover {
   background: #f8fbff;
 }
 
+.clickable-row {
+  cursor: pointer;
+}
+
 .company-cell {
   display: flex;
   align-items: center;
