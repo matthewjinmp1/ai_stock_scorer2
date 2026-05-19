@@ -4172,5 +4172,223 @@
       },
       "total_tokens": 27
     }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 1,
+      "name": "NVIDIA",
+      "ticker": "NVDA"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (NVIDIA) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile).",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (NVIDIA) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile).",
+      "provider": "openrouter",
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779215840,
+      "error": null,
+      "finish_reason": "length",
+      "http_status": 200,
+      "id": "gen-1779215840-ryOu0PYywbi3rPKj8dvm",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "Based on the description provided and focusing on NVIDIA\u2019s **current state** (2024\u20132025), I would rate the company at **95 out of 100**.\n\nHere is the objective breakdown of why this score is justified, and where the slight deduction comes from:\n\n**Why it scores very high (95):**\n\n- **Trailblazer & Disruptive Innovator:** NVIDIA single-handedly created and dominates the modern AI computing platform (CUDA ecosystem, GPUs for AI). It disrupted the entire computing industry, not just graphics.\n- **Bold Execution & Long-Term Vision:** CEO Jensen Huang has been betting on accelerated computing and AI for over a decade. The company cannibalized its own gaming GPU market to serve the data center/AI boom. They set a \u201cmoonshot\u201d goal (Grace-Hopper, DGX, Omniverse) and executed flawlessly.\n- **High Talent Density & Meritocracy:** NVIDIA is notoriously intense, with a culture of \u201c",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "length"
+          }
+        ],
+        "created": 1779215840,
+        "id": "gen-1779215840-ryOu0PYywbi3rPKj8dvm",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "AkashML",
+        "system_fingerprint": "vllm-0.21.1rc1.dev98+g6e889b582-dp4-ep-a2e28142",
+        "usage": {
+          "completion_tokens": 200,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 0.000106029,
+          "cost_details": {
+            "upstream_inference_completions_cost": 5.6e-05,
+            "upstream_inference_cost": 0.0001071,
+            "upstream_inference_prompt_cost": 5.11e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 365,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 0,
+            "video_tokens": 0
+          },
+          "total_tokens": 565
+        }
+      },
+      "success": true,
+      "visible_content": "Based on the description provided and focusing on NVIDIA\u2019s **current state** (2024\u20132025), I would rate the company at **95 out of 100**.\n\nHere is the objective breakdown of why this score is justified, and where the slight deduction comes from:\n\n**Why it scores very high (95):**\n\n- **Trailblazer & Disruptive Innovator:** NVIDIA single-handedly created and dominates the modern AI computing platform (CUDA ecosystem, GPUs for AI). It disrupted the entire computing industry, not just graphics.\n- **Bold Execution & Long-Term Vision:** CEO Jensen Huang has been betting on accelerated computing and AI for over a decade. The company cannibalized its own gaming GPU market to serve the data center/AI boom. They set a \u201cmoonshot\u201d goal (Grace-Hopper, DGX, Omniverse) and executed flawlessly.\n- **High Talent Density & Meritocracy:** NVIDIA is notoriously intense, with a culture of \u201c"
+    },
+    "run_id": 13,
+    "timestamp": 1779215853,
+    "timing": {
+      "duration_ms": 14073
+    },
+    "token_stats": {
+      "completion_tokens": 200,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 0.000106029,
+      "cost_details": {
+        "upstream_inference_completions_cost": 5.6e-05,
+        "upstream_inference_cost": 0.0001071,
+        "upstream_inference_prompt_cost": 5.11e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 365,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 0,
+        "video_tokens": 0
+      },
+      "total_tokens": 565
+    }
+  },
+  {
+    "chain_of_thought": null,
+    "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    "company": {
+      "market_cap_rank": 2,
+      "name": "Alphabet (Google)",
+      "ticker": "GOOG"
+    },
+    "request": {
+      "max_tokens": 200,
+      "messages": [
+        {
+          "content": "Rate from 0 to 100 how well this company (Alphabet (Google)) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile).",
+          "role": "user"
+        }
+      ],
+      "model": "deepseek/deepseek-v4-flash",
+      "prompt_sent": "Rate from 0 to 100 how well this company (Alphabet (Google)) matches this description: \n\nHighly innovative. Highly ambitious. Disrupts industries rather than waiting to get disrupted. Attracts world class talent. Ambitious and super smart people want to work here. not afraid to break the status quo. Executes boldly and rapidly on goals. Thinks long term. Trailblazer. Disruptive innovator. Sets big goals and executes on them. Always improving. Hungry. Fierce. Bold. Able to adapt rapidly to changing conditions. Desire to make a major impact on the world. It is ok if the company makes mistakes, as long as it gets back up and fights. It is ok if the company is controversial, as long as it keeps fighting and striving. Takes bold and calculated risks. Hardcore. Intense. Does hard things. Unlikely to be disrupted because they adapt fast to new trends and can constantly reinvent their business. Cannibalizes itself. Has an ambitious long term vision. Creates lots of value for their customers. Strong desire to succeed. High pace of innovation. Warrior. Execution and results oriented. Ruthless toward mediocrity. Meritocratic. Engages in moonshots. Daring. Fighter. Strong desire to be great. unapologetically bold. Courageous. High talent density. \n\nIt does not matter how big the company is, as long as it has these traits. Focus on the company\u2019s current state. Not what they were a long time ago. Be objective and unbiased. The average company should get about a 50. The score should represent the company\u2019s percentile among a standard basket of companies (score of 0 is 0th percentile, score of 100 is 100th percentile).",
+      "provider": "openrouter",
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "temperature": 0,
+      "url": "https://openrouter.ai/api/v1/chat/completions"
+    },
+    "response": {
+      "created": 1779215854,
+      "error": null,
+      "finish_reason": "length",
+      "http_status": 200,
+      "id": "gen-1779215854-eTfYz7g13ZqYqjz3IVLf",
+      "model": "deepseek/deepseek-v4-flash-20260423",
+      "raw_payload": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+              "content": "**Score: 72 / 100**\n\n**Rationale:**\n\nAlphabet (Google) still exhibits many of the traits you listed, but its current state reflects a mature giant that has partially lost the raw, hungry edge of its earlier years. Here\u2019s the breakdown:\n\n- **Strengths (High alignment):**  \n  - **Moonshots & Long-term vision:** Waymo, Verily, DeepMind, and other \u201cOther Bets\u201d show genuine long-term, high-risk ambition.  \n  - **Talent density:** Still attracts world-class engineers and researchers; compensation and prestige remain top-tier.  \n  - **Adaptability & cannibalization:** Has killed successful products (Google Reader, Inbox, Hangouts) to pivot, and aggressively invests in AI (Gemini, TPUs) even at the cost of legacy search revenue.  \n  - **Bold execution on AI:** Launched Bard/Gemini, integrated AI into Search, Cloud, and Workspace",
+              "refusal": null,
+              "role": "assistant"
+            },
+            "native_finish_reason": "length"
+          }
+        ],
+        "created": 1779215854,
+        "id": "gen-1779215854-eTfYz7g13ZqYqjz3IVLf",
+        "model": "deepseek/deepseek-v4-flash-20260423",
+        "object": "chat.completion",
+        "provider": "Baidu",
+        "system_fingerprint": null,
+        "usage": {
+          "completion_tokens": 200,
+          "completion_tokens_details": {
+            "audio_tokens": 0,
+            "image_tokens": 0,
+            "reasoning_tokens": 0
+          },
+          "cost": 7.8511356e-05,
+          "cost_details": {
+            "upstream_inference_completions_cost": 5.04e-05,
+            "upstream_inference_cost": 7.93044e-05,
+            "upstream_inference_prompt_cost": 2.89044e-05
+          },
+          "is_byok": false,
+          "prompt_tokens": 367,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_tokens": 172,
+            "video_tokens": 0
+          },
+          "total_tokens": 567
+        }
+      },
+      "success": true,
+      "visible_content": "**Score: 72 / 100**\n\n**Rationale:**\n\nAlphabet (Google) still exhibits many of the traits you listed, but its current state reflects a mature giant that has partially lost the raw, hungry edge of its earlier years. Here\u2019s the breakdown:\n\n- **Strengths (High alignment):**  \n  - **Moonshots & Long-term vision:** Waymo, Verily, DeepMind, and other \u201cOther Bets\u201d show genuine long-term, high-risk ambition.  \n  - **Talent density:** Still attracts world-class engineers and researchers; compensation and prestige remain top-tier.  \n  - **Adaptability & cannibalization:** Has killed successful products (Google Reader, Inbox, Hangouts) to pivot, and aggressively invests in AI (Gemini, TPUs) even at the cost of legacy search revenue.  \n  - **Bold execution on AI:** Launched Bard/Gemini, integrated AI into Search, Cloud, and Workspace"
+    },
+    "run_id": 13,
+    "timestamp": 1779215859,
+    "timing": {
+      "duration_ms": 5814
+    },
+    "token_stats": {
+      "completion_tokens": 200,
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "image_tokens": 0,
+        "reasoning_tokens": 0
+      },
+      "cost": 7.8511356e-05,
+      "cost_details": {
+        "upstream_inference_completions_cost": 5.04e-05,
+        "upstream_inference_cost": 7.93044e-05,
+        "upstream_inference_prompt_cost": 2.89044e-05
+      },
+      "is_byok": false,
+      "prompt_tokens": 367,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cache_write_tokens": 0,
+        "cached_tokens": 172,
+        "video_tokens": 0
+      },
+      "total_tokens": 567
+    }
   }
 ]

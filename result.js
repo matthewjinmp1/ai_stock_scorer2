@@ -44,10 +44,11 @@ function formatNumber(value) {
 
 function formatCost(value) {
   if (value === null || value === undefined) return "--";
-  return `$${Number(value).toLocaleString(undefined, {
-    minimumFractionDigits: 6,
-    maximumFractionDigits: 8,
-  })}`;
+  const cents = Number(value) * 100;
+  return `${cents.toLocaleString(undefined, {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  })} cents`;
 }
 
 function formatMs(value) {

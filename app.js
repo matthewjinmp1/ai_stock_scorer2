@@ -58,18 +58,12 @@ function statusClass(status) {
 }
 
 function formatCost(value) {
-  const cost = Number(value || 0);
-  if (!cost) return "$0.00";
-  if (cost < 0.01) {
-    return `$${cost.toLocaleString(undefined, {
-      minimumFractionDigits: 6,
-      maximumFractionDigits: 6,
-    })}`;
-  }
-  return `$${cost.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+  const cents = Number(value || 0) * 100;
+  if (!cents) return "0.0000 cents";
+  return `${cents.toLocaleString(undefined, {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  })} cents`;
 }
 
 async function renameRun(runId, currentName) {
