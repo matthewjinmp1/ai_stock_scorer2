@@ -9,7 +9,7 @@ const countLabel = document.querySelector("#countLabel");
 let companiesAvailable = 0;
 
 function setRunRows(message) {
-  runRows.innerHTML = `<tr><td colspan="8">${escapeHtml(message)}</td></tr>`;
+  runRows.innerHTML = `<tr><td colspan="7">${escapeHtml(message)}</td></tr>`;
 }
 
 async function fetchJson(url) {
@@ -133,7 +133,6 @@ async function loadRuns() {
         <tr class="clickable-row" data-run-id="${run.id}">
           <td>#${run.id}</td>
           <td><strong>${escapeHtml(run.name || `Run #${run.id}`)}</strong></td>
-          <td class="prompt-cell">${escapeHtml(run.prompt)}</td>
           <td><span class="${statusClass(run.status)}">${escapeHtml(run.status)}</span></td>
           <td>${progress(run)}</td>
           <td>${formatCost(run.cost)}</td>
