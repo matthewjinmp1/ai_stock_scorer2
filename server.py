@@ -481,6 +481,28 @@ def rename_scoring_run(run_id, name):
     return get_run(run_id)
 
 
+def remove_ai_request_entries(run_id):
+    if not AI_REQUEST_LOG_PATH.exists():
+        return
+    entries = ai_request_entries()
+    kept = [entry for entry in entries if entry.get("run_id") != run_id]
+    if len(kept) == len(entries):
+        return
+    AI_REQUEST_LOG_PATH.write_text(json.dumps(kept, indent=2), encoding="utf-8")
+
+
+def delete_scoring_run(run_id):
+    with db_connect() as connection:
+        row = connection.execute("SELECT id FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
+        if not row:
+            return False
+        connection.execute("DELETE FROM scoring_results WHERE run_id = ?", (run_id,))
+        connection.execute("DELETE FROM scoring_runs WHERE id = ?", (run_id,))
+        connection.commit()
+    remove_ai_request_entries(run_id)
+    return True
+
+
 def update_run_counts(connection, run_id):
     row = connection.execute(
         """
@@ -784,7 +806,11 @@ def score_run_worker(run_id):
     try:
         companies = scoring_companies(run["company_count"])
         for company in companies:
-            if run_status(run_id) == "stop_requested":
+            current_status = run_status(run_id)
+            if current_status is None:
+                stopped = True
+                break
+            if current_status == "stop_requested":
                 stopped = True
                 break
 
@@ -801,6 +827,9 @@ def score_run_worker(run_id):
                 error = str(exc)
 
             with db_connect() as connection:
+                if run_status(run_id) is None:
+                    stopped = True
+                    break
                 save_result(connection, run_id, company, score, raw_response, error)
                 update_run_counts(connection, run_id)
                 connection.commit()
@@ -809,6 +838,8 @@ def score_run_worker(run_id):
 
     with db_connect() as connection:
         current_status = run_status(run_id)
+        if current_status is None:
+            return
         if current_status == "stop_requested":
             stopped = True
         status = "stopped" if stopped else "failed" if fatal_error else "completed"
@@ -1002,6 +1033,19 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({"run": run})
             except Exception as exc:
                 self.send_json({"error": str(exc)}, 400)
+            return
+        self.send_json({"error": "Not found"}, 404)
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        run_match = re.fullmatch(r"/api/runs/(\d+)", parsed.path)
+        if run_match:
+            ensure_scoring_schema()
+            deleted = delete_scoring_run(int(run_match.group(1)))
+            if not deleted:
+                self.send_json({"error": "Run not found"}, 404)
+                return
+            self.send_json({"deleted": True})
             return
         self.send_json({"error": "Not found"}, 404)
 

@@ -3,6 +3,7 @@ const runSelect = document.querySelector("#runSelect");
 const stopButton = document.querySelector("#stopButton");
 const rerunButton = document.querySelector("#rerunButton");
 const renameButton = document.querySelector("#renameButton");
+const deleteButton = document.querySelector("#deleteButton");
 const runTitle = document.querySelector("#runTitle");
 const runPrompt = document.querySelector("#runPrompt");
 const runStatus = document.querySelector("#runStatus");
@@ -101,6 +102,30 @@ async function renameCurrentRun() {
   }
 }
 
+async function deleteCurrentRun() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before deleting.";
+    return;
+  }
+
+  const label = currentRun.name || `Run #${currentRun.id}`;
+  if (!window.confirm(`Delete "${label}" and all saved scores for it?`)) return;
+
+  deleteButton.disabled = true;
+  statusEl.textContent = `Deleting ${label}...`;
+  try {
+    const response = await fetch(`/api/runs/${currentRun.id}`, {
+      method: "DELETE",
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not delete run");
+    window.location.href = "/";
+  } catch (error) {
+    statusEl.textContent = error.message;
+    deleteButton.disabled = false;
+  }
+}
+
 async function loadRunList() {
   const response = await fetch("/api/runs");
   const payload = await response.json();
@@ -121,6 +146,7 @@ async function loadRunList() {
   if (currentRunId) runSelect.value = currentRunId;
   rerunButton.disabled = !currentRunId;
   renameButton.disabled = !currentRunId;
+  deleteButton.disabled = !currentRunId;
   stopButton.disabled = true;
 }
 
@@ -135,6 +161,7 @@ function renderRun(run) {
   stopButton.textContent = run.status === "stop_requested" ? "Stopping..." : "Stop";
   rerunButton.disabled = false;
   renameButton.disabled = false;
+  deleteButton.disabled = false;
 
   if (!run.results.length) {
     resultRows.innerHTML = '<tr><td colspan="7">Waiting for scores...</td></tr>';
@@ -171,6 +198,7 @@ async function loadCurrentRun() {
     currentRun = null;
     rerunButton.disabled = true;
     renameButton.disabled = true;
+    deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
     resultRows.innerHTML = '<tr><td colspan="7">Create a scoring run first.</td></tr>';
@@ -267,6 +295,7 @@ runSelect.addEventListener("change", () => {
 stopButton.addEventListener("click", stopCurrentRun);
 rerunButton.addEventListener("click", rerunCurrentPrompt);
 renameButton.addEventListener("click", renameCurrentRun);
+deleteButton.addEventListener("click", deleteCurrentRun);
 
 if ("EventSource" in window) {
   const events = new EventSource("/events");

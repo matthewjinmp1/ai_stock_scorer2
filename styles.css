@@ -394,7 +394,7 @@ button:hover {
 }
 
 .result-toolbar {
-  grid-template-columns: minmax(260px, 1fr) auto auto auto;
+  grid-template-columns: minmax(260px, 1fr) auto auto auto auto;
 }
 
 .danger-button {
@@ -444,6 +444,14 @@ button:disabled {
   color: var(--accent-strong);
   background: transparent;
   text-decoration: underline;
+}
+
+.danger-link {
+  color: var(--loss);
+}
+
+.danger-link:hover {
+  color: #a61e1e;
 }
 
 .pill {

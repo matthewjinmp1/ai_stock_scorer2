@@ -81,6 +81,23 @@ async function renameRun(runId, currentName) {
   }
 }
 
+async function deleteRun(runId, currentName) {
+  const label = currentName || `Run #${runId}`;
+  if (!window.confirm(`Delete "${label}" and all saved scores for it?`)) return;
+
+  try {
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      method: "DELETE",
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not delete run");
+    statusEl.textContent = `Deleted ${label}.`;
+    await loadRuns();
+  } catch (error) {
+    statusEl.textContent = error.message;
+  }
+}
+
 async function loadCompanies() {
   const payload = await fetchJson("/api/companies");
   companiesAvailable = payload.companies.length;
@@ -117,6 +134,12 @@ async function loadRuns() {
                 data-rename-run="${run.id}"
                 data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
               >Rename</button>
+              <button
+                class="link-button danger-link"
+                type="button"
+                data-delete-run="${run.id}"
+                data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
+              >Delete</button>
             </div>
           </td>
         </tr>
@@ -173,9 +196,16 @@ async function createRun() {
 
 runButton.addEventListener("click", createRun);
 runRows.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-rename-run]");
-  if (!button) return;
-  renameRun(button.dataset.renameRun, button.dataset.runName);
+  const renameButton = event.target.closest("[data-rename-run]");
+  if (renameButton) {
+    renameRun(renameButton.dataset.renameRun, renameButton.dataset.runName);
+    return;
+  }
+
+  const deleteButton = event.target.closest("[data-delete-run]");
+  if (deleteButton) {
+    deleteRun(deleteButton.dataset.deleteRun, deleteButton.dataset.runName);
+  }
 });
 
 window.addEventListener("pageshow", (event) => {
