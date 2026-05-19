@@ -188,6 +188,21 @@ button:hover {
   background: var(--panel);
 }
 
+.prompt-editor {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 30px rgba(29, 45, 68, 0.06);
+}
+
+.prompt-editor[hidden] {
+  display: none;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -394,7 +409,7 @@ button:hover {
 }
 
 .result-toolbar {
-  grid-template-columns: minmax(260px, 1fr) auto auto auto auto;
+  grid-template-columns: minmax(260px, 1fr) auto auto auto auto auto;
 }
 
 .danger-button {

@@ -316,13 +316,21 @@ def normalize_run_name(value):
     return name
 
 
+def normalize_scoring_prompt(value):
+    prompt = (value or "").strip()
+    if not prompt:
+        raise ValueError("Prompt is required")
+    if not prompt_has_company_keyword(prompt):
+        raise ValueError("Prompt must include the COMPANY keyword.")
+    return prompt
+
+
 def create_scoring_run(name, prompt, model, company_count):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
-    if not prompt_has_company_keyword(prompt):
-        raise ValueError("Prompt must include the COMPANY keyword.")
 
     name = normalize_run_name(name)
+    prompt = normalize_scoring_prompt(prompt)
     company_count = normalize_company_count(company_count)
     companies = scoring_companies(company_count)
     if not companies:
@@ -496,12 +504,30 @@ def list_runs():
 
 
 def rename_scoring_run(run_id, name):
-    name = normalize_run_name(name)
+    return update_scoring_run(run_id, name=name)
+
+
+def update_scoring_run(run_id, name=None, prompt=None):
+    updates = []
+    values = []
+    if name is not None:
+        updates.append("name = ?")
+        values.append(normalize_run_name(name))
+    if prompt is not None:
+        updates.append("prompt = ?")
+        values.append(normalize_scoring_prompt(prompt))
+    if not updates:
+        return get_run(run_id)
+
     with db_connect() as connection:
         row = connection.execute("SELECT id FROM scoring_runs WHERE id = ? AND deleted_at IS NULL", (run_id,)).fetchone()
         if not row:
             return None
-        connection.execute("UPDATE scoring_runs SET name = ? WHERE id = ?", (name, run_id))
+        values.append(run_id)
+        connection.execute(
+            f"UPDATE scoring_runs SET {', '.join(updates)} WHERE id = ?",
+            values,
+        )
         connection.commit()
     return get_run(run_id)
 
@@ -1035,13 +1061,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if not name:
                     self.send_json({"error": "Run name is required."}, 400)
                     return
-                prompt = (payload.get("prompt") or "").strip()
-                if not prompt:
-                    self.send_json({"error": "Prompt is required"}, 400)
-                    return
-                if not prompt_has_company_keyword(prompt):
-                    self.send_json({"error": "Prompt must include the COMPANY keyword."}, 400)
-                    return
+                prompt = normalize_scoring_prompt(payload.get("prompt"))
                 company_count = normalize_company_count(payload.get("companyCount"))
                 run_id = create_scoring_run(name, prompt, openrouter_model(), company_count)
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
@@ -1059,7 +1079,11 @@ class Handler(SimpleHTTPRequestHandler):
             ensure_scoring_schema()
             try:
                 payload = self.read_json()
-                run = rename_scoring_run(int(run_match.group(1)), payload.get("name"))
+                run = update_scoring_run(
+                    int(run_match.group(1)),
+                    name=payload.get("name") if "name" in payload else None,
+                    prompt=payload.get("prompt") if "prompt" in payload else None,
+                )
                 if not run:
                     self.send_json({"error": "Run not found"}, 404)
                     return

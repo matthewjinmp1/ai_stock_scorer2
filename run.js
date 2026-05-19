@@ -3,7 +3,12 @@ const runSelect = document.querySelector("#runSelect");
 const stopButton = document.querySelector("#stopButton");
 const rerunButton = document.querySelector("#rerunButton");
 const renameButton = document.querySelector("#renameButton");
+const editPromptButton = document.querySelector("#editPromptButton");
 const deleteButton = document.querySelector("#deleteButton");
+const promptEditor = document.querySelector("#promptEditor");
+const promptEditorInput = document.querySelector("#promptEditorInput");
+const savePromptButton = document.querySelector("#savePromptButton");
+const cancelPromptButton = document.querySelector("#cancelPromptButton");
 const runTitle = document.querySelector("#runTitle");
 const runPrompt = document.querySelector("#runPrompt");
 const runStatus = document.querySelector("#runStatus");
@@ -102,6 +107,58 @@ async function renameCurrentRun() {
   }
 }
 
+function showPromptEditor() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before editing its prompt.";
+    return;
+  }
+  promptEditor.hidden = false;
+  promptEditorInput.value = currentRun.prompt || "";
+  promptEditorInput.focus();
+}
+
+function hidePromptEditor() {
+  promptEditor.hidden = true;
+}
+
+async function saveCurrentPrompt() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before editing its prompt.";
+    return;
+  }
+
+  const prompt = promptEditorInput.value.trim();
+  if (!prompt) {
+    statusEl.textContent = "Prompt is required.";
+    promptEditorInput.focus();
+    return;
+  }
+  if (!prompt.includes("COMPANY")) {
+    statusEl.textContent = "Prompt must include the COMPANY keyword.";
+    promptEditorInput.focus();
+    return;
+  }
+
+  savePromptButton.disabled = true;
+  statusEl.textContent = "Saving prompt...";
+  try {
+    const response = await fetch(`/api/runs/${currentRun.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not save prompt");
+    renderRun(payload.run);
+    hidePromptEditor();
+    statusEl.textContent = "Prompt saved. Rerun will use the edited prompt.";
+  } catch (error) {
+    statusEl.textContent = error.message;
+  } finally {
+    savePromptButton.disabled = false;
+  }
+}
+
 async function deleteCurrentRun() {
   if (!currentRun) {
     statusEl.textContent = "Pick a saved run before archiving.";
@@ -144,6 +201,7 @@ async function loadRunList() {
   if (currentRunId) runSelect.value = currentRunId;
   rerunButton.disabled = !currentRunId;
   renameButton.disabled = !currentRunId;
+  editPromptButton.disabled = !currentRunId;
   deleteButton.disabled = !currentRunId;
   stopButton.disabled = true;
 }
@@ -159,6 +217,7 @@ function renderRun(run) {
   stopButton.textContent = run.status === "stop_requested" ? "Stopping..." : "Stop";
   rerunButton.disabled = false;
   renameButton.disabled = false;
+  editPromptButton.disabled = false;
   deleteButton.disabled = false;
 
   if (!run.results.length) {
@@ -196,6 +255,7 @@ async function loadCurrentRun() {
     currentRun = null;
     rerunButton.disabled = true;
     renameButton.disabled = true;
+    editPromptButton.disabled = true;
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
@@ -293,6 +353,9 @@ runSelect.addEventListener("change", () => {
 stopButton.addEventListener("click", stopCurrentRun);
 rerunButton.addEventListener("click", rerunCurrentPrompt);
 renameButton.addEventListener("click", renameCurrentRun);
+editPromptButton.addEventListener("click", showPromptEditor);
+savePromptButton.addEventListener("click", saveCurrentPrompt);
+cancelPromptButton.addEventListener("click", hidePromptEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
 
 if ("EventSource" in window) {
