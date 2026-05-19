@@ -7,6 +7,25 @@ const runRows = document.querySelector("#runRows");
 const countLabel = document.querySelector("#countLabel");
 let companiesAvailable = 0;
 
+function setRunRows(message) {
+  runRows.innerHTML = `<tr><td colspan="6">${escapeHtml(message)}</td></tr>`;
+}
+
+async function fetchJson(url) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || `Could not load ${url}`);
+      return payload;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -38,9 +57,7 @@ function statusClass(status) {
 }
 
 async function loadCompanies() {
-  const response = await fetch("/api/companies");
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || "Could not load companies");
+  const payload = await fetchJson("/api/companies");
   companiesAvailable = payload.companies.length;
   countLabel.textContent = companiesAvailable.toString();
   companyCountInput.max = String(companiesAvailable);
@@ -48,12 +65,11 @@ async function loadCompanies() {
 }
 
 async function loadRuns() {
-  const response = await fetch("/api/runs");
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || "Could not load runs");
+  setRunRows("Loading saved scoring runs...");
+  const payload = await fetchJson("/api/runs");
 
   if (!payload.runs.length) {
-    runRows.innerHTML = '<tr><td colspan="6">No saved scoring runs yet.</td></tr>';
+    setRunRows("No saved scoring runs yet.");
     return;
   }
 
@@ -115,15 +131,26 @@ async function createRun() {
 
 runButton.addEventListener("click", createRun);
 
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    loadRuns().catch((error) => {
+      statusEl.textContent = error.message;
+      setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
+    });
+  }
+});
+
 if ("EventSource" in window) {
   const events = new EventSource("/events");
   events.addEventListener("reload", () => window.location.reload());
 }
 
 try {
+  setRunRows("Loading saved scoring runs...");
   await loadCompanies();
   await loadRuns();
   statusEl.textContent = "Ready.";
 } catch (error) {
   statusEl.textContent = error.message;
+  setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
 }

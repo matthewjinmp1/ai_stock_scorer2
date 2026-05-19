@@ -196,7 +196,7 @@ button:hover {
 }
 
 .detail-toolbar {
-  grid-template-columns: auto;
+  grid-template-columns: auto auto;
   justify-content: start;
 }
 

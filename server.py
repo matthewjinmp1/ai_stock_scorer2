@@ -832,6 +832,10 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store, max-age=0")
+        super().end_headers()
+
     def read_json(self):
         content_length = int(self.headers.get("Content-Length", "0"))
         if content_length <= 0:

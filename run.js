@@ -13,6 +13,24 @@ let currentRunId = params.get("id");
 let pollTimer = null;
 let currentRun = null;
 
+function ensureHomeLink() {
+  const toolbar = document.querySelector(".result-toolbar");
+  if (!toolbar) return;
+
+  const existingHome = toolbar.querySelector('a[href="/"]');
+  if (existingHome) {
+    existingHome.textContent = "Home";
+    existingHome.classList.add("secondary-link");
+    return;
+  }
+
+  const homeLink = document.createElement("a");
+  homeLink.href = "/";
+  homeLink.className = "secondary-link";
+  homeLink.textContent = "Home";
+  toolbar.append(homeLink);
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -196,6 +214,7 @@ if ("EventSource" in window) {
 }
 
 try {
+  ensureHomeLink();
   await loadRunList();
   await loadCurrentRun();
 } catch (error) {
