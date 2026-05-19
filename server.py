@@ -394,6 +394,21 @@ def find_ai_request_entry(run_id, ticker):
     return matches[-1] if matches else None
 
 
+def ai_request_costs_by_run():
+    costs = {}
+    for entry in ai_request_entries():
+        run_id = entry.get("run_id")
+        if run_id is None:
+            continue
+        token_stats = entry.get("token_stats") or {}
+        try:
+            cost = float(token_stats.get("cost") or 0)
+        except (TypeError, ValueError):
+            cost = 0
+        costs[run_id] = costs.get(run_id, 0) + cost
+    return costs
+
+
 def get_result_detail(run_id, ticker):
     with db_connect() as connection:
         run = connection.execute(
@@ -471,7 +486,13 @@ def list_runs():
             LIMIT 100
             """
         ).fetchall()
-    return [dict(row) for row in rows]
+    costs = ai_request_costs_by_run()
+    runs = []
+    for row in rows:
+        run = dict(row)
+        run["cost"] = costs.get(run["id"], 0)
+        runs.append(run)
+    return runs
 
 
 def rename_scoring_run(run_id, name):

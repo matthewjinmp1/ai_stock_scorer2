@@ -9,7 +9,7 @@ const countLabel = document.querySelector("#countLabel");
 let companiesAvailable = 0;
 
 function setRunRows(message) {
-  runRows.innerHTML = `<tr><td colspan="7">${escapeHtml(message)}</td></tr>`;
+  runRows.innerHTML = `<tr><td colspan="8">${escapeHtml(message)}</td></tr>`;
 }
 
 async function fetchJson(url) {
@@ -55,6 +55,21 @@ function statusClass(status) {
   if (status === "failed") return "pill bad";
   if (status === "running") return "pill live";
   return "pill";
+}
+
+function formatCost(value) {
+  const cost = Number(value || 0);
+  if (!cost) return "$0.00";
+  if (cost < 0.01) {
+    return `$${cost.toLocaleString(undefined, {
+      minimumFractionDigits: 6,
+      maximumFractionDigits: 6,
+    })}`;
+  }
+  return `$${cost.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 async function renameRun(runId, currentName) {
@@ -127,6 +142,7 @@ async function loadRuns() {
           <td class="prompt-cell">${escapeHtml(run.prompt)}</td>
           <td><span class="${statusClass(run.status)}">${escapeHtml(run.status)}</span></td>
           <td>${progress(run)}</td>
+          <td>${formatCost(run.cost)}</td>
           <td>${formatDate(run.created_at)}</td>
           <td class="row-actions">
             <div class="row-actions-inner">
