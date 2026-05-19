@@ -2,6 +2,7 @@ const params = new URLSearchParams(window.location.search);
 const runSelect = document.querySelector("#runSelect");
 const stopButton = document.querySelector("#stopButton");
 const rerunButton = document.querySelector("#rerunButton");
+const renameButton = document.querySelector("#renameButton");
 const runTitle = document.querySelector("#runTitle");
 const runPrompt = document.querySelector("#runPrompt");
 const runStatus = document.querySelector("#runStatus");
@@ -66,6 +67,40 @@ function canStop(run) {
   return run && ["queued", "running", "stop_requested"].includes(run.status);
 }
 
+async function renameCurrentRun() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before renaming.";
+    return;
+  }
+
+  const name = window.prompt("Rename this run", currentRun.name || `Run #${currentRun.id}`);
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) {
+    statusEl.textContent = "Run name is required.";
+    return;
+  }
+
+  renameButton.disabled = true;
+  try {
+    const response = await fetch(`/api/runs/${currentRun.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not rename run");
+    renderRun(payload.run);
+    await loadRunList();
+    runSelect.value = currentRunId;
+    statusEl.textContent = `Renamed to ${payload.run.name}.`;
+  } catch (error) {
+    statusEl.textContent = error.message;
+  } finally {
+    renameButton.disabled = !currentRun;
+  }
+}
+
 async function loadRunList() {
   const response = await fetch("/api/runs");
   const payload = await response.json();
@@ -75,7 +110,7 @@ async function loadRunList() {
   for (const run of payload.runs) {
     const option = document.createElement("option");
     option.value = run.id;
-    option.textContent = `#${run.id} - ${run.status} - ${run.prompt.slice(0, 80)}`;
+    option.textContent = `${run.name || `Run #${run.id}`} - ${run.status}`;
     runSelect.append(option);
   }
 
@@ -85,12 +120,13 @@ async function loadRunList() {
   }
   if (currentRunId) runSelect.value = currentRunId;
   rerunButton.disabled = !currentRunId;
+  renameButton.disabled = !currentRunId;
   stopButton.disabled = true;
 }
 
 function renderRun(run) {
   currentRun = run;
-  runTitle.textContent = `Run #${run.id}`;
+  runTitle.textContent = run.name || `Run #${run.id}`;
   runPrompt.textContent = run.prompt;
   runStatus.textContent = `${run.status} ${progress(run)}`;
   runCount.textContent = String(run.results.length);
@@ -98,6 +134,7 @@ function renderRun(run) {
   stopButton.disabled = !canStop(run);
   stopButton.textContent = run.status === "stop_requested" ? "Stopping..." : "Stop";
   rerunButton.disabled = false;
+  renameButton.disabled = false;
 
   if (!run.results.length) {
     resultRows.innerHTML = '<tr><td colspan="7">Waiting for scores...</td></tr>';
@@ -133,6 +170,7 @@ async function loadCurrentRun() {
   if (!currentRunId) {
     currentRun = null;
     rerunButton.disabled = true;
+    renameButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
     resultRows.innerHTML = '<tr><td colspan="7">Create a scoring run first.</td></tr>';
@@ -183,6 +221,14 @@ async function rerunCurrentPrompt() {
     return;
   }
 
+  const name = window.prompt("Name this rerun", `${currentRun.name || `Run #${currentRun.id}`} rerun`);
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) {
+    statusEl.textContent = "Run name is required.";
+    return;
+  }
+
   rerunButton.disabled = true;
   statusEl.textContent = "Starting rerun...";
 
@@ -190,7 +236,11 @@ async function rerunCurrentPrompt() {
     const response = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: currentRun.prompt }),
+      body: JSON.stringify({
+        name: trimmed,
+        prompt: currentRun.prompt,
+        companyCount: currentRun.company_count,
+      }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not start rerun");
@@ -216,6 +266,7 @@ runSelect.addEventListener("change", () => {
 
 stopButton.addEventListener("click", stopCurrentRun);
 rerunButton.addEventListener("click", rerunCurrentPrompt);
+renameButton.addEventListener("click", renameCurrentRun);
 
 if ("EventSource" in window) {
   const events = new EventSource("/events");

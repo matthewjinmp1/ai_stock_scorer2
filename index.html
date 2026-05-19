@@ -23,6 +23,10 @@
 
       <section class="prompt-panel" aria-label="Run stock scoring prompt">
         <label>
+          <span>Run name</span>
+          <input id="runNameInput" type="text" maxlength="120" placeholder="Example: Innovation score test" />
+        </label>
+        <label>
           <span>Prompt</span>
           <textarea id="promptInput" rows="5" placeholder="Example: Give this company a competitive moat score from 0 to 100. Return only the number."></textarea>
         </label>
@@ -46,6 +50,7 @@
           <thead>
             <tr>
               <th>Run</th>
+              <th>Name</th>
               <th>Prompt</th>
               <th>Status</th>
               <th>Progress</th>

@@ -208,6 +208,7 @@ def ensure_scoring_schema():
             """
             CREATE TABLE IF NOT EXISTS scoring_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
                 prompt TEXT NOT NULL,
                 model TEXT NOT NULL,
                 status TEXT NOT NULL,
@@ -242,6 +243,20 @@ def ensure_scoring_schema():
             CREATE INDEX IF NOT EXISTS idx_scoring_results_run_score ON scoring_results(run_id, score DESC);
             """
         )
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(scoring_runs)").fetchall()
+        }
+        if "name" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN name TEXT")
+        connection.execute(
+            """
+            UPDATE scoring_runs
+            SET name = 'Run #' || id
+            WHERE name IS NULL OR trim(name) = ''
+            """
+        )
+        connection.commit()
 
 
 def row_to_company(row):
@@ -289,12 +304,22 @@ def normalize_company_count(value):
     return company_count
 
 
-def create_scoring_run(prompt, model, company_count):
+def normalize_run_name(value):
+    name = (value or "").strip()
+    if not name:
+        raise ValueError("Run name is required.")
+    if len(name) > 120:
+        raise ValueError("Run name must be 120 characters or fewer.")
+    return name
+
+
+def create_scoring_run(name, prompt, model, company_count):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
     if not prompt_has_company_keyword(prompt):
         raise ValueError("Prompt must include the COMPANY keyword.")
 
+    name = normalize_run_name(name)
     company_count = normalize_company_count(company_count)
     companies = scoring_companies(company_count)
     if not companies:
@@ -304,10 +329,10 @@ def create_scoring_run(prompt, model, company_count):
     with db_connect() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO scoring_runs (prompt, model, status, company_count, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO scoring_runs (name, prompt, model, status, company_count, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (prompt, model, "queued", len(companies), now),
+            (name, prompt, model, "queued", len(companies), now),
         )
         run_id = cursor.lastrowid
         connection.commit()
@@ -321,7 +346,7 @@ def get_run(run_id):
     with db_connect() as connection:
         run = connection.execute(
             """
-            SELECT id, prompt, model, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE id = ?
@@ -370,7 +395,7 @@ def get_result_detail(run_id, ticker):
     with db_connect() as connection:
         run = connection.execute(
             """
-            SELECT id, prompt, model, status, created_at, started_at, finished_at, error
+            SELECT id, name, prompt, model, status, created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE id = ?
             """,
@@ -421,7 +446,7 @@ def stop_scoring_run(run_id):
         connection.commit()
         updated = connection.execute(
             """
-            SELECT id, prompt, model, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE id = ?
@@ -435,7 +460,7 @@ def list_runs():
     with db_connect() as connection:
         rows = connection.execute(
             """
-            SELECT id, prompt, model, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             ORDER BY created_at DESC, id DESC
@@ -443,6 +468,17 @@ def list_runs():
             """
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def rename_scoring_run(run_id, name):
+    name = normalize_run_name(name)
+    with db_connect() as connection:
+        row = connection.execute("SELECT id FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
+        if not row:
+            return None
+        connection.execute("UPDATE scoring_runs SET name = ? WHERE id = ?", (name, run_id))
+        connection.commit()
+    return get_run(run_id)
 
 
 def update_run_counts(connection, run_id):
@@ -732,7 +768,7 @@ def score_run_worker(run_id):
     ensure_scoring_schema()
     with db_connect() as connection:
         run = connection.execute(
-            "SELECT prompt, model, company_count FROM scoring_runs WHERE id = ?",
+            "SELECT name, prompt, model, company_count FROM scoring_runs WHERE id = ?",
             (run_id,),
         ).fetchone()
         if not run:
@@ -931,6 +967,10 @@ class Handler(SimpleHTTPRequestHandler):
             ensure_scoring_schema()
             try:
                 payload = self.read_json()
+                name = (payload.get("name") or "").strip()
+                if not name:
+                    self.send_json({"error": "Run name is required."}, 400)
+                    return
                 prompt = (payload.get("prompt") or "").strip()
                 if not prompt:
                     self.send_json({"error": "Prompt is required"}, 400)
@@ -939,10 +979,29 @@ class Handler(SimpleHTTPRequestHandler):
                     self.send_json({"error": "Prompt must include the COMPANY keyword."}, 400)
                     return
                 company_count = normalize_company_count(payload.get("companyCount"))
-                run_id = create_scoring_run(prompt, openrouter_model(), company_count)
+                run_id = create_scoring_run(name, prompt, openrouter_model(), company_count)
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
             except Exception as exc:
                 self.send_json({"error": str(exc)}, 500)
+            return
+        self.send_json({"error": "Not found"}, 404)
+
+    def do_PATCH(self):
+        parsed = urlparse(self.path)
+        run_match = re.fullmatch(r"/api/runs/(\d+)", parsed.path)
+        if run_match:
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                run = rename_scoring_run(int(run_match.group(1)), payload.get("name"))
+                if not run:
+                    self.send_json({"error": "Run not found"}, 404)
+                    return
+                self.send_json({"run": run})
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 400)
             return
         self.send_json({"error": "Not found"}, 404)
 

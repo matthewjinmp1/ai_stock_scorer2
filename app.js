@@ -1,4 +1,5 @@
 const promptInput = document.querySelector("#promptInput");
+const runNameInput = document.querySelector("#runNameInput");
 const companyCountInput = document.querySelector("#companyCountInput");
 const companyCountHelp = document.querySelector("#companyCountHelp");
 const runButton = document.querySelector("#runButton");
@@ -8,7 +9,7 @@ const countLabel = document.querySelector("#countLabel");
 let companiesAvailable = 0;
 
 function setRunRows(message) {
-  runRows.innerHTML = `<tr><td colspan="6">${escapeHtml(message)}</td></tr>`;
+  runRows.innerHTML = `<tr><td colspan="7">${escapeHtml(message)}</td></tr>`;
 }
 
 async function fetchJson(url) {
@@ -56,6 +57,30 @@ function statusClass(status) {
   return "pill";
 }
 
+async function renameRun(runId, currentName) {
+  const name = window.prompt("Rename this run", currentName || "");
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) {
+    statusEl.textContent = "Run name is required.";
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not rename run");
+    statusEl.textContent = `Renamed to ${payload.run.name}.`;
+    await loadRuns();
+  } catch (error) {
+    statusEl.textContent = error.message;
+  }
+}
+
 async function loadCompanies() {
   const payload = await fetchJson("/api/companies");
   companiesAvailable = payload.companies.length;
@@ -78,11 +103,22 @@ async function loadRuns() {
       (run) => `
         <tr>
           <td>#${run.id}</td>
+          <td><strong>${escapeHtml(run.name || `Run #${run.id}`)}</strong></td>
           <td class="prompt-cell">${escapeHtml(run.prompt)}</td>
           <td><span class="${statusClass(run.status)}">${escapeHtml(run.status)}</span></td>
           <td>${progress(run)}</td>
           <td>${formatDate(run.created_at)}</td>
-          <td><a class="row-link" href="/run.html?id=${run.id}">Open</a></td>
+          <td class="row-actions">
+            <div class="row-actions-inner">
+              <a class="row-link" href="/run.html?id=${run.id}">Open</a>
+              <button
+                class="link-button"
+                type="button"
+                data-rename-run="${run.id}"
+                data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
+              >Rename</button>
+            </div>
+          </td>
         </tr>
       `
     )
@@ -90,7 +126,13 @@ async function loadRuns() {
 }
 
 async function createRun() {
+  const name = runNameInput.value.trim();
   const prompt = promptInput.value.trim();
+  if (!name) {
+    statusEl.textContent = "Give this run a name first.";
+    runNameInput.focus();
+    return;
+  }
   if (!prompt) {
     statusEl.textContent = "Enter a numeric scoring prompt first.";
     promptInput.focus();
@@ -115,7 +157,7 @@ async function createRun() {
     const response = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, companyCount }),
+      body: JSON.stringify({ name, prompt, companyCount }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not create run");
@@ -130,6 +172,11 @@ async function createRun() {
 }
 
 runButton.addEventListener("click", createRun);
+runRows.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-rename-run]");
+  if (!button) return;
+  renameRun(button.dataset.renameRun, button.dataset.runName);
+});
 
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) {

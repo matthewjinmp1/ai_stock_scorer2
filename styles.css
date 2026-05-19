@@ -168,6 +168,17 @@ button:hover {
   background: var(--accent-strong);
 }
 
+.secondary-button {
+  color: var(--accent);
+  background: #eef5ff;
+  border-color: #c9d9ec;
+}
+
+.secondary-button:hover {
+  color: #fff;
+  background: var(--accent);
+}
+
 .prompt-panel {
   display: grid;
   gap: 14px;
@@ -408,6 +419,31 @@ button:disabled {
   max-width: 520px;
   white-space: normal;
   line-height: 1.35;
+}
+
+.row-actions {
+  white-space: nowrap;
+}
+
+.row-actions-inner {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.link-button {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  color: var(--accent);
+  background: transparent;
+  font-weight: 700;
+}
+
+.link-button:hover {
+  color: var(--accent-strong);
+  background: transparent;
+  text-decoration: underline;
 }
 
 .pill {

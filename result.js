@@ -106,7 +106,7 @@ async function loadDetail() {
   const reasoningTokenCount = Number(completionDetails.reasoning_tokens || 0);
 
   els.title.textContent = result.company_name;
-  els.subtitle.textContent = `Run #${run.id} • ${result.ticker} • ${run.model}`;
+  els.subtitle.textContent = `${run.name || `Run #${run.id}`} • ${result.ticker} • ${run.model}`;
   els.scoreValue.textContent = formatNumber(result.score);
   els.tickerLabel.textContent = result.ticker;
   els.status.textContent = error ? "Request completed with an error." : "Request completed successfully.";
@@ -130,7 +130,7 @@ async function loadDetail() {
   setBar(els.completionTokenBar, completionTokenCount, total);
   setBar(els.reasoningTokenBar, reasoningTokenCount, total);
 
-  els.runIdValue.textContent = `#${run.id}`;
+  els.runIdValue.textContent = `${run.name || `Run #${run.id}`} (#${run.id})`;
   els.requestModel.textContent = text(request.model);
   els.responseModel.textContent = text(responseData.model);
   els.httpStatus.textContent = text(responseData.http_status);
