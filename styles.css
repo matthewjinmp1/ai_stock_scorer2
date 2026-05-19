@@ -31,6 +31,23 @@ body {
   padding: 36px 0;
 }
 
+.page-nav {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 24px rgba(29, 45, 68, 0.06);
+}
+
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 230px;
@@ -196,7 +213,7 @@ button:hover {
 }
 
 .detail-toolbar {
-  grid-template-columns: auto auto;
+  grid-template-columns: auto;
   justify-content: start;
 }
 

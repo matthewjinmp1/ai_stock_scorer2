@@ -14,21 +14,30 @@ let pollTimer = null;
 let currentRun = null;
 
 function ensureHomeLink() {
-  const toolbar = document.querySelector(".result-toolbar");
-  if (!toolbar) return;
+  let nav = document.querySelector(".page-nav");
+  const shell = document.querySelector(".shell");
+  if (!nav && shell) {
+    nav = document.createElement("nav");
+    nav.className = "page-nav";
+    nav.setAttribute("aria-label", "Page navigation");
+    shell.prepend(nav);
+  }
+  if (!nav) return;
 
-  const existingHome = toolbar.querySelector('a[href="/"]');
+  const existingHome = document.querySelector('a[href="/"]');
   if (existingHome) {
     existingHome.textContent = "Home";
     existingHome.classList.add("secondary-link");
+    existingHome.classList.add("nav-link");
+    if (existingHome.parentElement !== nav) nav.append(existingHome);
     return;
   }
 
   const homeLink = document.createElement("a");
   homeLink.href = "/";
-  homeLink.className = "secondary-link";
+  homeLink.className = "secondary-link nav-link";
   homeLink.textContent = "Home";
-  toolbar.append(homeLink);
+  nav.append(homeLink);
 }
 
 function escapeHtml(value) {
