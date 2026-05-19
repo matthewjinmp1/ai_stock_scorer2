@@ -83,15 +83,15 @@ async function renameRun(runId, currentName) {
 
 async function deleteRun(runId, currentName) {
   const label = currentName || `Run #${runId}`;
-  if (!window.confirm(`Delete "${label}" and all saved scores for it?`)) return;
+  if (!window.confirm(`Archive "${label}"? It will be hidden from normal views, but its data will stay saved.`)) return;
 
   try {
     const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
       method: "DELETE",
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not delete run");
-    statusEl.textContent = `Deleted ${label}.`;
+    if (!response.ok) throw new Error(payload.error || "Could not archive run");
+    statusEl.textContent = `Archived ${label}.`;
     await loadRuns();
   } catch (error) {
     statusEl.textContent = error.message;
@@ -139,7 +139,7 @@ async function loadRuns() {
                 type="button"
                 data-delete-run="${run.id}"
                 data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
-              >Delete</button>
+              >Archive</button>
             </div>
           </td>
         </tr>

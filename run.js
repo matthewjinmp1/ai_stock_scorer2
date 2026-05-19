@@ -104,21 +104,21 @@ async function renameCurrentRun() {
 
 async function deleteCurrentRun() {
   if (!currentRun) {
-    statusEl.textContent = "Pick a saved run before deleting.";
+    statusEl.textContent = "Pick a saved run before archiving.";
     return;
   }
 
   const label = currentRun.name || `Run #${currentRun.id}`;
-  if (!window.confirm(`Delete "${label}" and all saved scores for it?`)) return;
+  if (!window.confirm(`Archive "${label}"? It will be hidden from normal views, but its data will stay saved.`)) return;
 
   deleteButton.disabled = true;
-  statusEl.textContent = `Deleting ${label}...`;
+  statusEl.textContent = `Archiving ${label}...`;
   try {
     const response = await fetch(`/api/runs/${currentRun.id}`, {
       method: "DELETE",
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not delete run");
+    if (!response.ok) throw new Error(payload.error || "Could not archive run");
     window.location.href = "/";
   } catch (error) {
     statusEl.textContent = error.message;

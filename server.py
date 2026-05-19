@@ -218,6 +218,7 @@ def ensure_scoring_schema():
                 created_at INTEGER NOT NULL,
                 started_at INTEGER,
                 finished_at INTEGER,
+                deleted_at INTEGER,
                 error TEXT
             );
 
@@ -249,6 +250,8 @@ def ensure_scoring_schema():
         }
         if "name" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN name TEXT")
+        if "deleted_at" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN deleted_at INTEGER")
         connection.execute(
             """
             UPDATE scoring_runs
@@ -349,7 +352,7 @@ def get_run(run_id):
             SELECT id, name, prompt, model, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
-            WHERE id = ?
+            WHERE id = ? AND deleted_at IS NULL
             """,
             (run_id,),
         ).fetchone()
@@ -397,7 +400,7 @@ def get_result_detail(run_id, ticker):
             """
             SELECT id, name, prompt, model, status, created_at, started_at, finished_at, error
             FROM scoring_runs
-            WHERE id = ?
+            WHERE id = ? AND deleted_at IS NULL
             """,
             (run_id,),
         ).fetchone()
@@ -425,14 +428,14 @@ def get_result_detail(run_id, ticker):
 
 def run_status(run_id):
     with db_connect() as connection:
-        row = connection.execute("SELECT status FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
+        row = connection.execute("SELECT status FROM scoring_runs WHERE id = ? AND deleted_at IS NULL", (run_id,)).fetchone()
     return row["status"] if row else None
 
 
 def stop_scoring_run(run_id):
     now = int(time.time())
     with db_connect() as connection:
-        row = connection.execute("SELECT status FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
+        row = connection.execute("SELECT status FROM scoring_runs WHERE id = ? AND deleted_at IS NULL", (run_id,)).fetchone()
         if not row:
             return None
         if row["status"] in ("queued", "running"):
@@ -449,7 +452,7 @@ def stop_scoring_run(run_id):
             SELECT id, name, prompt, model, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
-            WHERE id = ?
+            WHERE id = ? AND deleted_at IS NULL
             """,
             (run_id,),
         ).fetchone()
@@ -463,6 +466,7 @@ def list_runs():
             SELECT id, name, prompt, model, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
+            WHERE deleted_at IS NULL
             ORDER BY created_at DESC, id DESC
             LIMIT 100
             """
@@ -473,7 +477,7 @@ def list_runs():
 def rename_scoring_run(run_id, name):
     name = normalize_run_name(name)
     with db_connect() as connection:
-        row = connection.execute("SELECT id FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
+        row = connection.execute("SELECT id FROM scoring_runs WHERE id = ? AND deleted_at IS NULL", (run_id,)).fetchone()
         if not row:
             return None
         connection.execute("UPDATE scoring_runs SET name = ? WHERE id = ?", (name, run_id))
@@ -481,25 +485,33 @@ def rename_scoring_run(run_id, name):
     return get_run(run_id)
 
 
-def remove_ai_request_entries(run_id):
-    if not AI_REQUEST_LOG_PATH.exists():
-        return
-    entries = ai_request_entries()
-    kept = [entry for entry in entries if entry.get("run_id") != run_id]
-    if len(kept) == len(entries):
-        return
-    AI_REQUEST_LOG_PATH.write_text(json.dumps(kept, indent=2), encoding="utf-8")
-
-
 def delete_scoring_run(run_id):
+    now = int(time.time())
     with db_connect() as connection:
-        row = connection.execute("SELECT id FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
+        row = connection.execute("SELECT id FROM scoring_runs WHERE id = ? AND deleted_at IS NULL", (run_id,)).fetchone()
         if not row:
             return False
-        connection.execute("DELETE FROM scoring_results WHERE run_id = ?", (run_id,))
-        connection.execute("DELETE FROM scoring_runs WHERE id = ?", (run_id,))
+        connection.execute(
+            """
+            UPDATE scoring_runs
+            SET deleted_at = ?,
+                status = CASE
+                    WHEN status IN ('queued', 'running', 'stop_requested') THEN 'stopped'
+                    ELSE status
+                END,
+                finished_at = CASE
+                    WHEN finished_at IS NULL THEN ?
+                    ELSE finished_at
+                END,
+                error = CASE
+                    WHEN status IN ('queued', 'running', 'stop_requested') THEN 'Archived by user.'
+                    ELSE error
+                END
+            WHERE id = ?
+            """,
+            (now, now, run_id),
+        )
         connection.commit()
-    remove_ai_request_entries(run_id)
     return True
 
 
@@ -790,7 +802,7 @@ def score_run_worker(run_id):
     ensure_scoring_schema()
     with db_connect() as connection:
         run = connection.execute(
-            "SELECT name, prompt, model, company_count FROM scoring_runs WHERE id = ?",
+            "SELECT name, prompt, model, company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
             (run_id,),
         ).fetchone()
         if not run:
@@ -1041,11 +1053,11 @@ class Handler(SimpleHTTPRequestHandler):
         run_match = re.fullmatch(r"/api/runs/(\d+)", parsed.path)
         if run_match:
             ensure_scoring_schema()
-            deleted = delete_scoring_run(int(run_match.group(1)))
-            if not deleted:
+            archived = delete_scoring_run(int(run_match.group(1)))
+            if not archived:
                 self.send_json({"error": "Run not found"}, 404)
                 return
-            self.send_json({"deleted": True})
+            self.send_json({"archived": True})
             return
         self.send_json({"error": "Not found"}, 404)
 
