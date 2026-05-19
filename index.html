@@ -26,6 +26,13 @@
           <span>Prompt</span>
           <textarea id="promptInput" rows="5" placeholder="Example: Give this company a competitive moat score from 0 to 100. Return only the number."></textarea>
         </label>
+        <div class="run-options">
+          <label>
+            <span>Stocks to score</span>
+            <input id="companyCountInput" type="number" min="1" max="100" value="10" />
+          </label>
+          <p id="companyCountHelp">Starting from the largest companies by market cap.</p>
+        </div>
         <div class="actions">
           <button id="runButton" type="button">Run score</button>
           <a class="secondary-link" href="/run.html">Open saved rankings</a>

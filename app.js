@@ -1,8 +1,11 @@
 const promptInput = document.querySelector("#promptInput");
+const companyCountInput = document.querySelector("#companyCountInput");
+const companyCountHelp = document.querySelector("#companyCountHelp");
 const runButton = document.querySelector("#runButton");
 const statusEl = document.querySelector("#status");
 const runRows = document.querySelector("#runRows");
 const countLabel = document.querySelector("#countLabel");
+let companiesAvailable = 0;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -38,7 +41,10 @@ async function loadCompanies() {
   const response = await fetch("/api/companies");
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || "Could not load companies");
-  countLabel.textContent = payload.companies.length.toString();
+  companiesAvailable = payload.companies.length;
+  countLabel.textContent = companiesAvailable.toString();
+  companyCountInput.max = String(companiesAvailable);
+  companyCountHelp.textContent = `Choose 1-${companiesAvailable}. Scoring starts from the largest companies by market cap.`;
 }
 
 async function loadRuns() {
@@ -79,15 +85,21 @@ async function createRun() {
     promptInput.focus();
     return;
   }
+  const companyCount = Number(companyCountInput.value);
+  if (!Number.isInteger(companyCount) || companyCount < 1 || companyCount > companiesAvailable) {
+    statusEl.textContent = `Choose a stock count from 1 to ${companiesAvailable}.`;
+    companyCountInput.focus();
+    return;
+  }
 
   runButton.disabled = true;
-  statusEl.textContent = "Creating scoring run...";
+  statusEl.textContent = `Creating scoring run for ${companyCount} stocks...`;
 
   try {
     const response = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, companyCount }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not create run");

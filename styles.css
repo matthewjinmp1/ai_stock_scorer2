@@ -167,6 +167,19 @@ button:hover {
   align-items: center;
 }
 
+.run-options {
+  display: grid;
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.run-options p {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 .secondary-link,
 .row-link,
 .company-link {
@@ -497,7 +510,8 @@ tbody tr:hover {
   .hero,
   .toolbar,
   .metric-grid,
-  .detail-grid {
+  .detail-grid,
+  .run-options {
     grid-template-columns: 1fr;
   }
 

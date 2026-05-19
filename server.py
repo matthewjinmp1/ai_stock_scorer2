@@ -20,7 +20,7 @@ DB_PATH = ROOT / "companies.db"
 AI_REQUEST_LOG_PATH = ROOT / "ai_requests.json"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
-SCORING_COMPANY_LIMIT = 10
+DEFAULT_SCORING_COMPANY_COUNT = 10
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
@@ -270,17 +270,33 @@ def db_companies():
     return [row_to_company(row) for row in rows]
 
 
-def scoring_companies():
-    return db_companies()[:SCORING_COMPANY_LIMIT]
+def scoring_companies(company_count):
+    return db_companies()[:company_count]
 
 
-def create_scoring_run(prompt, model):
+def normalize_company_count(value):
+    companies_available = len(db_companies())
+    if companies_available <= 0:
+        raise RuntimeError("No companies found. Run ./fetch_companies_to_db.py first.")
+    try:
+        company_count = int(value)
+    except (TypeError, ValueError):
+        company_count = DEFAULT_SCORING_COMPANY_COUNT
+    if company_count < 1:
+        raise ValueError("Company count must be at least 1.")
+    if company_count > companies_available:
+        raise ValueError(f"Company count cannot exceed {companies_available}.")
+    return company_count
+
+
+def create_scoring_run(prompt, model, company_count):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
     if not prompt_has_company_keyword(prompt):
         raise ValueError("Prompt must include the COMPANY keyword.")
 
-    companies = scoring_companies()
+    company_count = normalize_company_count(company_count)
+    companies = scoring_companies(company_count)
     if not companies:
         raise RuntimeError("No companies found. Run ./fetch_companies_to_db.py first.")
 
@@ -715,7 +731,10 @@ def save_result(connection, run_id, company, score, raw_response, error):
 def score_run_worker(run_id):
     ensure_scoring_schema()
     with db_connect() as connection:
-        run = connection.execute("SELECT prompt, model FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
+        run = connection.execute(
+            "SELECT prompt, model, company_count FROM scoring_runs WHERE id = ?",
+            (run_id,),
+        ).fetchone()
         if not run:
             return
         connection.execute(
@@ -727,7 +746,7 @@ def score_run_worker(run_id):
     fatal_error = None
     stopped = False
     try:
-        companies = scoring_companies()
+        companies = scoring_companies(run["company_count"])
         for company in companies:
             if run_status(run_id) == "stop_requested":
                 stopped = True
@@ -915,7 +934,8 @@ class Handler(SimpleHTTPRequestHandler):
                 if not prompt_has_company_keyword(prompt):
                     self.send_json({"error": "Prompt must include the COMPANY keyword."}, 400)
                     return
-                run_id = create_scoring_run(prompt, openrouter_model())
+                company_count = normalize_company_count(payload.get("companyCount"))
+                run_id = create_scoring_run(prompt, openrouter_model(), company_count)
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
             except Exception as exc:
                 self.send_json({"error": str(exc)}, 500)
