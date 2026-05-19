@@ -19,7 +19,7 @@ CACHE_SECONDS = 60 * 15
 DB_PATH = ROOT / "companies.db"
 AI_REQUEST_LOG_PATH = ROOT / "ai_requests.json"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
+OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
 SCORING_COMPANY_LIMIT = 10
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
 
@@ -44,7 +44,7 @@ load_env_file()
 
 
 def openrouter_model():
-    return os.environ.get("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
+    return OPENROUTER_MODEL
 
 
 def openrouter_max_tokens():
