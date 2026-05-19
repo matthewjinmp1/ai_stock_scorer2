@@ -83,7 +83,7 @@ async function renameRun(runId, currentName) {
 
 async function deleteRun(runId, currentName) {
   const label = currentName || `Run #${runId}`;
-  if (!window.confirm(`Archive "${label}"? It will be hidden from normal views, but its data will stay saved.`)) return;
+  statusEl.textContent = `Archiving ${label}...`;
 
   try {
     const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {

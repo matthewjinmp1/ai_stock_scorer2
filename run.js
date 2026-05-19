@@ -109,8 +109,6 @@ async function deleteCurrentRun() {
   }
 
   const label = currentRun.name || `Run #${currentRun.id}`;
-  if (!window.confirm(`Archive "${label}"? It will be hidden from normal views, but its data will stay saved.`)) return;
-
   deleteButton.disabled = true;
   statusEl.textContent = `Archiving ${label}...`;
   try {
