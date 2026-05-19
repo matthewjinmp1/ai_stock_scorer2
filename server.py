@@ -704,6 +704,12 @@ def watched_signature():
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def handle_one_request(self):
+        try:
+            super().handle_one_request()
+        except ConnectionResetError:
+            pass
+
     def translate_path(self, path):
         parsed = urlparse(path).path.lstrip("/")
         if not parsed:
