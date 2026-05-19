@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Request Detail</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero compact-hero">
+        <div>
+          <p class="eyebrow">AI Request Detail</p>
+          <h1 id="title">Stock Request</h1>
+          <p id="subtitle" class="lede"></p>
+        </div>
+        <div class="hero-stat">
+          <span id="scoreLabel">Score</span>
+          <strong id="scoreValue">--</strong>
+          <small id="tickerLabel"></small>
+        </div>
+      </section>
+
+      <section class="toolbar detail-toolbar" aria-label="Request controls">
+        <a id="backLink" class="secondary-link" href="/run.html">Back to ranking</a>
+      </section>
+
+      <p id="status" class="status" role="status"></p>
+
+      <section class="detail-grid">
+        <article class="detail-panel">
+          <h2>Prompt Sent</h2>
+          <pre id="promptSent"></pre>
+        </article>
+
+        <article class="detail-panel">
+          <h2>AI Response</h2>
+          <pre id="aiResponse"></pre>
+        </article>
+
+        <article class="detail-panel">
+          <h2>Token Stats</h2>
+          <pre id="tokenStats"></pre>
+        </article>
+
+        <article class="detail-panel">
+          <h2>Request Metadata</h2>
+          <pre id="metadata"></pre>
+        </article>
+      </section>
+    </main>
+    <script src="/result.js" type="module"></script>
+  </body>
+</html>

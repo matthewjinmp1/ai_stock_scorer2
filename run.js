@@ -27,6 +27,10 @@ function formatScore(score) {
   return Number(score).toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+function resultUrl(result) {
+  return `/result.html?run=${encodeURIComponent(currentRunId)}&ticker=${encodeURIComponent(result.ticker)}`;
+}
+
 function progress(run) {
   return `${run.completed_count + run.failed_count}/${run.company_count}`;
 }
@@ -82,7 +86,9 @@ function renderRun(run) {
           <td><strong>${formatScore(result.score)}</strong></td>
           <td>
             <div>
-              <strong>${escapeHtml(result.company_name)}</strong>
+              <a class="company-link" href="${resultUrl(result)}">
+                <strong>${escapeHtml(result.company_name)}</strong>
+              </a>
               <span class="ticker">${escapeHtml(result.ticker)}</span>
             </div>
           </td>

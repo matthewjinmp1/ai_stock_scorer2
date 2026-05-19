@@ -10,7 +10,7 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 ROOT = Path(__file__).resolve().parent
@@ -329,6 +329,59 @@ def get_run(run_id):
     return payload
 
 
+def ai_request_entries():
+    if not AI_REQUEST_LOG_PATH.exists():
+        return []
+    try:
+        entries = json.loads(AI_REQUEST_LOG_PATH.read_text())
+        return entries if isinstance(entries, list) else []
+    except json.JSONDecodeError:
+        return []
+
+
+def find_ai_request_entry(run_id, ticker):
+    ticker = ticker.upper()
+    matches = [
+        entry
+        for entry in ai_request_entries()
+        if entry.get("run_id") == run_id
+        and (entry.get("company", {}).get("ticker") or "").upper() == ticker
+    ]
+    return matches[-1] if matches else None
+
+
+def get_result_detail(run_id, ticker):
+    with db_connect() as connection:
+        run = connection.execute(
+            """
+            SELECT id, prompt, model, status, created_at, started_at, finished_at, error
+            FROM scoring_runs
+            WHERE id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+        if not run:
+            return None
+
+        result = connection.execute(
+            """
+            SELECT ticker, company_name, rank, market_cap, market_cap_value, price, country,
+                   score, raw_response, error, created_at
+            FROM scoring_results
+            WHERE run_id = ? AND ticker = ?
+            """,
+            (run_id, ticker),
+        ).fetchone()
+        if not result:
+            return None
+
+    return {
+        "run": dict(run),
+        "result": dict(result),
+        "aiRequest": sanitized_ai_request_entry(find_ai_request_entry(run_id, ticker)),
+    }
+
+
 def run_status(run_id):
     with db_connect() as connection:
         row = connection.execute("SELECT status FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
@@ -486,7 +539,7 @@ def ai_log_entry(run_id, company, request_payload, started_at, response_payload=
             "model": response_payload.get("model") if response_payload else None,
             "visible_content": choice.get("message", {}).get("content") if choice else None,
             "finish_reason": choice.get("finish_reason") if choice else None,
-            "raw_payload": response_payload,
+            "raw_payload": sanitized_ai_payload(response_payload),
             "error": error,
         },
         "token_stats": response_payload.get("usage") if response_payload else None,
@@ -496,6 +549,31 @@ def ai_log_entry(run_id, company, request_payload, started_at, response_payload=
         "chain_of_thought": None,
         "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
     }
+
+
+def sanitized_ai_payload(payload):
+    if payload is None:
+        return None
+    sanitized = json.loads(json.dumps(payload))
+    for choice in sanitized.get("choices", []) or []:
+        message = choice.get("message")
+        if isinstance(message, dict):
+            message.pop("reasoning", None)
+            message.pop("reasoning_details", None)
+            message.pop("reasoning_content", None)
+    return sanitized
+
+
+def sanitized_ai_request_entry(entry):
+    if entry is None:
+        return None
+    sanitized = json.loads(json.dumps(entry))
+    response = sanitized.get("response")
+    if isinstance(response, dict):
+        response["raw_payload"] = sanitized_ai_payload(response.get("raw_payload"))
+    sanitized["chain_of_thought"] = None
+    sanitized["chain_of_thought_note"] = "Hidden chain-of-thought is not exposed in this app."
+    return sanitized
 
 
 def call_openrouter(prompt, company, model, run_id=None):
@@ -693,7 +771,17 @@ def score_run_worker(run_id):
 
 
 def watched_signature():
-    files = ["server.py", "index.html", "styles.css", "app.js", "start_server.sh"]
+    files = [
+        "server.py",
+        "index.html",
+        "styles.css",
+        "app.js",
+        "run.html",
+        "run.js",
+        "result.html",
+        "result.js",
+        "start_server.sh",
+    ]
     signature = []
     for filename in files:
         path = ROOT / filename
@@ -737,6 +825,10 @@ class Handler(SimpleHTTPRequestHandler):
             self.path = "/run.html"
             super().do_GET()
             return
+        if parsed.path == "/result.html":
+            self.path = "/result.html"
+            super().do_GET()
+            return
 
         if parsed.path == "/api/companies":
             try:
@@ -754,6 +846,16 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/runs":
             ensure_scoring_schema()
             self.send_json({"runs": list_runs()})
+            return
+
+        result_match = re.fullmatch(r"/api/runs/(\d+)/results/(.+)", parsed.path)
+        if result_match:
+            ensure_scoring_schema()
+            detail = get_result_detail(int(result_match.group(1)), unquote(result_match.group(2)))
+            if not detail:
+                self.send_json({"error": "Result not found"}, 404)
+                return
+            self.send_json({"detail": detail})
             return
 
         run_match = re.fullmatch(r"/api/runs/(\d+)", parsed.path)

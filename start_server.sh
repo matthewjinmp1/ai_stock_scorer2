@@ -19,7 +19,7 @@ fi
 
 export PORT
 
-WATCHED_FILES=(server.py index.html styles.css app.js run.html run.js)
+WATCHED_FILES=(server.py index.html styles.css app.js run.html run.js result.html result.js)
 
 signature() {
   python3 -c 'import os, sys
