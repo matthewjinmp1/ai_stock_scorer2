@@ -17,12 +17,14 @@ ROOT = Path(__file__).resolve().parent
 SOURCE_URL = "https://companiesmarketcap.com/"
 CACHE_SECONDS = 60 * 15
 DB_PATH = ROOT / "companies.db"
+AI_REQUEST_LOG_PATH = ROOT / "ai_requests.json"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash"
 SCORING_COMPANY_LIMIT = 10
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
+_ai_request_log_lock = threading.Lock()
 
 
 def load_env_file():
@@ -46,6 +48,24 @@ def openrouter_model():
 
 def prompt_has_company_keyword(prompt):
     return "COMPANY" in prompt
+
+
+def append_ai_request_log(entry):
+    with _ai_request_log_lock:
+        if AI_REQUEST_LOG_PATH.exists():
+            try:
+                entries = json.loads(AI_REQUEST_LOG_PATH.read_text())
+                if not isinstance(entries, list):
+                    entries = []
+            except json.JSONDecodeError:
+                entries = []
+        else:
+            entries = []
+
+        entries.append(entry)
+        tmp_path = AI_REQUEST_LOG_PATH.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(entries, indent=2, sort_keys=True))
+        tmp_path.replace(AI_REQUEST_LOG_PATH)
 
 
 def _clean(value):
@@ -304,6 +324,39 @@ def get_run(run_id):
     return payload
 
 
+def run_status(run_id):
+    with db_connect() as connection:
+        row = connection.execute("SELECT status FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
+    return row["status"] if row else None
+
+
+def stop_scoring_run(run_id):
+    now = int(time.time())
+    with db_connect() as connection:
+        row = connection.execute("SELECT status FROM scoring_runs WHERE id = ?", (run_id,)).fetchone()
+        if not row:
+            return None
+        if row["status"] in ("queued", "running"):
+            connection.execute(
+                "UPDATE scoring_runs SET status = ?, error = ? WHERE id = ?",
+                ("stop_requested", "Stop requested by user.", run_id),
+            )
+        elif row["status"] == "stop_requested":
+            pass
+        update_run_counts(connection, run_id)
+        connection.commit()
+        updated = connection.execute(
+            """
+            SELECT id, prompt, model, status, company_count, completed_count, failed_count,
+                   created_at, started_at, finished_at, error
+            FROM scoring_runs
+            WHERE id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+    return dict(updated)
+
+
 def list_runs():
     with db_connect() as connection:
         rows = connection.execute(
@@ -372,21 +425,87 @@ def prompt_for_company(prompt, company):
     return prompt.strip().replace("COMPANY", company["name"])
 
 
-def call_openrouter(prompt, company, model):
+def openrouter_http_error_details(error):
+    try:
+        body = error.read().decode("utf-8", "replace")
+    except Exception:
+        body = ""
+
+    message = f"OpenRouter HTTP {error.code}: {error.reason}"
+    parsed_body = None
+    if body:
+        try:
+            parsed_body = json.loads(body)
+            detail = parsed_body.get("error", {}).get("message") or parsed_body.get("message")
+            if detail:
+                message = f"{message} - {detail}"
+        except json.JSONDecodeError:
+            message = f"{message} - {body[:300]}"
+
+    return {
+        "message": message,
+        "status": error.code,
+        "reason": error.reason,
+        "body": parsed_body if parsed_body is not None else body,
+    }
+
+
+def ai_log_entry(run_id, company, request_payload, started_at, response_payload=None, error=None, http_status=None):
+    choice = None
+    if response_payload and response_payload.get("choices"):
+        choice = response_payload["choices"][0]
+
+    return {
+        "timestamp": int(time.time()),
+        "run_id": run_id,
+        "company": {
+            "name": company["name"],
+            "ticker": company["ticker"],
+            "market_cap_rank": company["rank"],
+        },
+        "request": {
+            "provider": "openrouter",
+            "url": OPENROUTER_API_URL,
+            "model": request_payload.get("model"),
+            "messages": request_payload.get("messages"),
+            "temperature": request_payload.get("temperature"),
+            "max_tokens": request_payload.get("max_tokens"),
+            "prompt_sent": request_payload["messages"][0]["content"],
+        },
+        "response": {
+            "success": error is None,
+            "http_status": http_status,
+            "id": response_payload.get("id") if response_payload else None,
+            "created": response_payload.get("created") if response_payload else None,
+            "model": response_payload.get("model") if response_payload else None,
+            "visible_content": choice.get("message", {}).get("content") if choice else None,
+            "finish_reason": choice.get("finish_reason") if choice else None,
+            "raw_payload": response_payload,
+            "error": error,
+        },
+        "token_stats": response_payload.get("usage") if response_payload else None,
+        "timing": {
+            "duration_ms": round((time.time() - started_at) * 1000),
+        },
+        "chain_of_thought": None,
+        "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+    }
+
+
+def call_openrouter(prompt, company, model, run_id=None):
     api_key = os.environ.get("OPENROUTER_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_KEY is not set")
 
-    body = json.dumps(
-        {
-            "model": model,
-            "messages": [
-                {"role": "user", "content": prompt_for_company(prompt, company)},
-            ],
-            "temperature": 0,
-            "max_tokens": 20,
-        }
-    ).encode("utf-8")
+    request_payload = {
+        "model": model,
+        "messages": [
+            {"role": "user", "content": prompt_for_company(prompt, company)},
+        ],
+        "temperature": 0,
+        "max_tokens": 20,
+    }
+    body = json.dumps(request_payload).encode("utf-8")
     request = urllib.request.Request(
         OPENROUTER_API_URL,
         data=body,
@@ -398,15 +517,66 @@ def call_openrouter(prompt, company, model):
         },
         method="POST",
     )
+    started_at = time.time()
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
+            http_status = response.status
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        message = openrouter_error_message(exc)
+        details = openrouter_http_error_details(exc)
+        append_ai_request_log(
+            ai_log_entry(
+                run_id,
+                company,
+                request_payload,
+                started_at,
+                error=details,
+                http_status=details["status"],
+            )
+        )
+        message = details["message"]
         if exc.code in (401, 403):
             raise FatalScoringError(message) from exc
         raise RuntimeError(message) from exc
-    return payload["choices"][0]["message"]["content"].strip()
+    except Exception as exc:
+        append_ai_request_log(
+            ai_log_entry(
+                run_id,
+                company,
+                request_payload,
+                started_at,
+                error={"message": str(exc), "type": exc.__class__.__name__},
+            )
+        )
+        raise
+
+    try:
+        content = payload["choices"][0]["message"]["content"].strip()
+    except Exception as exc:
+        append_ai_request_log(
+            ai_log_entry(
+                run_id,
+                company,
+                request_payload,
+                started_at,
+                response_payload=payload,
+                error={"message": str(exc), "type": exc.__class__.__name__},
+                http_status=http_status,
+            )
+        )
+        raise
+
+    append_ai_request_log(
+        ai_log_entry(
+            run_id,
+            company,
+            request_payload,
+            started_at,
+            response_payload=payload,
+            http_status=http_status,
+        )
+    )
+    return content
 
 
 def save_result(connection, run_id, company, score, raw_response, error):
@@ -460,14 +630,19 @@ def score_run_worker(run_id):
         connection.commit()
 
     fatal_error = None
+    stopped = False
     try:
         companies = scoring_companies()
         for company in companies:
+            if run_status(run_id) == "stop_requested":
+                stopped = True
+                break
+
             raw_response = None
             score = None
             error = None
             try:
-                raw_response = call_openrouter(run["prompt"], company, run["model"])
+                raw_response = call_openrouter(run["prompt"], company, run["model"], run_id=run_id)
                 score = parse_numeric_score(raw_response)
             except FatalScoringError as exc:
                 fatal_error = str(exc)
@@ -483,14 +658,18 @@ def score_run_worker(run_id):
         fatal_error = str(exc)
 
     with db_connect() as connection:
-        status = "failed" if fatal_error else "completed"
+        current_status = run_status(run_id)
+        if current_status == "stop_requested":
+            stopped = True
+        status = "stopped" if stopped else "failed" if fatal_error else "completed"
+        final_error = "Stopped by user." if stopped else fatal_error
         connection.execute(
             """
             UPDATE scoring_runs
             SET status = ?, finished_at = ?, error = ?
             WHERE id = ?
             """,
-            (status, int(time.time()), fatal_error, run_id),
+            (status, int(time.time()), final_error, run_id),
         )
         update_run_counts(connection, run_id)
         connection.commit()
@@ -590,6 +769,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        stop_match = re.fullmatch(r"/api/runs/(\d+)/stop", parsed.path)
+        if stop_match:
+            ensure_scoring_schema()
+            run = stop_scoring_run(int(stop_match.group(1)))
+            if not run:
+                self.send_json({"error": "Run not found"}, 404)
+                return
+            self.send_json({"run": run})
+            return
+
         if parsed.path == "/api/runs":
             ensure_scoring_schema()
             try:

@@ -1,5 +1,6 @@
 const params = new URLSearchParams(window.location.search);
 const runSelect = document.querySelector("#runSelect");
+const stopButton = document.querySelector("#stopButton");
 const rerunButton = document.querySelector("#rerunButton");
 const runTitle = document.querySelector("#runTitle");
 const runPrompt = document.querySelector("#runPrompt");
@@ -30,6 +31,10 @@ function progress(run) {
   return `${run.completed_count + run.failed_count}/${run.company_count}`;
 }
 
+function canStop(run) {
+  return run && ["queued", "running", "stop_requested"].includes(run.status);
+}
+
 async function loadRunList() {
   const response = await fetch("/api/runs");
   const payload = await response.json();
@@ -49,6 +54,7 @@ async function loadRunList() {
   }
   if (currentRunId) runSelect.value = currentRunId;
   rerunButton.disabled = !currentRunId;
+  stopButton.disabled = true;
 }
 
 function renderRun(run) {
@@ -58,6 +64,9 @@ function renderRun(run) {
   runStatus.textContent = `${run.status} ${progress(run)}`;
   runCount.textContent = String(run.results.length);
   statusEl.textContent = run.error || `Model: ${run.model}`;
+  stopButton.disabled = !canStop(run);
+  stopButton.textContent = run.status === "stop_requested" ? "Stopping..." : "Stop";
+  rerunButton.disabled = false;
 
   if (!run.results.length) {
     resultRows.innerHTML = '<tr><td colspan="7">Waiting for scores...</td></tr>';
@@ -91,6 +100,7 @@ async function loadCurrentRun() {
   if (!currentRunId) {
     currentRun = null;
     rerunButton.disabled = true;
+    stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
     resultRows.innerHTML = '<tr><td colspan="7">Create a scoring run first.</td></tr>';
     return;
@@ -101,8 +111,36 @@ async function loadCurrentRun() {
   if (!response.ok) throw new Error(payload.error || "Could not load run");
   renderRun(payload.run);
 
-  if (payload.run.status === "queued" || payload.run.status === "running") {
+  if (payload.run.status === "queued" || payload.run.status === "running" || payload.run.status === "stop_requested") {
     pollTimer = window.setTimeout(loadCurrentRun, 2500);
+  }
+}
+
+async function stopCurrentRun() {
+  if (!currentRunId || !currentRun) {
+    statusEl.textContent = "Pick a running run before stopping.";
+    return;
+  }
+
+  stopButton.disabled = true;
+  stopButton.textContent = "Stopping...";
+  statusEl.textContent = "Stop requested. The current company request may finish first.";
+
+  try {
+    const response = await fetch(`/api/runs/${currentRunId}/stop`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not stop run");
+    renderRun({ ...payload.run, results: currentRun.results });
+    if (pollTimer) window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(loadCurrentRun, 1000);
+  } catch (error) {
+    statusEl.textContent = error.message;
+    stopButton.disabled = !canStop(currentRun);
+    stopButton.textContent = "Stop";
   }
 }
 
@@ -143,6 +181,7 @@ runSelect.addEventListener("change", () => {
   loadCurrentRun();
 });
 
+stopButton.addEventListener("click", stopCurrentRun);
 rerunButton.addEventListener("click", rerunCurrentPrompt);
 
 if ("EventSource" in window) {
