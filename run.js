@@ -151,6 +151,8 @@ function numericScores(run) {
 
 function renderRunStats(run) {
   const stats = run.stats || {};
+  const model = run.model_details || {};
+  const reasoning = model.reasoning || {};
   const scores = numericScores(run);
   const minScore = scores.length ? Math.min(...scores) : null;
   const maxScore = scores.length ? Math.max(...scores) : null;
@@ -158,7 +160,13 @@ function renderRunStats(run) {
     ? scores.reduce((sum, score) => sum + score, 0) / scores.length
     : null;
 
-  statModel.textContent = run.model;
+  statModel.innerHTML = `
+    <span class="model-label">${escapeHtml(model.label || run.model)}</span>
+    <span class="model-id">${escapeHtml(model.id || run.model)}</span>
+    <span class="model-id">reasoning: ${escapeHtml(reasoning.effort || "none")}, exclude: ${escapeHtml(
+    reasoning.exclude === undefined ? "true" : String(reasoning.exclude)
+  )}</span>
+  `;
   statProgress.textContent = progress(run);
   statCost.textContent = formatCents(stats.cost);
   statTokens.textContent = formatNumber(stats.total_tokens);

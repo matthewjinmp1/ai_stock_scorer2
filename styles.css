@@ -283,6 +283,21 @@ button:hover {
   line-height: 1;
 }
 
+.metric-card strong .model-label {
+  color: var(--ink);
+  font-size: 1.12rem;
+  line-height: 1.1;
+  text-transform: none;
+}
+
+.metric-card strong .model-id {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.25;
+  text-transform: none;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

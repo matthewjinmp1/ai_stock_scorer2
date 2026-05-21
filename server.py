@@ -73,6 +73,15 @@ def model_config(model):
     return next(option for option in MODEL_OPTIONS if option["id"] == normalized)
 
 
+def model_details(model):
+    config = model_config(model)
+    return {
+        "id": config["id"],
+        "label": config["label"],
+        "reasoning": config["reasoning"],
+    }
+
+
 def openrouter_max_tokens():
     return int(os.environ.get("OPENROUTER_MAX_TOKENS", str(OPENROUTER_MAX_TOKENS)))
 
@@ -454,6 +463,7 @@ def get_run(run_id):
         result["total_tokens"] = stats.get("total_tokens", 0)
         result["cost"] = stats.get("cost", 0)
         payload["results"].append(result)
+    payload["model_details"] = model_details(run["model"])
     payload["stats"] = ai_request_stats_for_run(run_id)
     return payload
 
