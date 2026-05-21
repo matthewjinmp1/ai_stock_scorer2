@@ -100,6 +100,7 @@ async function loadDetail() {
 
   const prompt = request.prompt_sent || "";
   const visibleResponse = responseData.visible_content ?? result.raw_response;
+  const responseText = text(visibleResponse);
   const error = responseData.error?.message || responseData.error || result.error || "";
   const total = Number(tokens.total_tokens || 0);
   const promptTokenCount = Number(tokens.prompt_tokens || 0);
@@ -120,8 +121,13 @@ async function loadDetail() {
 
   els.promptSent.textContent = prompt || "--";
   els.promptLength.textContent = prompt ? `${prompt.length.toLocaleString()} chars` : "";
-  els.responseContent.textContent = text(visibleResponse);
-  els.finishReason.textContent = responseData.finish_reason ? `finish: ${responseData.finish_reason}` : "";
+  els.responseContent.textContent = responseText;
+  els.finishReason.textContent = [
+    responseData.finish_reason ? `finish: ${responseData.finish_reason}` : "",
+    visibleResponse ? `${String(visibleResponse).length.toLocaleString()} chars` : "",
+  ]
+    .filter(Boolean)
+    .join(" • ");
   els.responseError.textContent = typeof error === "string" ? error : JSON.stringify(error);
 
   els.promptTokenLabel.textContent = formatNumber(promptTokenCount);

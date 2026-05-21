@@ -329,6 +329,7 @@ button:hover {
   color: #203047;
   background: #f8fafd;
   line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .response-panel {
@@ -336,17 +337,9 @@ button:hover {
   align-content: start;
 }
 
-.response-score {
-  display: grid;
-  min-height: 150px;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--accent-strong);
-  background: linear-gradient(180deg, #f8fbff, #eef6ff);
-  font-size: clamp(3rem, 7vw, 6.5rem);
-  font-weight: 900;
-  line-height: 1;
+.response-text {
+  max-height: 260px;
+  overflow: auto;
 }
 
 .token-bars {
