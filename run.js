@@ -27,6 +27,7 @@ const statRequests = document.querySelector("#statRequests");
 let currentRunId = params.get("id");
 let pollTimer = null;
 let currentRun = null;
+let sortState = { key: "scoreRank", direction: "asc" };
 
 function ensureHomeLink() {
   let nav = document.querySelector(".page-nav");
@@ -88,6 +89,11 @@ function formatMs(value) {
   return `${Number(value).toLocaleString()} ms`;
 }
 
+function numericValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function resultUrl(result) {
   return `/result.html?run=${encodeURIComponent(currentRunId)}&ticker=${encodeURIComponent(result.ticker)}`;
 }
@@ -128,6 +134,74 @@ function renderRunStats(run) {
   statRequests.textContent = `${formatNumber(stats.successful_request_count || 0)} ok / ${formatNumber(
     stats.failed_request_count || 0
   )} failed`;
+}
+
+function sortValue(result, key) {
+  if (key === "scoreRank") return result.scoreRank;
+  if (key === "score") return numericValue(result.score);
+  if (key === "company") return `${result.company_name || ""} ${result.ticker || ""}`.toLowerCase();
+  if (key === "totalTokens") return numericValue(result.total_tokens);
+  if (key === "cost") return numericValue(result.cost);
+  if (key === "error") return (result.error || "").toLowerCase();
+  return result.scoreRank;
+}
+
+function compareResults(left, right, key, direction) {
+  const leftValue = sortValue(left, key);
+  const rightValue = sortValue(right, key);
+  const leftMissing = leftValue === null || leftValue === "";
+  const rightMissing = rightValue === null || rightValue === "";
+
+  if (leftMissing && rightMissing) return left.scoreRank - right.scoreRank;
+  if (leftMissing) return 1;
+  if (rightMissing) return -1;
+
+  let comparison = 0;
+  if (typeof leftValue === "number" && typeof rightValue === "number") {
+    comparison = leftValue - rightValue;
+  } else {
+    comparison = String(leftValue).localeCompare(String(rightValue), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  }
+
+  if (direction === "desc") comparison *= -1;
+  return comparison || left.scoreRank - right.scoreRank;
+}
+
+function sortedResults(results) {
+  return results
+    .map((result, index) => ({ ...result, scoreRank: index + 1 }))
+    .sort((left, right) => {
+      return compareResults(left, right, sortState.key, sortState.direction);
+    });
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll("[data-sort-key]").forEach((button) => {
+    const isActive = button.dataset.sortKey === sortState.key;
+    const th = button.closest("th");
+    if (th) {
+      th.setAttribute(
+        "aria-sort",
+        isActive ? (sortState.direction === "asc" ? "ascending" : "descending") : "none"
+      );
+    }
+    button.classList.toggle("is-active", isActive);
+    button.dataset.direction = isActive ? sortState.direction : "";
+  });
+}
+
+function setSort(key) {
+  if (sortState.key === key) {
+    sortState = { key, direction: sortState.direction === "asc" ? "desc" : "asc" };
+  } else {
+    const direction = ["score", "totalTokens", "cost"].includes(key) ? "desc" : "asc";
+    sortState = { key, direction };
+  }
+
+  if (currentRun) renderRun(currentRun);
 }
 
 async function renameCurrentRun() {
@@ -295,13 +369,14 @@ function renderRun(run) {
     return;
   }
 
-  resultRows.innerHTML = run.results
-    .map((result, index) => {
+  updateSortHeaders();
+  resultRows.innerHTML = sortedResults(run.results)
+    .map((result) => {
       const error = result.error ? escapeHtml(result.error) : "";
       const url = resultUrl(result);
       return `
         <tr class="clickable-row" data-result-url="${url}">
-          <td>${index + 1}</td>
+          <td>${result.scoreRank}</td>
           <td><strong>${formatScore(result.score)}</strong></td>
           <td>
             <div>
@@ -421,6 +496,9 @@ extendButton.addEventListener("click", extendCurrentRun);
 savePromptButton.addEventListener("click", saveCurrentPrompt);
 cancelPromptButton.addEventListener("click", hidePromptEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
+document.querySelectorAll("[data-sort-key]").forEach((button) => {
+  button.addEventListener("click", () => setSort(button.dataset.sortKey));
+});
 resultRows.addEventListener("click", (event) => {
   if (event.target.closest("a")) return;
   const row = event.target.closest("[data-result-url]");

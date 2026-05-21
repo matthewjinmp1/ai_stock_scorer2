@@ -86,12 +86,24 @@
         <table>
           <thead>
             <tr>
-              <th>Score Rank</th>
-              <th>Score</th>
-              <th>Company</th>
-              <th>Total Tokens</th>
-              <th>Cost</th>
-              <th>Error</th>
+              <th aria-sort="ascending">
+                <button class="sort-button" type="button" data-sort-key="scoreRank">Score Rank</button>
+              </th>
+              <th>
+                <button class="sort-button" type="button" data-sort-key="score">Score</button>
+              </th>
+              <th>
+                <button class="sort-button" type="button" data-sort-key="company">Company</button>
+              </th>
+              <th>
+                <button class="sort-button" type="button" data-sort-key="totalTokens">Total Tokens</button>
+              </th>
+              <th>
+                <button class="sort-button" type="button" data-sort-key="cost">Cost</button>
+              </th>
+              <th>
+                <button class="sort-button" type="button" data-sort-key="error">Error</button>
+              </th>
             </tr>
           </thead>
           <tbody id="resultRows"></tbody>
