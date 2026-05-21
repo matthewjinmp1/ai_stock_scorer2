@@ -463,6 +463,7 @@ def get_run(run_id):
         result["total_tokens"] = stats.get("total_tokens", 0)
         result["prompt_tokens"] = stats.get("prompt_tokens", 0)
         result["completion_tokens"] = stats.get("completion_tokens", 0)
+        result["response_tokens"] = stats.get("response_tokens", 0)
         result["reasoning_tokens"] = stats.get("reasoning_tokens", 0)
         result["cost"] = stats.get("cost", 0)
         payload["results"].append(result)
@@ -513,6 +514,7 @@ def ai_request_stats_for_run(run_id):
         "total_tokens": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,
+        "response_tokens": 0,
         "reasoning_tokens": 0,
         "request_count": 0,
         "successful_request_count": 0,
@@ -537,6 +539,12 @@ def ai_request_stats_for_run(run_id):
                 stats[key] += float(token_stats.get(key) or 0)
             except (TypeError, ValueError):
                 pass
+        try:
+            completion_tokens = float(token_stats.get("completion_tokens") or 0)
+            reasoning_tokens = float(completion_details.get("reasoning_tokens") or 0)
+            stats["response_tokens"] += max(0, completion_tokens - reasoning_tokens)
+        except (TypeError, ValueError):
+            pass
         try:
             stats["reasoning_tokens"] += int(completion_details.get("reasoning_tokens") or 0)
         except (TypeError, ValueError):
@@ -569,6 +577,7 @@ def ai_request_stats_by_ticker(run_id):
                 "total_tokens": 0,
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
+                "response_tokens": 0,
                 "reasoning_tokens": 0,
             },
         )
@@ -577,6 +586,12 @@ def ai_request_stats_by_ticker(run_id):
                 current[key] += float(token_stats.get(key) or 0)
             except (TypeError, ValueError):
                 pass
+        try:
+            completion_tokens = float(token_stats.get("completion_tokens") or 0)
+            reasoning_tokens = float(completion_details.get("reasoning_tokens") or 0)
+            current["response_tokens"] += max(0, completion_tokens - reasoning_tokens)
+        except (TypeError, ValueError):
+            pass
         try:
             current["reasoning_tokens"] += int(completion_details.get("reasoning_tokens") or 0)
         except (TypeError, ValueError):

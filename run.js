@@ -29,7 +29,7 @@ const SORT_KEYS = new Set([
   "score",
   "company",
   "inputTokens",
-  "outputTokens",
+  "responseTokens",
   "reasoningTokens",
   "cost",
   "error",
@@ -39,7 +39,9 @@ const SORT_DIRECTIONS = new Set(["asc", "desc"]);
 let currentRunId = params.get("id");
 let pollTimer = null;
 let currentRun = null;
-const requestedSortKey = params.get("sort") === "totalTokens" ? "outputTokens" : params.get("sort");
+const requestedSortKey = ["totalTokens", "outputTokens"].includes(params.get("sort"))
+  ? "responseTokens"
+  : params.get("sort");
 let sortState = {
   key: SORT_KEYS.has(requestedSortKey) ? requestedSortKey : "scoreRank",
   direction: SORT_DIRECTIONS.has(params.get("dir")) ? params.get("dir") : "asc",
@@ -194,7 +196,7 @@ function sortValue(result, key) {
   if (key === "score") return numericValue(result.score);
   if (key === "company") return `${result.company_name || ""} ${result.ticker || ""}`.toLowerCase();
   if (key === "inputTokens") return numericValue(result.prompt_tokens);
-  if (key === "outputTokens") return numericValue(result.completion_tokens);
+  if (key === "responseTokens") return numericValue(result.response_tokens);
   if (key === "reasoningTokens") return numericValue(result.reasoning_tokens);
   if (key === "cost") return numericValue(result.cost);
   if (key === "error") return (result.error || "").toLowerCase();
@@ -252,7 +254,7 @@ function setSort(key) {
   if (sortState.key === key) {
     sortState = { key, direction: sortState.direction === "asc" ? "desc" : "asc" };
   } else {
-    const direction = ["score", "inputTokens", "outputTokens", "reasoningTokens", "cost"].includes(key)
+    const direction = ["score", "inputTokens", "responseTokens", "reasoningTokens", "cost"].includes(key)
       ? "desc"
       : "asc";
     sortState = { key, direction };
@@ -445,7 +447,7 @@ function renderRun(run) {
             </div>
           </td>
           <td>${formatNumber(result.prompt_tokens)}</td>
-          <td>${formatNumber(result.completion_tokens)}</td>
+          <td>${formatNumber(result.response_tokens)}</td>
           <td>${formatNumber(result.reasoning_tokens)}</td>
           <td>${formatCents(result.cost)}</td>
           <td class="error-cell">${error}</td>

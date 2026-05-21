@@ -125,6 +125,7 @@ async function loadDetail() {
   const promptTokenCount = Number(tokens.prompt_tokens || 0);
   const completionTokenCount = Number(tokens.completion_tokens || 0);
   const reasoningTokenCount = Number(completionDetails.reasoning_tokens || 0);
+  const responseTokenCount = Math.max(0, completionTokenCount - reasoningTokenCount);
 
   els.title.textContent = result.company_name;
   els.subtitle.textContent = `${run.name || `Run #${run.id}`} • ${result.ticker} • ${run.model}`;
@@ -134,7 +135,7 @@ async function loadDetail() {
 
   els.totalTokens.textContent = formatNumber(total);
   els.promptTokens.textContent = formatNumber(promptTokenCount);
-  els.completionTokens.textContent = formatNumber(completionTokenCount);
+  els.completionTokens.textContent = formatNumber(responseTokenCount);
   els.costValue.textContent = formatCost(tokens.cost);
   els.latencyValue.textContent = formatMs(aiRequest?.timing?.duration_ms);
 
@@ -150,10 +151,10 @@ async function loadDetail() {
   els.responseError.textContent = typeof error === "string" ? error : JSON.stringify(error);
 
   els.promptTokenLabel.textContent = formatNumber(promptTokenCount);
-  els.completionTokenLabel.textContent = formatNumber(completionTokenCount);
+  els.completionTokenLabel.textContent = formatNumber(responseTokenCount);
   els.reasoningTokenLabel.textContent = formatNumber(reasoningTokenCount);
   setBar(els.promptTokenBar, promptTokenCount, total);
-  setBar(els.completionTokenBar, completionTokenCount, total);
+  setBar(els.completionTokenBar, responseTokenCount, total);
   setBar(els.reasoningTokenBar, reasoningTokenCount, total);
 
   els.runIdValue.textContent = `${run.name || `Run #${run.id}`} (#${run.id})`;
