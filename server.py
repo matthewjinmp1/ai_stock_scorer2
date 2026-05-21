@@ -19,16 +19,24 @@ SOURCE_URL = "https://companiesmarketcap.com/"
 CACHE_SECONDS = 60 * 15
 DB_PATH = ROOT / "companies.db"
 AI_REQUEST_LOG_PATH = ROOT / "ai_requests.json"
+PROVIDER_BLOCKLIST_PATH = ROOT / "provider_blocklist.json"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_PROVIDER_BLOCKLIST = ["siliconflow", "gmicloud"]
+PROVIDER_SLUGS = {
+    "AkashML": "akashml",
+    "Alibaba": "alibaba",
+    "AtlasCloud": "atlas-cloud",
+    "Baidu": "baidu",
+    "DeepSeek": "deepseek",
+    "GMICloud": "gmicloud",
+    "SiliconFlow": "siliconflow",
+}
 MODEL_OPTIONS = [
     {
         "id": "deepseek/deepseek-v4-flash",
         "label": "DeepSeek V4 Flash (non-reasoning)",
         "reasoning": {"effort": "none", "exclude": False},
         "provider": {
-            "order": ["DeepSeek", "AtlasCloud", "Baidu", "Alibaba", "AkashML"],
-            "only": ["DeepSeek", "AtlasCloud", "Baidu", "Alibaba", "AkashML"],
-            "ignore": ["SiliconFlow", "GMICloud"],
             "require_parameters": True,
         },
     }
@@ -41,6 +49,7 @@ OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
 _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
 _ai_request_log_lock = threading.Lock()
+_provider_blocklist_lock = threading.Lock()
 
 
 def load_env_file():
@@ -79,13 +88,90 @@ def model_config(model):
     return next(option for option in MODEL_OPTIONS if option["id"] == normalized)
 
 
+def provider_slug(provider):
+    if not provider:
+        return ""
+    provider = str(provider).strip()
+    if not provider:
+        return ""
+    if provider in PROVIDER_SLUGS:
+        return PROVIDER_SLUGS[provider]
+    return re.sub(r"[^a-z0-9]+", "-", provider.lower()).strip("-")
+
+
+def provider_blocklist():
+    blocked = {provider_slug(provider) for provider in DEFAULT_PROVIDER_BLOCKLIST}
+    with _provider_blocklist_lock:
+        if PROVIDER_BLOCKLIST_PATH.exists():
+            try:
+                payload = json.loads(PROVIDER_BLOCKLIST_PATH.read_text())
+                providers = payload.get("blocked_providers") if isinstance(payload, dict) else payload
+                if isinstance(providers, list):
+                    blocked.update(provider_slug(provider) for provider in providers if provider)
+            except json.JSONDecodeError:
+                pass
+    return sorted(provider for provider in blocked if provider)
+
+
+def save_provider_blocklist(blocked):
+    payload = {
+        "blocked_providers": sorted(set(blocked)),
+        "updated_at": int(time.time()),
+    }
+    tmp_path = PROVIDER_BLOCKLIST_PATH.with_suffix(".json.tmp")
+    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    tmp_path.replace(PROVIDER_BLOCKLIST_PATH)
+
+
+def block_reasoning_provider(provider, run_id=None, ticker=None, reasoning_tokens=0):
+    slug = provider_slug(provider)
+    if not slug:
+        return False
+    with _provider_blocklist_lock:
+        blocked = {provider_slug(item) for item in DEFAULT_PROVIDER_BLOCKLIST}
+        if PROVIDER_BLOCKLIST_PATH.exists():
+            try:
+                payload = json.loads(PROVIDER_BLOCKLIST_PATH.read_text())
+                providers = payload.get("blocked_providers") if isinstance(payload, dict) else payload
+                if isinstance(providers, list):
+                    blocked.update(provider_slug(item) for item in providers if item)
+            except json.JSONDecodeError:
+                pass
+        blocked = {item for item in blocked if item}
+        already_blocked = slug in blocked
+        blocked.add(slug)
+        payload = {
+            "blocked_providers": sorted(blocked),
+            "updated_at": int(time.time()),
+            "last_blocked": {
+                "provider": provider,
+                "provider_slug": slug,
+                "run_id": run_id,
+                "ticker": ticker,
+                "reasoning_tokens": reasoning_tokens,
+            },
+        }
+        tmp_path = PROVIDER_BLOCKLIST_PATH.with_suffix(".json.tmp")
+        tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+        tmp_path.replace(PROVIDER_BLOCKLIST_PATH)
+    return not already_blocked
+
+
+def provider_preferences(config):
+    provider = dict(config.get("provider") or {})
+    blocked = provider_blocklist()
+    if blocked:
+        provider["ignore"] = blocked
+    return provider
+
+
 def model_details(model):
     config = model_config(model)
     return {
         "id": config["id"],
         "label": config["label"],
         "reasoning": config["reasoning"],
-        "provider": config["provider"],
+        "provider": provider_preferences(config),
     }
 
 
@@ -892,6 +978,41 @@ def ai_log_entry(run_id, company, request_payload, started_at, response_payload=
     }
 
 
+def reasoning_token_count(response_payload):
+    usage = response_payload.get("usage") if response_payload else None
+    completion_details = usage.get("completion_tokens_details") if isinstance(usage, dict) else None
+    if not isinstance(completion_details, dict):
+        return 0
+    try:
+        return int(completion_details.get("reasoning_tokens") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def response_provider(response_payload):
+    if not response_payload:
+        return None
+    provider = response_payload.get("provider")
+    if provider:
+        return provider
+    return None
+
+
+def maybe_block_reasoning_provider(run_id, company, request_payload, response_payload):
+    reasoning = request_payload.get("reasoning") or {}
+    if reasoning.get("effort") != "none":
+        return
+    tokens = reasoning_token_count(response_payload)
+    if tokens <= 0:
+        return
+    block_reasoning_provider(
+        response_provider(response_payload),
+        run_id=run_id,
+        ticker=company.get("ticker"),
+        reasoning_tokens=tokens,
+    )
+
+
 def sanitized_ai_payload(payload):
     if payload is None:
         return None
@@ -941,7 +1062,7 @@ def call_openrouter(prompt, company, model, run_id=None):
         "temperature": 0,
         "max_tokens": openrouter_max_tokens(),
         "reasoning": config["reasoning"],
-        "provider": config["provider"],
+        "provider": provider_preferences(config),
     }
     body = json.dumps(request_payload).encode("utf-8")
     request = urllib.request.Request(
@@ -987,6 +1108,8 @@ def call_openrouter(prompt, company, model, run_id=None):
             )
         )
         raise
+
+    maybe_block_reasoning_provider(run_id, company, request_payload, payload)
 
     try:
         message = payload["choices"][0].get("message", {})

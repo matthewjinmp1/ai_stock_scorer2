@@ -3,3 +3,5 @@ companies.db
 ai_requests.json
 *.db-shm
 *.db-wal
+
+provider_blocklist.json

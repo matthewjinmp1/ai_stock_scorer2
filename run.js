@@ -179,8 +179,8 @@ function renderRunStats(run) {
     <span class="model-id">reasoning: ${escapeHtml(reasoning.effort || "none")}, exclude: ${escapeHtml(
     reasoning.exclude === undefined ? "true" : String(reasoning.exclude)
   )}</span>
-    <span class="model-id">providers: ${escapeHtml((provider.only || []).join(", ") || "OpenRouter default")}</span>
-    <span class="model-id">ignored: ${escapeHtml((provider.ignore || []).join(", ") || "none")}</span>
+    <span class="model-id">provider routing: all except blocked</span>
+    <span class="model-id">blocked: ${escapeHtml((provider.ignore || []).join(", ") || "none")}</span>
   `;
   statProgress.textContent = progress(run);
   statCost.textContent = formatCents(stats.cost);
