@@ -3,6 +3,7 @@ const stopButton = document.querySelector("#stopButton");
 const rerunButton = document.querySelector("#rerunButton");
 const renameButton = document.querySelector("#renameButton");
 const editPromptButton = document.querySelector("#editPromptButton");
+const extendButton = document.querySelector("#extendButton");
 const deleteButton = document.querySelector("#deleteButton");
 const promptEditor = document.querySelector("#promptEditor");
 const promptEditorInput = document.querySelector("#promptEditorInput");
@@ -235,6 +236,44 @@ async function deleteCurrentRun() {
   }
 }
 
+async function extendCurrentRun() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before extending.";
+    return;
+  }
+
+  const nextCount = Math.min(100, Number(currentRun.company_count || 0) + 10);
+  const value = window.prompt(
+    `Extend to how many total stocks? Current total is ${currentRun.company_count}.`,
+    String(nextCount)
+  );
+  if (value === null) return;
+
+  const companyCount = Number(value);
+  if (!Number.isInteger(companyCount)) {
+    statusEl.textContent = "Enter a whole number of stocks.";
+    return;
+  }
+
+  extendButton.disabled = true;
+  statusEl.textContent = `Extending to ${companyCount} stocks...`;
+  try {
+    const response = await fetch(`/api/runs/${currentRun.id}/extend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyCount }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not extend run");
+    renderRun(payload.run);
+    if (pollTimer) window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(loadCurrentRun, 1000);
+  } catch (error) {
+    statusEl.textContent = error.message;
+    extendButton.disabled = !currentRun;
+  }
+}
+
 function renderRun(run) {
   currentRun = run;
   runTitle.textContent = run.name || `Run #${run.id}`;
@@ -248,6 +287,7 @@ function renderRun(run) {
   rerunButton.disabled = false;
   renameButton.disabled = false;
   editPromptButton.disabled = false;
+  extendButton.disabled = canStop(run);
   deleteButton.disabled = false;
 
   if (!run.results.length) {
@@ -286,6 +326,7 @@ async function loadCurrentRun() {
     rerunButton.disabled = true;
     renameButton.disabled = true;
     editPromptButton.disabled = true;
+    extendButton.disabled = true;
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
@@ -376,6 +417,7 @@ stopButton.addEventListener("click", stopCurrentRun);
 rerunButton.addEventListener("click", rerunCurrentPrompt);
 renameButton.addEventListener("click", renameCurrentRun);
 editPromptButton.addEventListener("click", showPromptEditor);
+extendButton.addEventListener("click", extendCurrentRun);
 savePromptButton.addEventListener("click", saveCurrentPrompt);
 cancelPromptButton.addEventListener("click", hidePromptEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);

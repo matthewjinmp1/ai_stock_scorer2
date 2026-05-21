@@ -378,6 +378,40 @@ def create_scoring_run(name, prompt, model, company_count):
     return run_id
 
 
+def extend_scoring_run(run_id, company_count):
+    target_count = normalize_company_count(company_count)
+    with db_connect() as connection:
+        run = connection.execute(
+            """
+            SELECT id, status, company_count
+            FROM scoring_runs
+            WHERE id = ? AND deleted_at IS NULL
+            """,
+            (run_id,),
+        ).fetchone()
+        if not run:
+            return None
+        if run["status"] in ("queued", "running", "stop_requested"):
+            raise ValueError("Wait for the current run to finish before extending it.")
+        if target_count <= run["company_count"]:
+            raise ValueError(f"Choose a stock count above {run['company_count']}.")
+
+        connection.execute(
+            """
+            UPDATE scoring_runs
+            SET company_count = ?, status = ?, started_at = ?, finished_at = NULL, error = NULL
+            WHERE id = ?
+            """,
+            (target_count, "queued", int(time.time()), run_id),
+        )
+        connection.commit()
+        start_index = run["company_count"]
+
+    thread = threading.Thread(target=score_run_worker, args=(run_id, start_index), daemon=True)
+    thread.start()
+    return get_run(run_id)
+
+
 def get_run(run_id):
     with db_connect() as connection:
         run = connection.execute(
@@ -917,7 +951,7 @@ def save_result(connection, run_id, company, score, raw_response, error):
     )
 
 
-def score_run_worker(run_id):
+def score_run_worker(run_id, start_index=0):
     ensure_scoring_schema()
     with db_connect() as connection:
         run = connection.execute(
@@ -935,7 +969,7 @@ def score_run_worker(run_id):
     fatal_error = None
     stopped = False
     try:
-        companies = scoring_companies(run["company_count"])
+        companies = scoring_companies(run["company_count"])[start_index:]
         for company in companies:
             current_status = run_status(run_id)
             if current_status is None:
@@ -1142,6 +1176,22 @@ class Handler(SimpleHTTPRequestHandler):
                 company_count = normalize_company_count(payload.get("companyCount"))
                 run_id = create_scoring_run(name, prompt, model, company_count)
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
+        extend_match = re.fullmatch(r"/api/runs/(\d+)/extend", parsed.path)
+        if extend_match:
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                run = extend_scoring_run(int(extend_match.group(1)), payload.get("companyCount"))
+                if not run:
+                    self.send_json({"error": "Run not found"}, 404)
+                    return
+                self.send_json({"run": run})
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)
             except Exception as exc:
