@@ -165,6 +165,7 @@ function renderRunStats(run) {
   const stats = run.stats || {};
   const model = run.model_details || {};
   const reasoning = model.reasoning || {};
+  const provider = model.provider || {};
   const scores = numericScores(run);
   const minScore = scores.length ? Math.min(...scores) : null;
   const maxScore = scores.length ? Math.max(...scores) : null;
@@ -178,6 +179,8 @@ function renderRunStats(run) {
     <span class="model-id">reasoning: ${escapeHtml(reasoning.effort || "none")}, exclude: ${escapeHtml(
     reasoning.exclude === undefined ? "true" : String(reasoning.exclude)
   )}</span>
+    <span class="model-id">providers: ${escapeHtml((provider.only || []).join(", ") || "OpenRouter default")}</span>
+    <span class="model-id">ignored: ${escapeHtml((provider.ignore || []).join(", ") || "none")}</span>
   `;
   statProgress.textContent = progress(run);
   statCost.textContent = formatCents(stats.cost);

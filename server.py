@@ -25,6 +25,12 @@ MODEL_OPTIONS = [
         "id": "deepseek/deepseek-v4-flash",
         "label": "DeepSeek V4 Flash (non-reasoning)",
         "reasoning": {"effort": "none", "exclude": False},
+        "provider": {
+            "order": ["DeepSeek", "AtlasCloud", "Baidu", "Alibaba", "AkashML"],
+            "only": ["DeepSeek", "AtlasCloud", "Baidu", "Alibaba", "AkashML"],
+            "ignore": ["SiliconFlow", "GMICloud"],
+            "require_parameters": True,
+        },
     }
 ]
 DEFAULT_OPENROUTER_MODEL = MODEL_OPTIONS[0]["id"]
@@ -79,6 +85,7 @@ def model_details(model):
         "id": config["id"],
         "label": config["label"],
         "reasoning": config["reasoning"],
+        "provider": config["provider"],
     }
 
 
@@ -934,9 +941,7 @@ def call_openrouter(prompt, company, model, run_id=None):
         "temperature": 0,
         "max_tokens": openrouter_max_tokens(),
         "reasoning": config["reasoning"],
-        "provider": {
-            "require_parameters": True,
-        },
+        "provider": config["provider"],
     }
     body = json.dumps(request_payload).encode("utf-8")
     request = urllib.request.Request(
