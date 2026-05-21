@@ -24,10 +24,17 @@ const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
 const statRequests = document.querySelector("#statRequests");
 
+const SORT_KEYS = new Set(["scoreRank", "score", "company", "totalTokens", "cost", "error"]);
+const SORT_DIRECTIONS = new Set(["asc", "desc"]);
+
 let currentRunId = params.get("id");
 let pollTimer = null;
 let currentRun = null;
-let sortState = { key: "scoreRank", direction: "asc" };
+let sortState = {
+  key: SORT_KEYS.has(params.get("sort")) ? params.get("sort") : "scoreRank",
+  direction: SORT_DIRECTIONS.has(params.get("dir")) ? params.get("dir") : "asc",
+};
+let restoredScroll = false;
 
 function ensureHomeLink() {
   let nav = document.querySelector(".page-nav");
@@ -94,8 +101,36 @@ function numericValue(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function resultUrl(result) {
-  return `/result.html?run=${encodeURIComponent(currentRunId)}&ticker=${encodeURIComponent(result.ticker)}`;
+function runUrlWithState(scrollY = window.scrollY) {
+  const url = new URL("/run.html", window.location.origin);
+  if (currentRunId) url.searchParams.set("id", currentRunId);
+  url.searchParams.set("sort", sortState.key);
+  url.searchParams.set("dir", sortState.direction);
+  url.searchParams.set("y", String(Math.max(0, Math.round(scrollY))));
+  return `${url.pathname}${url.search}`;
+}
+
+function resultUrl(result, scrollY = window.scrollY) {
+  const url = new URL("/result.html", window.location.origin);
+  url.searchParams.set("run", currentRunId);
+  url.searchParams.set("ticker", result.ticker);
+  url.searchParams.set("sort", sortState.key);
+  url.searchParams.set("dir", sortState.direction);
+  url.searchParams.set("y", String(Math.max(0, Math.round(scrollY))));
+  return `${url.pathname}${url.search}`;
+}
+
+function saveRunViewState() {
+  history.replaceState(null, "", runUrlWithState());
+}
+
+function restoreScrollPosition() {
+  if (restoredScroll) return;
+  restoredScroll = true;
+  const y = Number(params.get("y"));
+  if (!Number.isFinite(y) || y <= 0) return;
+
+  window.scrollTo(0, y);
 }
 
 function progress(run) {
@@ -201,6 +236,7 @@ function setSort(key) {
     sortState = { key, direction };
   }
 
+  saveRunViewState();
   if (currentRun) renderRun(currentRun);
 }
 
@@ -393,6 +429,7 @@ function renderRun(run) {
       `;
     })
     .join("");
+  restoreScrollPosition();
 }
 
 async function loadCurrentRun() {
@@ -479,6 +516,8 @@ async function rerunCurrentPrompt() {
 
     currentRunId = String(payload.runId);
     history.replaceState(null, "", `/run.html?id=${currentRunId}`);
+    sortState = { key: "scoreRank", direction: "asc" };
+    restoredScroll = true;
     if (pollTimer) window.clearTimeout(pollTimer);
     await loadCurrentRun();
   } catch (error) {
@@ -500,9 +539,16 @@ document.querySelectorAll("[data-sort-key]").forEach((button) => {
   button.addEventListener("click", () => setSort(button.dataset.sortKey));
 });
 resultRows.addEventListener("click", (event) => {
-  if (event.target.closest("a")) return;
   const row = event.target.closest("[data-result-url]");
-  if (row) window.location.href = row.dataset.resultUrl;
+  if (!row) return;
+  const link = row.querySelector(".company-link");
+  const destination = new URL(link?.getAttribute("href") || row.dataset.resultUrl, window.location.origin);
+  destination.searchParams.set("sort", sortState.key);
+  destination.searchParams.set("dir", sortState.direction);
+  destination.searchParams.set("y", String(Math.max(0, Math.round(window.scrollY))));
+  event.preventDefault();
+  saveRunViewState();
+  window.location.href = `${destination.pathname}${destination.search}`;
 });
 
 if ("EventSource" in window) {

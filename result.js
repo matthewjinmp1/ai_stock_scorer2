@@ -84,7 +84,13 @@ async function loadDetail() {
     throw new Error("Missing run or ticker.");
   }
 
-  els.backLink.href = `/run.html?id=${encodeURIComponent(runId)}`;
+  const backUrl = new URL("/run.html", window.location.origin);
+  backUrl.searchParams.set("id", runId);
+  ["sort", "dir", "y"].forEach((key) => {
+    const value = params.get(key);
+    if (value) backUrl.searchParams.set(key, value);
+  });
+  els.backLink.href = `${backUrl.pathname}${backUrl.search}`;
 
   const response = await fetch(
     `/api/runs/${encodeURIComponent(runId)}/results/${encodeURIComponent(ticker)}`
