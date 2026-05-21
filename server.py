@@ -24,7 +24,7 @@ MODEL_OPTIONS = [
     {
         "id": "deepseek/deepseek-v4-flash",
         "label": "DeepSeek V4 Flash (non-reasoning)",
-        "reasoning": {"effort": "none", "exclude": True},
+        "reasoning": {"effort": "none", "exclude": False},
     }
 ]
 DEFAULT_OPENROUTER_MODEL = MODEL_OPTIONS[0]["id"]
@@ -796,8 +796,10 @@ def openrouter_http_error_details(error):
 
 def ai_log_entry(run_id, company, request_payload, started_at, response_payload=None, error=None, http_status=None):
     choice = None
+    message = {}
     if response_payload and response_payload.get("choices"):
         choice = response_payload["choices"][0]
+        message = choice.get("message", {}) or {}
 
     return {
         "timestamp": int(time.time()),
@@ -824,7 +826,11 @@ def ai_log_entry(run_id, company, request_payload, started_at, response_payload=
             "id": response_payload.get("id") if response_payload else None,
             "created": response_payload.get("created") if response_payload else None,
             "model": response_payload.get("model") if response_payload else None,
-            "visible_content": choice.get("message", {}).get("content") if choice else None,
+            "provider": response_payload.get("provider") if response_payload else None,
+            "visible_content": message.get("content") if choice else None,
+            "reasoning": message.get("reasoning"),
+            "reasoning_content": message.get("reasoning_content"),
+            "reasoning_details": message.get("reasoning_details"),
             "finish_reason": choice.get("finish_reason") if choice else None,
             "raw_payload": sanitized_ai_payload(response_payload),
             "error": error,
@@ -833,8 +839,20 @@ def ai_log_entry(run_id, company, request_payload, started_at, response_payload=
         "timing": {
             "duration_ms": round((time.time() - started_at) * 1000),
         },
-        "chain_of_thought": None,
-        "chain_of_thought_note": "Hidden chain-of-thought is not exposed by the model/API and is not logged.",
+        "chain_of_thought": (
+            message.get("reasoning")
+            or message.get("reasoning_content")
+            or message.get("reasoning_details")
+        ),
+        "chain_of_thought_note": (
+            "Reasoning text was returned by the provider."
+            if (
+                message.get("reasoning")
+                or message.get("reasoning_content")
+                or message.get("reasoning_details")
+            )
+            else "Hidden chain-of-thought was not exposed by the model/API for this request."
+        ),
     }
 
 
@@ -858,8 +876,18 @@ def sanitized_ai_request_entry(entry):
     response = sanitized.get("response")
     if isinstance(response, dict):
         response["raw_payload"] = sanitized_ai_payload(response.get("raw_payload"))
-    sanitized["chain_of_thought"] = None
-    sanitized["chain_of_thought_note"] = "Hidden chain-of-thought is not exposed in this app."
+    if not sanitized.get("chain_of_thought"):
+        sanitized["chain_of_thought"] = (
+            response.get("reasoning")
+            or response.get("reasoning_content")
+            or response.get("reasoning_details")
+            if isinstance(response, dict)
+            else None
+        )
+    if sanitized.get("chain_of_thought"):
+        sanitized["chain_of_thought_note"] = "Reasoning text was returned by the provider."
+    else:
+        sanitized["chain_of_thought_note"] = "Hidden chain-of-thought was not exposed by the model/API for this request."
     return sanitized
 
 

@@ -81,6 +81,11 @@ function reasoningText(reasoning) {
   return [effort, exclude].filter(Boolean).join(", ") || "Configured";
 }
 
+function displayReasoningTrace(value) {
+  if (value === undefined || value === null || value === "") return "";
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+}
+
 async function loadDetail() {
   if (!runId || !ticker) {
     throw new Error("Missing run or ticker.");
@@ -109,7 +114,12 @@ async function loadDetail() {
   const prompt = request.prompt_sent || "";
   const visibleResponse = responseData.visible_content ?? result.raw_response;
   const responseText = text(visibleResponse);
-  const reasoningTrace = aiRequest?.chain_of_thought || responseData.reasoning || responseData.reasoning_content;
+  const reasoningTrace = displayReasoningTrace(
+    aiRequest?.chain_of_thought ||
+      responseData.reasoning ||
+      responseData.reasoning_content ||
+      responseData.reasoning_details
+  );
   const error = responseData.error?.message || responseData.error || result.error || "";
   const total = Number(tokens.total_tokens || 0);
   const promptTokenCount = Number(tokens.prompt_tokens || 0);
