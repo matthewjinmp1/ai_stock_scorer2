@@ -298,13 +298,14 @@ function renderRun(run) {
   resultRows.innerHTML = run.results
     .map((result, index) => {
       const error = result.error ? escapeHtml(result.error) : "";
+      const url = resultUrl(result);
       return `
-        <tr>
+        <tr class="clickable-row" data-result-url="${url}">
           <td>${index + 1}</td>
           <td><strong>${formatScore(result.score)}</strong></td>
           <td>
             <div>
-              <a class="company-link" href="${resultUrl(result)}">
+              <a class="company-link" href="${url}">
                 <strong>${escapeHtml(result.company_name)}</strong>
               </a>
               <span class="ticker">${escapeHtml(result.ticker)}</span>
@@ -421,6 +422,11 @@ extendButton.addEventListener("click", extendCurrentRun);
 savePromptButton.addEventListener("click", saveCurrentPrompt);
 cancelPromptButton.addEventListener("click", hidePromptEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
+resultRows.addEventListener("click", (event) => {
+  if (event.target.closest("a")) return;
+  const row = event.target.closest("[data-result-url]");
+  if (row) window.location.href = row.dataset.resultUrl;
+});
 
 if ("EventSource" in window) {
   const events = new EventSource("/events");
