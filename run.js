@@ -24,14 +24,24 @@ const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
 const statRequests = document.querySelector("#statRequests");
 
-const SORT_KEYS = new Set(["scoreRank", "score", "company", "totalTokens", "cost", "error"]);
+const SORT_KEYS = new Set([
+  "scoreRank",
+  "score",
+  "company",
+  "inputTokens",
+  "outputTokens",
+  "reasoningTokens",
+  "cost",
+  "error",
+]);
 const SORT_DIRECTIONS = new Set(["asc", "desc"]);
 
 let currentRunId = params.get("id");
 let pollTimer = null;
 let currentRun = null;
+const requestedSortKey = params.get("sort") === "totalTokens" ? "outputTokens" : params.get("sort");
 let sortState = {
-  key: SORT_KEYS.has(params.get("sort")) ? params.get("sort") : "scoreRank",
+  key: SORT_KEYS.has(requestedSortKey) ? requestedSortKey : "scoreRank",
   direction: SORT_DIRECTIONS.has(params.get("dir")) ? params.get("dir") : "asc",
 };
 let restoredScroll = false;
@@ -183,7 +193,9 @@ function sortValue(result, key) {
   if (key === "scoreRank") return result.scoreRank;
   if (key === "score") return numericValue(result.score);
   if (key === "company") return `${result.company_name || ""} ${result.ticker || ""}`.toLowerCase();
-  if (key === "totalTokens") return numericValue(result.total_tokens);
+  if (key === "inputTokens") return numericValue(result.prompt_tokens);
+  if (key === "outputTokens") return numericValue(result.completion_tokens);
+  if (key === "reasoningTokens") return numericValue(result.reasoning_tokens);
   if (key === "cost") return numericValue(result.cost);
   if (key === "error") return (result.error || "").toLowerCase();
   return result.scoreRank;
@@ -240,7 +252,9 @@ function setSort(key) {
   if (sortState.key === key) {
     sortState = { key, direction: sortState.direction === "asc" ? "desc" : "asc" };
   } else {
-    const direction = ["score", "totalTokens", "cost"].includes(key) ? "desc" : "asc";
+    const direction = ["score", "inputTokens", "outputTokens", "reasoningTokens", "cost"].includes(key)
+      ? "desc"
+      : "asc";
     sortState = { key, direction };
   }
 
@@ -409,7 +423,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="6">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="8">Waiting for scores...</td></tr>';
     return;
   }
 
@@ -430,7 +444,9 @@ function renderRun(run) {
               <span class="ticker">${escapeHtml(result.ticker)}</span>
             </div>
           </td>
-          <td>${formatNumber(result.total_tokens)}</td>
+          <td>${formatNumber(result.prompt_tokens)}</td>
+          <td>${formatNumber(result.completion_tokens)}</td>
+          <td>${formatNumber(result.reasoning_tokens)}</td>
           <td>${formatCents(result.cost)}</td>
           <td class="error-cell">${error}</td>
         </tr>
@@ -450,7 +466,7 @@ async function loadCurrentRun() {
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="6">Create a scoring run first.</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="8">Create a scoring run first.</td></tr>';
     return;
   }
 

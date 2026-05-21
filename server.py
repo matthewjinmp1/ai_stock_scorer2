@@ -461,6 +461,9 @@ def get_run(run_id):
         result = dict(row)
         stats = result_stats.get((result["ticker"] or "").upper(), {})
         result["total_tokens"] = stats.get("total_tokens", 0)
+        result["prompt_tokens"] = stats.get("prompt_tokens", 0)
+        result["completion_tokens"] = stats.get("completion_tokens", 0)
+        result["reasoning_tokens"] = stats.get("reasoning_tokens", 0)
         result["cost"] = stats.get("cost", 0)
         payload["results"].append(result)
     payload["model_details"] = model_details(run["model"])
@@ -558,13 +561,24 @@ def ai_request_stats_by_ticker(run_id):
             continue
 
         token_stats = entry.get("token_stats") or {}
-        current = stats.setdefault(ticker, {"cost": 0, "total_tokens": 0})
+        completion_details = token_stats.get("completion_tokens_details") or {}
+        current = stats.setdefault(
+            ticker,
+            {
+                "cost": 0,
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "reasoning_tokens": 0,
+            },
+        )
+        for key in ("cost", "total_tokens", "prompt_tokens", "completion_tokens"):
+            try:
+                current[key] += float(token_stats.get(key) or 0)
+            except (TypeError, ValueError):
+                pass
         try:
-            current["cost"] += float(token_stats.get("cost") or 0)
-        except (TypeError, ValueError):
-            pass
-        try:
-            current["total_tokens"] += int(token_stats.get("total_tokens") or 0)
+            current["reasoning_tokens"] += int(completion_details.get("reasoning_tokens") or 0)
         except (TypeError, ValueError):
             pass
     return stats
