@@ -435,8 +435,15 @@ def get_run(run_id):
             """,
             (run_id,),
         ).fetchall()
+    result_stats = ai_request_stats_by_ticker(run_id)
     payload = dict(run)
-    payload["results"] = [dict(row) for row in results]
+    payload["results"] = []
+    for row in results:
+        result = dict(row)
+        stats = result_stats.get((result["ticker"] or "").upper(), {})
+        result["total_tokens"] = stats.get("total_tokens", 0)
+        result["cost"] = stats.get("cost", 0)
+        payload["results"].append(result)
     payload["stats"] = ai_request_stats_for_run(run_id)
     return payload
 
@@ -518,6 +525,28 @@ def ai_request_stats_for_run(run_id):
 
     if stats["request_count"]:
         stats["average_latency_ms"] = round(stats["total_latency_ms"] / stats["request_count"])
+    return stats
+
+
+def ai_request_stats_by_ticker(run_id):
+    stats = {}
+    for entry in ai_request_entries():
+        if entry.get("run_id") != run_id:
+            continue
+        ticker = (entry.get("company", {}).get("ticker") or "").upper()
+        if not ticker:
+            continue
+
+        token_stats = entry.get("token_stats") or {}
+        current = stats.setdefault(ticker, {"cost": 0, "total_tokens": 0})
+        try:
+            current["cost"] += float(token_stats.get("cost") or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            current["total_tokens"] += int(token_stats.get("total_tokens") or 0)
+        except (TypeError, ValueError):
+            pass
     return stats
 
 

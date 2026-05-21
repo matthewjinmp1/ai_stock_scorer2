@@ -291,7 +291,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="7">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="6">Waiting for scores...</td></tr>';
     return;
   }
 
@@ -311,9 +311,8 @@ function renderRun(run) {
               <span class="ticker">${escapeHtml(result.ticker)}</span>
             </div>
           </td>
-          <td>${result.rank}</td>
-          <td>${escapeHtml(result.market_cap)}</td>
-          <td>${escapeHtml(result.country)}</td>
+          <td>${formatNumber(result.total_tokens)}</td>
+          <td>${formatCents(result.cost)}</td>
           <td class="error-cell">${error}</td>
         </tr>
       `;
@@ -331,7 +330,7 @@ async function loadCurrentRun() {
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="7">Create a scoring run first.</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="6">Create a scoring run first.</td></tr>';
     return;
   }
 
