@@ -305,6 +305,10 @@ button:hover {
   margin-bottom: 14px;
 }
 
+.detail-grid.single-column {
+  grid-template-columns: 1fr;
+}
+
 .detail-panel {
   min-width: 0;
   padding: 16px;

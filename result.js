@@ -31,6 +31,8 @@ const els = {
   httpStatus: document.querySelector("#httpStatus"),
   reasoningSetting: document.querySelector("#reasoningSetting"),
   createdAt: document.querySelector("#createdAt"),
+  reasoningTraceStats: document.querySelector("#reasoningTraceStats"),
+  reasoningTrace: document.querySelector("#reasoningTrace"),
 };
 
 function text(value, fallback = "--") {
@@ -107,6 +109,7 @@ async function loadDetail() {
   const prompt = request.prompt_sent || "";
   const visibleResponse = responseData.visible_content ?? result.raw_response;
   const responseText = text(visibleResponse);
+  const reasoningTrace = aiRequest?.chain_of_thought || responseData.reasoning || responseData.reasoning_content;
   const error = responseData.error?.message || responseData.error || result.error || "";
   const total = Number(tokens.total_tokens || 0);
   const promptTokenCount = Number(tokens.prompt_tokens || 0);
@@ -149,6 +152,11 @@ async function loadDetail() {
   els.httpStatus.textContent = text(responseData.http_status);
   els.reasoningSetting.textContent = reasoningText(request.reasoning);
   els.createdAt.textContent = formatDate(result.created_at);
+  els.reasoningTraceStats.textContent = `${formatNumber(reasoningTokenCount)} reasoning tokens`;
+  els.reasoningTrace.textContent =
+    reasoningTrace ||
+    aiRequest?.chain_of_thought_note ||
+    "Reasoning text was not exposed by the model/API for this request.";
 }
 
 if ("EventSource" in window) {
