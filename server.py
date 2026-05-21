@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import concurrent.futures
 import html
 import json
 import os
@@ -28,6 +29,7 @@ MODEL_OPTIONS = [
 ]
 DEFAULT_OPENROUTER_MODEL = MODEL_OPTIONS[0]["id"]
 DEFAULT_SCORING_COMPANY_COUNT = 10
+DEFAULT_SCORING_CONCURRENCY = 5
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
@@ -73,6 +75,14 @@ def model_config(model):
 
 def openrouter_max_tokens():
     return int(os.environ.get("OPENROUTER_MAX_TOKENS", str(OPENROUTER_MAX_TOKENS)))
+
+
+def scoring_concurrency():
+    try:
+        value = int(os.environ.get("SCORING_CONCURRENCY", str(DEFAULT_SCORING_CONCURRENCY)))
+    except ValueError:
+        value = DEFAULT_SCORING_CONCURRENCY
+    return max(1, min(20, value))
 
 
 def prompt_has_company_keyword(prompt):
@@ -980,6 +990,32 @@ def save_result(connection, run_id, company, score, raw_response, error):
     )
 
 
+def score_company_request(run_id, prompt, model, company):
+    raw_response = None
+    score = None
+    error = None
+    try:
+        raw_response = call_openrouter(prompt, company, model, run_id=run_id)
+        score = parse_numeric_score(raw_response)
+    except FatalScoringError:
+        raise
+    except Exception as exc:
+        error = str(exc)
+    return company, score, raw_response, error
+
+
+def save_scoring_result(run_id, company, score, raw_response, error):
+    with db_connect() as connection:
+        if run_status(run_id) is None:
+            return False
+        if run_status(run_id) == "stop_requested":
+            return False
+        save_result(connection, run_id, company, score, raw_response, error)
+        update_run_counts(connection, run_id)
+        connection.commit()
+    return True
+
+
 def score_run_worker(run_id, start_index=0):
     ensure_scoring_schema()
     with db_connect() as connection:
@@ -999,34 +1035,69 @@ def score_run_worker(run_id, start_index=0):
     stopped = False
     try:
         companies = scoring_companies(run["company_count"])[start_index:]
-        for company in companies:
+        company_iter = iter(companies)
+        futures = {}
+        max_workers = min(scoring_concurrency(), len(companies)) or 1
+
+        def submit_next(executor):
+            try:
+                company = next(company_iter)
+            except StopIteration:
+                return False
             current_status = run_status(run_id)
             if current_status is None:
-                stopped = True
-                break
+                return False
             if current_status == "stop_requested":
-                stopped = True
-                break
+                return False
+            future = executor.submit(
+                score_company_request,
+                run_id,
+                run["prompt"],
+                run["model"],
+                company,
+            )
+            futures[future] = company
+            return True
 
-            raw_response = None
-            score = None
-            error = None
-            try:
-                raw_response = call_openrouter(run["prompt"], company, run["model"], run_id=run_id)
-                score = parse_numeric_score(raw_response)
-            except FatalScoringError as exc:
-                fatal_error = str(exc)
-                break
-            except Exception as exc:
-                error = str(exc)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for _ in range(max_workers):
+                if not submit_next(executor):
+                    break
 
-            with db_connect() as connection:
-                if run_status(run_id) is None:
+            while futures:
+                current_status = run_status(run_id)
+                if current_status is None:
                     stopped = True
                     break
-                save_result(connection, run_id, company, score, raw_response, error)
-                update_run_counts(connection, run_id)
-                connection.commit()
+                if current_status == "stop_requested":
+                    stopped = True
+                    break
+
+                done, _pending = concurrent.futures.wait(
+                    futures,
+                    return_when=concurrent.futures.FIRST_COMPLETED,
+                )
+                for future in done:
+                    futures.pop(future, None)
+                    try:
+                        company, score, raw_response, error = future.result()
+                    except FatalScoringError as exc:
+                        fatal_error = str(exc)
+                        stopped = False
+                        break
+
+                    if not save_scoring_result(run_id, company, score, raw_response, error):
+                        stopped = True
+                        break
+
+                    if not submit_next(executor):
+                        continue
+
+                if fatal_error or stopped:
+                    break
+
+            for future in futures:
+                future.cancel()
     except Exception as exc:
         fatal_error = str(exc)
 
