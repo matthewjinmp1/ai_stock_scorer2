@@ -31,6 +31,10 @@ body {
   padding: 36px 0;
 }
 
+.run-shell {
+  padding-bottom: max(36px, 55vh);
+}
+
 .page-nav {
   display: flex;
   justify-content: flex-end;
