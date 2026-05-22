@@ -239,8 +239,19 @@ button:hover {
 }
 
 .detail-toolbar {
-  grid-template-columns: auto;
+  grid-template-columns: minmax(220px, max-content);
   justify-content: start;
+  align-items: stretch;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+}
+
+.detail-toolbar .secondary-link {
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+  padding: 0 20px;
 }
 
 .detail-shell {
