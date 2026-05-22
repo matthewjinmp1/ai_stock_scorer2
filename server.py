@@ -5,6 +5,8 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -22,6 +24,8 @@ CACHE_SECONDS = 60 * 15
 DB_PATH = ROOT / "companies.db"
 AI_REQUEST_LOG_PATH = ROOT / "ai_requests.json"
 PROVIDER_BLOCKLIST_PATH = ROOT / "provider_blocklist.json"
+SCORING_WORKER_PATH = ROOT / "scoring_worker.py"
+SCORING_WORKER_LOG_PATH = ROOT / "scoring_worker.log"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_PROVIDER_BLOCKLIST = ["siliconflow", "gmicloud"]
 PROVIDER_SLUGS = {
@@ -375,7 +379,9 @@ def ensure_scoring_schema():
                 started_at INTEGER,
                 finished_at INTEGER,
                 deleted_at INTEGER,
-                error TEXT
+                error TEXT,
+                worker_pid INTEGER,
+                worker_started_at INTEGER
             );
 
             CREATE TABLE IF NOT EXISTS scoring_results (
@@ -408,6 +414,10 @@ def ensure_scoring_schema():
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN name TEXT")
         if "deleted_at" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN deleted_at INTEGER")
+        if "worker_pid" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN worker_pid INTEGER")
+        if "worker_started_at" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN worker_started_at INTEGER")
         connection.execute(
             """
             UPDATE scoring_runs
@@ -481,6 +491,44 @@ def normalize_scoring_prompt(value):
     return prompt
 
 
+def process_is_running(pid):
+    try:
+        pid = int(pid or 0)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def start_scoring_worker_process(run_id, start_index=0):
+    with SCORING_WORKER_LOG_PATH.open("ab") as log_file:
+        process = subprocess.Popen(
+            [sys.executable, str(SCORING_WORKER_PATH), str(run_id), str(start_index)],
+            cwd=str(ROOT),
+            stdout=log_file,
+            stderr=log_file,
+            start_new_session=True,
+            close_fds=True,
+        )
+
+    with db_connect() as connection:
+        connection.execute(
+            """
+            UPDATE scoring_runs
+            SET worker_pid = ?, worker_started_at = ?
+            WHERE id = ?
+            """,
+            (process.pid, int(time.time()), run_id),
+        )
+        connection.commit()
+    return process.pid
+
+
 def create_scoring_run(name, prompt, model, company_count):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
@@ -505,8 +553,7 @@ def create_scoring_run(name, prompt, model, company_count):
         run_id = cursor.lastrowid
         connection.commit()
 
-    thread = threading.Thread(target=score_run_worker, args=(run_id,), daemon=True)
-    thread.start()
+    start_scoring_worker_process(run_id)
     return run_id
 
 
@@ -539,8 +586,7 @@ def extend_scoring_run(run_id, company_count):
         connection.commit()
         start_index = run["company_count"]
 
-    thread = threading.Thread(target=score_run_worker, args=(run_id, start_index), daemon=True)
-    thread.start()
+    start_scoring_worker_process(run_id, start_index)
     return get_run(run_id)
 
 
@@ -571,8 +617,7 @@ def fill_incomplete_scoring_run(run_id):
         )
         connection.commit()
 
-    thread = threading.Thread(target=score_run_worker, args=(run_id,), daemon=True)
-    thread.start()
+    start_scoring_worker_process(run_id)
     return get_run(run_id)
 
 
@@ -1007,17 +1052,34 @@ def incomplete_company_count(run_id):
 def mark_interrupted_runs():
     now = int(time.time())
     with db_connect() as connection:
-        connection.execute(
+        rows = connection.execute(
             """
-            UPDATE scoring_runs
-            SET status = ?,
-                finished_at = COALESCE(finished_at, ?),
-                error = COALESCE(error, ?)
+            SELECT id, status, worker_pid
+            FROM scoring_runs
             WHERE deleted_at IS NULL
               AND status IN ('queued', 'running', 'stop_requested')
             """,
-            ("stopped", now, "Interrupted by server restart before all companies finished."),
-        )
+        ).fetchall()
+        for row in rows:
+            if process_is_running(row["worker_pid"]):
+                continue
+            final_error = (
+                "Stopped by user."
+                if row["status"] == "stop_requested"
+                else "Interrupted because the scoring worker is no longer running."
+            )
+            connection.execute(
+                """
+                UPDATE scoring_runs
+                SET status = ?,
+                    finished_at = COALESCE(finished_at, ?),
+                    error = COALESCE(error, ?),
+                    worker_pid = NULL,
+                    worker_started_at = NULL
+                WHERE id = ?
+                """,
+                ("stopped", now, final_error, row["id"]),
+            )
         connection.commit()
 
 
@@ -1401,7 +1463,8 @@ def score_run_worker(run_id, start_index=0):
                 connection.execute(
                     """
                     UPDATE scoring_runs
-                    SET status = ?, finished_at = ?, error = ?
+                    SET status = ?, finished_at = ?, error = ?,
+                        worker_pid = NULL, worker_started_at = NULL
                     WHERE id = ?
                     """,
                     ("completed", int(time.time()), None, run_id),
@@ -1486,7 +1549,8 @@ def score_run_worker(run_id, start_index=0):
         connection.execute(
             """
             UPDATE scoring_runs
-            SET status = ?, finished_at = ?, error = ?
+            SET status = ?, finished_at = ?, error = ?,
+                worker_pid = NULL, worker_started_at = NULL
             WHERE id = ?
             """,
             (status, int(time.time()), final_error, run_id),

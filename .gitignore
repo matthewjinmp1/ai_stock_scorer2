@@ -5,3 +5,4 @@ ai_requests.json
 *.db-wal
 
 provider_blocklist.json
+scoring_worker.log
