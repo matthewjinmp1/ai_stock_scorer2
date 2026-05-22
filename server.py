@@ -544,6 +544,38 @@ def extend_scoring_run(run_id, company_count):
     return get_run(run_id)
 
 
+def fill_incomplete_scoring_run(run_id):
+    with db_connect() as connection:
+        run = connection.execute(
+            """
+            SELECT id, status
+            FROM scoring_runs
+            WHERE id = ? AND deleted_at IS NULL
+            """,
+            (run_id,),
+        ).fetchone()
+        if not run:
+            return None
+        if run["status"] in ("queued", "running", "stop_requested"):
+            raise ValueError("Wait for the current run to finish before filling missing scores.")
+        if incomplete_company_count(run_id) <= 0:
+            raise ValueError("This run already has a completed score for every selected stock.")
+
+        connection.execute(
+            """
+            UPDATE scoring_runs
+            SET status = ?, started_at = ?, finished_at = NULL, error = NULL
+            WHERE id = ?
+            """,
+            ("queued", int(time.time()), run_id),
+        )
+        connection.commit()
+
+    thread = threading.Thread(target=score_run_worker, args=(run_id,), daemon=True)
+    thread.start()
+    return get_run(run_id)
+
+
 def get_run(run_id):
     with db_connect() as connection:
         run = connection.execute(
@@ -582,6 +614,7 @@ def get_run(run_id):
         payload["results"].append(result)
     payload["model_details"] = model_details(run["model"])
     payload["stats"] = ai_request_stats_for_run(run_id)
+    payload["incomplete_count"] = incomplete_company_count(run_id)
     return payload
 
 
@@ -915,6 +948,37 @@ def result_tickers_for_run(run_id):
             (run_id,),
         ).fetchall()
     return {row["ticker"] for row in rows}
+
+
+def completed_score_tickers_for_run(run_id):
+    with db_connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT ticker
+            FROM scoring_results
+            WHERE run_id = ?
+              AND error IS NULL
+              AND score IS NOT NULL
+            """,
+            (run_id,),
+        ).fetchall()
+    return {row["ticker"] for row in rows}
+
+
+def incomplete_company_count(run_id):
+    with db_connect() as connection:
+        run = connection.execute(
+            "SELECT company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
+            (run_id,),
+        ).fetchone()
+    if not run:
+        return 0
+    complete_tickers = completed_score_tickers_for_run(run_id)
+    return sum(
+        1
+        for company in scoring_companies(run["company_count"])
+        if company["ticker"] not in complete_tickers
+    )
 
 
 def mark_interrupted_runs():
@@ -1307,8 +1371,8 @@ def score_run_worker(run_id, start_index=0):
         companies = scoring_companies(run["company_count"])
         if start_index:
             companies = companies[start_index:]
-        saved_tickers = result_tickers_for_run(run_id)
-        companies = [company for company in companies if company["ticker"] not in saved_tickers]
+        completed_tickers = completed_score_tickers_for_run(run_id)
+        companies = [company for company in companies if company["ticker"] not in completed_tickers]
         if not companies:
             with db_connect() as connection:
                 connection.execute(
@@ -1586,6 +1650,21 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 payload = self.read_json()
                 run = extend_scoring_run(int(extend_match.group(1)), payload.get("companyCount"))
+                if not run:
+                    self.send_json({"error": "Run not found"}, 404)
+                    return
+                self.send_json({"run": run})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
+        fill_match = re.fullmatch(r"/api/runs/(\d+)/fill", parsed.path)
+        if fill_match:
+            ensure_scoring_schema()
+            try:
+                run = fill_incomplete_scoring_run(int(fill_match.group(1)))
                 if not run:
                     self.send_json({"error": "Run not found"}, 404)
                     return

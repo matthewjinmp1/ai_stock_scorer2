@@ -4,6 +4,7 @@ const rerunButton = document.querySelector("#rerunButton");
 const renameButton = document.querySelector("#renameButton");
 const editPromptButton = document.querySelector("#editPromptButton");
 const extendButton = document.querySelector("#extendButton");
+const fillButton = document.querySelector("#fillButton");
 const deleteButton = document.querySelector("#deleteButton");
 const promptEditor = document.querySelector("#promptEditor");
 const promptEditorInput = document.querySelector("#promptEditorInput");
@@ -174,6 +175,17 @@ function progress(run) {
 
 function canStop(run) {
   return run && ["queued", "running", "stop_requested"].includes(run.status);
+}
+
+function incompleteCount(run) {
+  if (!run) return 0;
+  if (Number.isFinite(Number(run.incomplete_count))) return Number(run.incomplete_count);
+  const completedTickers = new Set(
+    (run.results || [])
+      .filter((result) => result.score !== null && result.score !== undefined && !result.error)
+      .map((result) => result.ticker)
+  );
+  return Math.max(0, Number(run.company_count || 0) - completedTickers.size);
 }
 
 function numericScores(run) {
@@ -450,6 +462,48 @@ async function extendCurrentRun() {
   }
 }
 
+async function fillCurrentRun() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before filling missing scores.";
+    return;
+  }
+
+  const missingCount = incompleteCount(currentRun);
+  if (!missingCount) {
+    statusEl.textContent = "This run already has a completed score for every selected stock.";
+    return;
+  }
+
+  fillButton.disabled = true;
+  try {
+    statusEl.textContent = "Estimating fill cost...";
+    const confirmed = await confirmCostEstimate({
+      model: currentRun.model,
+      companyCount: missingCount,
+      actionLabel: `Fill ${missingCount} missing score${missingCount === 1 ? "" : "s"}?`,
+    });
+    if (!confirmed) {
+      statusEl.textContent = "Fill canceled before any AI requests were sent.";
+      return;
+    }
+
+    statusEl.textContent = `Filling ${missingCount} missing score${missingCount === 1 ? "" : "s"}...`;
+    const response = await fetch(`/api/runs/${currentRun.id}/fill`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not fill missing scores");
+    renderRun(payload.run);
+    if (pollTimer) window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(loadCurrentRun, 1000);
+  } catch (error) {
+    statusEl.textContent = error.message;
+    fillButton.disabled = !currentRun || canStop(currentRun) || !incompleteCount(currentRun);
+  }
+}
+
 function renderRun(run) {
   currentRun = run;
   runTitle.textContent = run.name || `Run #${run.id}`;
@@ -464,6 +518,7 @@ function renderRun(run) {
   renameButton.disabled = false;
   editPromptButton.disabled = false;
   extendButton.disabled = canStop(run);
+  fillButton.disabled = canStop(run) || !incompleteCount(run);
   deleteButton.disabled = false;
 
   if (!run.results.length) {
@@ -507,6 +562,7 @@ async function loadCurrentRun() {
     renameButton.disabled = true;
     editPromptButton.disabled = true;
     extendButton.disabled = true;
+    fillButton.disabled = true;
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
@@ -611,6 +667,7 @@ rerunButton.addEventListener("click", rerunCurrentPrompt);
 renameButton.addEventListener("click", renameCurrentRun);
 editPromptButton.addEventListener("click", showPromptEditor);
 extendButton.addEventListener("click", extendCurrentRun);
+fillButton.addEventListener("click", fillCurrentRun);
 savePromptButton.addEventListener("click", saveCurrentPrompt);
 cancelPromptButton.addEventListener("click", hidePromptEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
