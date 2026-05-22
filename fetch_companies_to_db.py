@@ -4,7 +4,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-from server import SOURCE_URL, _fetch_html, _parse_companies
+from server import COMPANY_UNIVERSE_LIMIT, SOURCE_URL, fetch_top_market_cap_companies
 
 
 ROOT = Path(__file__).resolve().parent
@@ -101,10 +101,7 @@ def upsert_companies(connection, companies, fetched_at):
 
 
 def fetch_top_companies(limit):
-    companies = _parse_companies(_fetch_html(SOURCE_URL))[:limit]
-    if len(companies) < limit:
-        raise RuntimeError(f"Expected {limit} companies, fetched {len(companies)}")
-    return companies
+    return fetch_top_market_cap_companies(limit)
 
 
 def main():
@@ -112,7 +109,12 @@ def main():
         description="Fetch top companies from CompaniesMarketCap.com into SQLite."
     )
     parser.add_argument("--db", default=str(DEFAULT_DB_PATH), help="SQLite database path.")
-    parser.add_argument("--limit", type=int, default=100, help="Number of companies to fetch.")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=COMPANY_UNIVERSE_LIMIT,
+        help="Number of companies to fetch.",
+    )
     args = parser.parse_args()
 
     db_path = Path(args.db).expanduser().resolve()

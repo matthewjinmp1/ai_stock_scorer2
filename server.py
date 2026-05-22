@@ -16,6 +16,8 @@ from urllib.parse import unquote, urlparse
 
 ROOT = Path(__file__).resolve().parent
 SOURCE_URL = "https://companiesmarketcap.com/"
+COMPANY_UNIVERSE_LIMIT = 1000
+COMPANIESMARKETCAP_PAGE_SIZE = 100
 CACHE_SECONDS = 60 * 15
 DB_PATH = ROOT / "companies.db"
 AI_REQUEST_LOG_PATH = ROOT / "ai_requests.json"
@@ -238,6 +240,12 @@ def _fetch_html(url):
         return response.read().decode("utf-8", "replace")
 
 
+def company_source_url_for_page(page):
+    if page <= 1:
+        return SOURCE_URL
+    return f"{SOURCE_URL}page/{page}/"
+
+
 def _parse_companies(page_html):
     rows = re.findall(r"<tr[^>]*>(.*?)</tr>", page_html, flags=re.I | re.S)
     companies = []
@@ -301,7 +309,21 @@ def _parse_companies(page_html):
                 }
             )
 
-    return sorted(companies, key=lambda item: item["rank"])[:100]
+    return sorted(companies, key=lambda item: item["rank"])
+
+
+def fetch_top_market_cap_companies(limit=COMPANY_UNIVERSE_LIMIT):
+    companies_by_ticker = {}
+    page_count = (limit + COMPANIESMARKETCAP_PAGE_SIZE - 1) // COMPANIESMARKETCAP_PAGE_SIZE
+    for page in range(1, page_count + 1):
+        parsed = _parse_companies(_fetch_html(company_source_url_for_page(page)))
+        for company in parsed:
+            companies_by_ticker[company["ticker"]] = company
+
+    companies = sorted(companies_by_ticker.values(), key=lambda item: item["rank"])[:limit]
+    if len(companies) < limit:
+        raise ValueError(f"Expected {limit} companies, parsed {len(companies)}")
+    return companies
 
 
 def get_companies(force=False):
@@ -315,9 +337,7 @@ def get_companies(force=False):
             return _cache
 
     try:
-        companies = _parse_companies(_fetch_html(SOURCE_URL))
-        if len(companies) < 100:
-            raise ValueError(f"Expected 100 companies, parsed {len(companies)}")
+        companies = fetch_top_market_cap_companies(COMPANY_UNIVERSE_LIMIT)
         payload = {"companies": companies, "fetched_at": time.time(), "error": None}
     except Exception as exc:
         with _cache_lock:
