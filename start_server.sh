@@ -3,20 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-if [[ -z "${PORT:-}" ]]; then
-  PORT="$(python3 -c 'import socket
-for port in range(3000, 3021):
-    with socket.socket() as sock:
-        try:
-            sock.bind(("127.0.0.1", port))
-        except OSError:
-            continue
-        print(port)
-        break
-else:
-    raise SystemExit("No free port found between 3000 and 3020")')"
-fi
-
+PORT="3001"
 export PORT
 
 WATCHED_FILES=(server.py index.html styles.css app.js run.html run.js result.html result.js)
@@ -33,6 +20,35 @@ print("|".join(parts))' "${WATCHED_FILES[@]}"
 
 SERVER_PID=""
 
+kill_port_server() {
+  if ! command -v lsof >/dev/null 2>&1; then
+    return
+  fi
+
+  local pids
+  pids="$(lsof -tiTCP:"${PORT}" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -z "${pids}" ]]; then
+    return
+  fi
+
+  echo "Port ${PORT} is already in use. Stopping existing process..."
+  while read -r pid; do
+    if [[ -n "${pid}" ]] && [[ "${pid}" != "$$" ]]; then
+      local parent_pid parent_command
+      parent_pid="$(ps -o ppid= -p "${pid}" 2>/dev/null | tr -d ' ' || true)"
+      parent_command=""
+      if [[ -n "${parent_pid}" ]] && [[ "${parent_pid}" != "$$" ]]; then
+        parent_command="$(ps -o command= -p "${parent_pid}" 2>/dev/null || true)"
+      fi
+      if [[ "${parent_command}" == *"start_server.sh"* ]]; then
+        kill "${parent_pid}" 2>/dev/null || true
+      fi
+      kill "${pid}" 2>/dev/null || true
+    fi
+  done <<< "${pids}"
+  sleep 0.5
+}
+
 stop_server() {
   if [[ -n "${SERVER_PID}" ]] && kill -0 "${SERVER_PID}" 2>/dev/null; then
     kill "${SERVER_PID}" 2>/dev/null || true
@@ -45,8 +61,10 @@ trap 'stop_server; exit 0' INT TERM EXIT
 last_signature="$(signature)"
 
 while true; do
+  kill_port_server
   python3 server.py &
   SERVER_PID="$!"
+  echo "Serving only on http://localhost:${PORT}"
   echo "Watching for changes. Press Ctrl-C to stop."
 
   while kill -0 "${SERVER_PID}" 2>/dev/null; do

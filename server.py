@@ -1531,7 +1531,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     ensure_scoring_schema()
-    port = int(os.environ.get("PORT", "3000"))
+    port = 3001
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"Serving AI Stock Scorer at http://localhost:{port}")
     print("Edit server.py, index.html, styles.css, or app.js and the browser will auto-refresh.")
