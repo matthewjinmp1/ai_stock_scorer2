@@ -2,6 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
+PROJECT_DIR="$(pwd)"
 
 PORT="3001"
 export PORT
@@ -34,16 +35,30 @@ kill_port_server() {
   echo "Port ${PORT} is already in use. Stopping existing process..."
   while read -r pid; do
     if [[ -n "${pid}" ]] && [[ "${pid}" != "$$" ]]; then
-      local parent_pid parent_command
+      local command parent_pid parent_command
+      command="$(ps -o command= -p "${pid}" 2>/dev/null || true)"
       parent_pid="$(ps -o ppid= -p "${pid}" 2>/dev/null | tr -d ' ' || true)"
       parent_command=""
       if [[ -n "${parent_pid}" ]] && [[ "${parent_pid}" != "$$" ]]; then
         parent_command="$(ps -o command= -p "${parent_pid}" 2>/dev/null || true)"
       fi
-      if [[ "${parent_command}" == *"start_server.sh"* ]]; then
+
+      if [[ "${command}" == *"${PROJECT_DIR}/server.py"* ]] || {
+        [[ "${command}" == *"python"* ]] && [[ "${command}" == *"server.py"* ]] && [[ "${parent_command}" == *"${PROJECT_DIR}/start_server.sh"* ]]
+      }; then
+        if [[ "${parent_command}" == *"${PROJECT_DIR}/start_server.sh"* ]]; then
+          kill "${parent_pid}" 2>/dev/null || true
+        fi
+        kill "${pid}" 2>/dev/null || true
+      elif [[ "${parent_command}" == *"${PROJECT_DIR}/start_server.sh"* ]]; then
         kill "${parent_pid}" 2>/dev/null || true
+        kill "${pid}" 2>/dev/null || true
+      else
+        echo "Port ${PORT} is used by another app:"
+        echo "  PID ${pid}: ${command}"
+        echo "Not killing it. Stop that app first, then rerun ./start_server.sh."
+        exit 1
       fi
-      kill "${pid}" 2>/dev/null || true
     fi
   done <<< "${pids}"
   sleep 0.5
