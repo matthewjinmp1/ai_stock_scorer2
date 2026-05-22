@@ -67,6 +67,22 @@ function formatCost(value) {
   })} cents`;
 }
 
+async function confirmCostEstimate({ model, companyCount, actionLabel }) {
+  const query = new URLSearchParams({ model, companyCount: String(companyCount) });
+  const payload = await fetchJson(`/api/cost-estimate?${query.toString()}`);
+  const estimate = payload.estimate;
+  const sampleText = estimate.sample_size
+    ? `Based on ${estimate.sample_size} recent requests.`
+    : "No recent cost history; using a fallback estimate.";
+  return window.confirm(
+    `${actionLabel}\n\n` +
+      `Stocks: ${estimate.company_count}\n` +
+      `Estimated cost: ${formatCost(estimate.estimated_cost)}\n` +
+      `Average per stock: ${formatCost(estimate.average_request_cost)}\n\n` +
+      `${sampleText}\n\nContinue?`
+  );
+}
+
 async function renameRun(runId, currentName) {
   const name = window.prompt("Rename this run", currentName || "");
   if (name === null) return;
@@ -204,9 +220,20 @@ async function createRun() {
   }
 
   runButton.disabled = true;
-  statusEl.textContent = `Creating scoring run for ${companyCount} stocks...`;
 
   try {
+    statusEl.textContent = "Estimating run cost...";
+    const confirmed = await confirmCostEstimate({
+      model,
+      companyCount,
+      actionLabel: "Start this scoring run?",
+    });
+    if (!confirmed) {
+      statusEl.textContent = "Run canceled before any AI requests were sent.";
+      return;
+    }
+
+    statusEl.textContent = `Creating scoring run for ${companyCount} stocks...`;
     const response = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

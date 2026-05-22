@@ -98,6 +98,29 @@ function formatCents(value) {
   })} cents`;
 }
 
+async function fetchJson(url) {
+  const response = await fetch(url, { cache: "no-store" });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || `Could not load ${url}`);
+  return payload;
+}
+
+async function confirmCostEstimate({ model, companyCount, actionLabel }) {
+  const query = new URLSearchParams({ model, companyCount: String(companyCount) });
+  const payload = await fetchJson(`/api/cost-estimate?${query.toString()}`);
+  const estimate = payload.estimate;
+  const sampleText = estimate.sample_size
+    ? `Based on ${estimate.sample_size} recent requests.`
+    : "No recent cost history; using a fallback estimate.";
+  return window.confirm(
+    `${actionLabel}\n\n` +
+      `Stocks: ${estimate.company_count}\n` +
+      `Estimated cost: ${formatCents(estimate.estimated_cost)}\n` +
+      `Average per stock: ${formatCents(estimate.average_request_cost)}\n\n` +
+      `${sampleText}\n\nContinue?`
+  );
+}
+
 function formatNumber(value) {
   if (value === null || value === undefined) return "--";
   return Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -391,10 +414,26 @@ async function extendCurrentRun() {
     statusEl.textContent = "Enter a whole number of stocks.";
     return;
   }
+  if (companyCount <= Number(currentRun.company_count || 0)) {
+    statusEl.textContent = `Choose a stock count above ${currentRun.company_count}.`;
+    return;
+  }
 
   extendButton.disabled = true;
-  statusEl.textContent = `Extending to ${companyCount} stocks...`;
   try {
+    const additionalCount = companyCount - Number(currentRun.company_count || 0);
+    statusEl.textContent = "Estimating extension cost...";
+    const confirmed = await confirmCostEstimate({
+      model: currentRun.model,
+      companyCount: additionalCount,
+      actionLabel: `Extend this run by ${additionalCount} stocks?`,
+    });
+    if (!confirmed) {
+      statusEl.textContent = "Extension canceled before any AI requests were sent.";
+      return;
+    }
+
+    statusEl.textContent = `Extending to ${companyCount} stocks...`;
     const response = await fetch(`/api/runs/${currentRun.id}/extend`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -528,9 +567,20 @@ async function rerunCurrentPrompt() {
   }
 
   rerunButton.disabled = true;
-  statusEl.textContent = "Starting rerun...";
 
   try {
+    statusEl.textContent = "Estimating rerun cost...";
+    const confirmed = await confirmCostEstimate({
+      model: currentRun.model,
+      companyCount: currentRun.company_count,
+      actionLabel: "Start this rerun?",
+    });
+    if (!confirmed) {
+      statusEl.textContent = "Rerun canceled before any AI requests were sent.";
+      return;
+    }
+
+    statusEl.textContent = "Starting rerun...";
     const response = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

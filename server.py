@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qsl, unquote, urlparse
 
 
 ROOT = Path(__file__).resolve().parent
@@ -619,6 +619,35 @@ def ai_request_costs_by_run():
             cost = 0
         costs[run_id] = costs.get(run_id, 0) + cost
     return costs
+
+
+def cost_estimate(model, company_count):
+    model = normalize_model(model)
+    company_count = normalize_company_count(company_count)
+    costs = []
+    for entry in ai_request_entries():
+        request = entry.get("request") or {}
+        if request.get("model") != model:
+            continue
+        token_stats = entry.get("token_stats") or {}
+        try:
+            cost = float(token_stats.get("cost") or 0)
+        except (TypeError, ValueError):
+            continue
+        if cost > 0:
+            costs.append(cost)
+
+    sample_size = min(200, len(costs))
+    recent_costs = costs[-sample_size:]
+    average_cost = sum(recent_costs) / sample_size if sample_size else 0.00005
+    return {
+        "model": model,
+        "company_count": company_count,
+        "estimated_cost": average_cost * company_count,
+        "average_request_cost": average_cost,
+        "sample_size": sample_size,
+        "source": "recent_requests" if sample_size else "fallback",
+    }
 
 
 def ai_request_stats_for_run(run_id):
@@ -1415,6 +1444,17 @@ class Handler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/models":
             self.send_json({"models": openrouter_model_options(), "default": openrouter_model()})
+            return
+
+        if parsed.path == "/api/cost-estimate":
+            query = dict(parse_qsl(parsed.query))
+            try:
+                estimate = cost_estimate(query.get("model"), query.get("companyCount"))
+                self.send_json({"estimate": estimate})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
             return
 
         if parsed.path == "/api/runs":
