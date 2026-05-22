@@ -614,6 +614,8 @@ def get_run(run_id):
         payload["results"].append(result)
     payload["model_details"] = model_details(run["model"])
     payload["stats"] = ai_request_stats_for_run(run_id)
+    payload["stats"]["recent_average_latency_ms"] = recent_average_latency_ms(run["model"])
+    payload["scoring_concurrency"] = scoring_concurrency()
     payload["incomplete_count"] = incomplete_company_count(run_id)
     return payload
 
@@ -681,6 +683,27 @@ def cost_estimate(model, company_count):
         "sample_size": sample_size,
         "source": "recent_requests" if sample_size else "fallback",
     }
+
+
+def recent_average_latency_ms(model, limit=200):
+    model = normalize_model(model)
+    latencies = []
+    for entry in ai_request_entries():
+        request = entry.get("request") or {}
+        if request.get("model") != model:
+            continue
+        try:
+            duration = int((entry.get("timing") or {}).get("duration_ms") or 0)
+        except (TypeError, ValueError):
+            continue
+        if duration > 0:
+            latencies.append(duration)
+
+    sample_size = min(limit, len(latencies))
+    recent_latencies = latencies[-sample_size:]
+    if not recent_latencies:
+        return None
+    return round(sum(recent_latencies) / sample_size)
 
 
 def ai_request_stats_for_run(run_id):

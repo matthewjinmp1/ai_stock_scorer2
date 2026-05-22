@@ -18,6 +18,7 @@ const statusEl = document.querySelector("#status");
 const resultRows = document.querySelector("#resultRows");
 const statModel = document.querySelector("#statModel");
 const statProgress = document.querySelector("#statProgress");
+const statEta = document.querySelector("#statEta");
 const statCost = document.querySelector("#statCost");
 const statTokens = document.querySelector("#statTokens");
 const statLatency = document.querySelector("#statLatency");
@@ -39,7 +40,9 @@ const SORT_DIRECTIONS = new Set(["asc", "desc"]);
 
 let currentRunId = params.get("id");
 let pollTimer = null;
+let etaTimer = null;
 let currentRun = null;
+let etaState = null;
 const requestedSortKey = ["totalTokens", "outputTokens"].includes(params.get("sort"))
   ? "responseTokens"
   : params.get("sort");
@@ -132,6 +135,20 @@ function formatMs(value) {
   return `${Number(value).toLocaleString()} ms`;
 }
 
+function formatDuration(ms) {
+  if (ms === null || ms === undefined) return "--";
+  const seconds = Math.max(0, Math.ceil(Number(ms) / 1000));
+  if (seconds < 60) return `${seconds} sec`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 60) {
+    return remainingSeconds ? `${minutes} min ${remainingSeconds} sec` : `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
+}
+
 function numericValue(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -188,6 +205,56 @@ function incompleteCount(run) {
   return Math.max(0, Number(run.company_count || 0) - completedTickers.size);
 }
 
+function etaEstimateMs(run) {
+  if (!canStop(run)) return null;
+  const remaining = incompleteCount(run);
+  if (!remaining) return 0;
+  const stats = run.stats || {};
+  const averageLatencyMs = Number(stats.average_latency_ms || stats.recent_average_latency_ms || 0);
+  if (!Number.isFinite(averageLatencyMs) || averageLatencyMs <= 0) return null;
+  const concurrency = Math.max(1, Number(run.scoring_concurrency || 1));
+  return Math.ceil(remaining / concurrency) * averageLatencyMs;
+}
+
+function updateEtaState(run) {
+  if (!canStop(run)) {
+    etaState = null;
+    return;
+  }
+
+  const remaining = incompleteCount(run);
+  const estimateMs = etaEstimateMs(run);
+  const key = `${run.id}:${remaining}`;
+  if (!etaState || etaState.key !== key || etaState.estimateMs !== estimateMs) {
+    etaState = {
+      key,
+      estimateMs,
+      targetAt: estimateMs === null ? null : Date.now() + estimateMs,
+    };
+  }
+}
+
+function renderEta(run = currentRun) {
+  if (!statEta || !run) return;
+  if (!canStop(run)) {
+    statEta.textContent = incompleteCount(run) ? "Paused" : "Done";
+    return;
+  }
+
+  if (!etaState || etaState.estimateMs === null) {
+    statEta.textContent = "Calculating...";
+    return;
+  }
+
+  const remainingMs = Math.max(0, etaState.targetAt - Date.now());
+  statEta.textContent = formatDuration(remainingMs);
+}
+
+function startEtaTimer() {
+  if (etaTimer) return;
+  etaTimer = window.setInterval(() => renderEta(), 1000);
+}
+
 function numericScores(run) {
   return run.results
     .map((result) => result.score)
@@ -218,6 +285,8 @@ function renderRunStats(run) {
     <span class="model-id">blocked: ${escapeHtml((provider.ignore || []).join(", ") || "none")}</span>
   `;
   statProgress.textContent = progress(run);
+  updateEtaState(run);
+  renderEta(run);
   statCost.textContent = formatCents(stats.cost);
   statTokens.textContent = formatNumber(stats.total_tokens);
   statLatency.textContent = formatMs(stats.average_latency_ms);
@@ -694,6 +763,7 @@ if ("EventSource" in window) {
 
 try {
   ensureHomeLink();
+  startEtaTimer();
   await loadCurrentRun();
 } catch (error) {
   statusEl.textContent = error.message;
