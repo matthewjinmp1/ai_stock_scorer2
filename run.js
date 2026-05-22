@@ -25,6 +25,10 @@ const statLatency = document.querySelector("#statLatency");
 const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
 const statRequests = document.querySelector("#statRequests");
+const scoreMinInput = document.querySelector("#scoreMinInput");
+const scoreMaxInput = document.querySelector("#scoreMaxInput");
+const clearScoreFilterButton = document.querySelector("#clearScoreFilterButton");
+const filterStatus = document.querySelector("#filterStatus");
 
 const SORT_KEYS = new Set([
   "scoreRank",
@@ -49,6 +53,10 @@ const requestedSortKey = ["totalTokens", "outputTokens"].includes(params.get("so
 let sortState = {
   key: SORT_KEYS.has(requestedSortKey) ? requestedSortKey : "scoreRank",
   direction: SORT_DIRECTIONS.has(params.get("dir")) ? params.get("dir") : "asc",
+};
+let scoreFilter = {
+  min: params.has("scoreMin") && Number.isFinite(Number(params.get("scoreMin"))) ? Number(params.get("scoreMin")) : null,
+  max: params.has("scoreMax") && Number.isFinite(Number(params.get("scoreMax"))) ? Number(params.get("scoreMax")) : null,
 };
 let restoredScroll = false;
 
@@ -159,6 +167,8 @@ function runUrlWithState(scrollY = window.scrollY) {
   if (currentRunId) url.searchParams.set("id", currentRunId);
   url.searchParams.set("sort", sortState.key);
   url.searchParams.set("dir", sortState.direction);
+  if (scoreFilter.min !== null) url.searchParams.set("scoreMin", String(scoreFilter.min));
+  if (scoreFilter.max !== null) url.searchParams.set("scoreMax", String(scoreFilter.max));
   url.searchParams.set("y", String(Math.max(0, Math.round(scrollY))));
   return `${url.pathname}${url.search}`;
 }
@@ -340,6 +350,59 @@ function sortedResults(results) {
     .sort((left, right) => {
       return compareResults(left, right, sortState.key, sortState.direction);
     });
+}
+
+function scoreInFilter(result) {
+  const score = numericValue(result.score);
+  if (score === null) return false;
+  if (scoreFilter.min !== null && score < scoreFilter.min) return false;
+  if (scoreFilter.max !== null && score > scoreFilter.max) return false;
+  return true;
+}
+
+function filteredResults(results) {
+  return results.filter(scoreInFilter);
+}
+
+function scoreFilterLabel() {
+  if (scoreFilter.min === null && scoreFilter.max === null) return "Showing all scores.";
+  if (scoreFilter.min !== null && scoreFilter.max !== null) {
+    return `Showing scores ${scoreFilter.min} to ${scoreFilter.max}.`;
+  }
+  if (scoreFilter.min !== null) return `Showing scores ${scoreFilter.min} and above.`;
+  return `Showing scores ${scoreFilter.max} and below.`;
+}
+
+function normalizeScoreFilterValue(value) {
+  if (value === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.max(0, Math.min(100, number));
+}
+
+function syncScoreFilterInputs() {
+  if (scoreMinInput) scoreMinInput.value = scoreFilter.min === null ? "" : String(scoreFilter.min);
+  if (scoreMaxInput) scoreMaxInput.value = scoreFilter.max === null ? "" : String(scoreFilter.max);
+}
+
+function updateScoreFilter() {
+  scoreFilter = {
+    min: normalizeScoreFilterValue(scoreMinInput?.value ?? ""),
+    max: normalizeScoreFilterValue(scoreMaxInput?.value ?? ""),
+  };
+  if (scoreFilter.min !== null && scoreFilter.max !== null && scoreFilter.min > scoreFilter.max) {
+    [scoreFilter.min, scoreFilter.max] = [scoreFilter.max, scoreFilter.min];
+    syncScoreFilterInputs();
+  }
+  saveRunViewState();
+  if (currentRun) renderRun(currentRun);
+}
+
+function clearScoreFilter() {
+  scoreFilter = { min: null, max: null };
+  syncScoreFilterInputs();
+  saveRunViewState();
+  if (currentRun) renderRun(currentRun);
 }
 
 function updateSortHeaders() {
@@ -592,11 +655,19 @@ function renderRun(run) {
 
   if (!run.results.length) {
     resultRows.innerHTML = '<tr><td colspan="8">Waiting for scores...</td></tr>';
+    filterStatus.textContent = scoreFilterLabel();
     return;
   }
 
   updateSortHeaders();
-  resultRows.innerHTML = sortedResults(run.results)
+  const visibleResults = sortedResults(filteredResults(run.results));
+  filterStatus.textContent = `${scoreFilterLabel()} ${visibleResults.length}/${run.results.length} rows visible.`;
+  if (!visibleResults.length) {
+    resultRows.innerHTML = '<tr><td colspan="8">No scores match this filter.</td></tr>';
+    restoreScrollPosition();
+    return;
+  }
+  resultRows.innerHTML = visibleResults
     .map((result) => {
       const error = result.error ? escapeHtml(result.error) : "";
       const url = resultUrl(result);
@@ -740,6 +811,9 @@ fillButton.addEventListener("click", fillCurrentRun);
 savePromptButton.addEventListener("click", saveCurrentPrompt);
 cancelPromptButton.addEventListener("click", hidePromptEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
+scoreMinInput.addEventListener("input", updateScoreFilter);
+scoreMaxInput.addEventListener("input", updateScoreFilter);
+clearScoreFilterButton.addEventListener("click", clearScoreFilter);
 document.querySelectorAll("[data-sort-key]").forEach((button) => {
   button.addEventListener("click", () => setSort(button.dataset.sortKey));
 });
@@ -763,6 +837,7 @@ if ("EventSource" in window) {
 
 try {
   ensureHomeLink();
+  syncScoreFilterInputs();
   startEtaTimer();
   await loadCurrentRun();
 } catch (error) {

@@ -87,6 +87,19 @@
         </article>
       </section>
 
+      <section class="filter-toolbar" aria-label="Score filters">
+        <label>
+          <span>Min score</span>
+          <input id="scoreMinInput" type="number" min="0" max="100" step="1" placeholder="80" />
+        </label>
+        <label>
+          <span>Max score</span>
+          <input id="scoreMaxInput" type="number" min="0" max="100" step="1" placeholder="90" />
+        </label>
+        <button id="clearScoreFilterButton" class="secondary-button" type="button">Clear filter</button>
+        <p id="filterStatus" class="filter-status">Showing all scores.</p>
+      </section>
+
       <section class="table-wrap" aria-label="Stock score ranking">
         <table class="ranking-table">
           <thead>

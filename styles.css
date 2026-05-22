@@ -530,6 +530,25 @@ button:disabled {
   font-size: 0.92rem;
 }
 
+.filter-toolbar {
+  display: grid;
+  grid-template-columns: minmax(120px, 170px) minmax(120px, 170px) auto minmax(180px, 1fr);
+  gap: 12px;
+  align-items: end;
+  margin: 18px 0 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 12px 30px rgba(29, 45, 68, 0.06);
+}
+
+.filter-status {
+  margin: 0 0 9px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
 .table-wrap {
   overflow-x: hidden;
   border: 1px solid var(--line);
@@ -693,6 +712,7 @@ tbody tr:hover {
 
   .hero,
   .toolbar,
+  .filter-toolbar,
   .metric-grid,
   .detail-grid,
   .run-options {
