@@ -531,7 +531,7 @@ button:disabled {
 }
 
 .table-wrap {
-  overflow: auto;
+  overflow-x: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -544,12 +544,53 @@ table {
   border-collapse: collapse;
 }
 
+.ranking-table {
+  table-layout: fixed;
+  min-width: 0;
+}
+
+.ranking-table th:nth-child(1),
+.ranking-table td:nth-child(1) {
+  width: 8%;
+}
+
+.ranking-table th:nth-child(2),
+.ranking-table td:nth-child(2) {
+  width: 8%;
+}
+
+.ranking-table th:nth-child(3),
+.ranking-table td:nth-child(3) {
+  width: 30%;
+}
+
+.ranking-table th:nth-child(4),
+.ranking-table td:nth-child(4),
+.ranking-table th:nth-child(5),
+.ranking-table td:nth-child(5),
+.ranking-table th:nth-child(6),
+.ranking-table td:nth-child(6) {
+  width: 12%;
+}
+
+.ranking-table th:nth-child(7),
+.ranking-table td:nth-child(7) {
+  width: 14%;
+}
+
+.ranking-table th:nth-child(8),
+.ranking-table td:nth-child(8) {
+  width: 6%;
+}
+
 th,
 td {
-  padding: 13px 16px;
+  padding: 13px 12px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 th {
@@ -566,6 +607,7 @@ th {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  max-width: 100%;
   padding: 0;
   border: 0;
   background: transparent;
@@ -573,6 +615,8 @@ th {
   font: inherit;
   text-transform: inherit;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sort-button::after {
