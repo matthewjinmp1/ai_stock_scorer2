@@ -26,6 +26,8 @@ const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
 const statRequests = document.querySelector("#statRequests");
 const scoreTargetInput = document.querySelector("#scoreTargetInput");
+const scoreDownButton = document.querySelector("#scoreDownButton");
+const scoreUpButton = document.querySelector("#scoreUpButton");
 const clearScoreFilterButton = document.querySelector("#clearScoreFilterButton");
 const filterStatus = document.querySelector("#filterStatus");
 
@@ -396,6 +398,44 @@ function updateMatchedScore(run) {
   matchedScore = nearestScore(run?.results || [], scoreFilterTarget);
 }
 
+function activeScoreForStepper() {
+  if (matchedScore !== null) return matchedScore;
+  if (scoreFilterTarget !== null) return scoreFilterTarget;
+  return null;
+}
+
+function nextScoreBucket(direction) {
+  const scores = uniqueScores(currentRun?.results || []);
+  if (!scores.length) return null;
+  const activeScore = activeScoreForStepper();
+  if (activeScore === null) return direction > 0 ? scores[0] : scores[scores.length - 1];
+  if (direction > 0) {
+    return scores.find((score) => score > activeScore) ?? null;
+  }
+  for (let index = scores.length - 1; index >= 0; index -= 1) {
+    if (scores[index] < activeScore) return scores[index];
+  }
+  return null;
+}
+
+function updateScoreStepperButtons() {
+  if (!scoreDownButton || !scoreUpButton) return;
+  const scores = uniqueScores(currentRun?.results || []);
+  const activeScore = activeScoreForStepper();
+  scoreDownButton.disabled = !scores.length || (activeScore !== null && !scores.some((score) => score < activeScore));
+  scoreUpButton.disabled = !scores.length || (activeScore !== null && !scores.some((score) => score > activeScore));
+}
+
+function stepScoreFilter(direction) {
+  const nextScore = nextScoreBucket(direction);
+  if (nextScore === null) return;
+  scoreFilterTarget = nextScore;
+  matchedScore = nextScore;
+  syncScoreFilterInputs();
+  saveRunViewState();
+  if (currentRun) renderRun(currentRun);
+}
+
 function scoreFilterLabel() {
   if (scoreFilterTarget === null) return "Showing all scores.";
   if (matchedScore === null) return `No completed scores available near ${scoreFilterTarget}.`;
@@ -670,12 +710,14 @@ function renderRun(run) {
   if (!run.results.length) {
     resultRows.innerHTML = '<tr><td colspan="8">Waiting for scores...</td></tr>';
     filterStatus.textContent = scoreFilterLabel();
+    updateScoreStepperButtons();
     return;
   }
 
   updateSortHeaders();
   const visibleResults = sortedResults(filteredResults(run.results));
   filterStatus.textContent = `${scoreFilterLabel()} ${visibleResults.length}/${run.results.length} rows visible.`;
+  updateScoreStepperButtons();
   if (!visibleResults.length) {
     resultRows.innerHTML = '<tr><td colspan="8">No scores match this filter.</td></tr>';
     restoreScrollPosition();
@@ -826,6 +868,8 @@ savePromptButton.addEventListener("click", saveCurrentPrompt);
 cancelPromptButton.addEventListener("click", hidePromptEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
 scoreTargetInput.addEventListener("input", updateScoreFilter);
+scoreDownButton.addEventListener("click", () => stepScoreFilter(-1));
+scoreUpButton.addEventListener("click", () => stepScoreFilter(1));
 clearScoreFilterButton.addEventListener("click", clearScoreFilter);
 document.querySelectorAll("[data-sort-key]").forEach((button) => {
   button.addEventListener("click", () => setSort(button.dataset.sortKey));

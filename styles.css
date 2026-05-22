@@ -543,7 +543,7 @@ button:disabled {
 
 .filter-toolbar {
   display: grid;
-  grid-template-columns: minmax(140px, 190px) auto minmax(220px, 1fr);
+  grid-template-columns: minmax(140px, 190px) auto auto minmax(220px, 1fr);
   gap: 12px;
   align-items: end;
   margin: 18px 0 14px;
@@ -552,6 +552,16 @@ button:disabled {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: 0 12px 30px rgba(29, 45, 68, 0.06);
+}
+
+.score-stepper {
+  display: flex;
+  gap: 8px;
+}
+
+.icon-button {
+  min-width: 54px;
+  padding: 0 12px;
 }
 
 .filter-status {

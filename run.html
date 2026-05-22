@@ -92,6 +92,10 @@
           <span>Find score</span>
           <input id="scoreTargetInput" type="number" min="0" max="100" step="1" placeholder="87" />
         </label>
+        <div class="score-stepper" aria-label="Move between score buckets">
+          <button id="scoreDownButton" class="secondary-button icon-button" type="button" title="Previous lower score">Down</button>
+          <button id="scoreUpButton" class="secondary-button icon-button" type="button" title="Next higher score">Up</button>
+        </div>
         <button id="clearScoreFilterButton" class="secondary-button" type="button">Clear filter</button>
         <p id="filterStatus" class="filter-status">Showing all scores.</p>
       </section>
