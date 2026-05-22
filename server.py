@@ -908,6 +908,32 @@ def update_run_counts(connection, run_id):
     )
 
 
+def result_tickers_for_run(run_id):
+    with db_connect() as connection:
+        rows = connection.execute(
+            "SELECT ticker FROM scoring_results WHERE run_id = ?",
+            (run_id,),
+        ).fetchall()
+    return {row["ticker"] for row in rows}
+
+
+def mark_interrupted_runs():
+    now = int(time.time())
+    with db_connect() as connection:
+        connection.execute(
+            """
+            UPDATE scoring_runs
+            SET status = ?,
+                finished_at = COALESCE(finished_at, ?),
+                error = COALESCE(error, ?)
+            WHERE deleted_at IS NULL
+              AND status IN ('queued', 'running', 'stop_requested')
+            """,
+            ("stopped", now, "Interrupted by server restart before all companies finished."),
+        )
+        connection.commit()
+
+
 def parse_numeric_score(text):
     match = re.search(r"-?\d+(?:\.\d+)?", text or "")
     if not match:
@@ -1278,7 +1304,24 @@ def score_run_worker(run_id, start_index=0):
     fatal_error = None
     stopped = False
     try:
-        companies = scoring_companies(run["company_count"])[start_index:]
+        companies = scoring_companies(run["company_count"])
+        if start_index:
+            companies = companies[start_index:]
+        saved_tickers = result_tickers_for_run(run_id)
+        companies = [company for company in companies if company["ticker"] not in saved_tickers]
+        if not companies:
+            with db_connect() as connection:
+                connection.execute(
+                    """
+                    UPDATE scoring_runs
+                    SET status = ?, finished_at = ?, error = ?
+                    WHERE id = ?
+                    """,
+                    ("completed", int(time.time()), None, run_id),
+                )
+                update_run_counts(connection, run_id)
+                connection.commit()
+            return
         company_iter = iter(companies)
         futures = {}
         max_workers = min(scoring_concurrency(), len(companies)) or 1
@@ -1591,6 +1634,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     ensure_scoring_schema()
+    mark_interrupted_runs()
     port = 3001
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"Serving AI Stock Scorer at http://localhost:{port}")
