@@ -1112,7 +1112,8 @@ def openrouter_error_message(error):
 
 
 def prompt_for_company(prompt, company):
-    return prompt.strip().replace("COMPANY", company["name"])
+    company_reference = f"{company['name']} (ticker: {company['ticker']})"
+    return prompt.strip().replace("COMPANY", company_reference)
 
 
 def openrouter_http_error_details(error):
