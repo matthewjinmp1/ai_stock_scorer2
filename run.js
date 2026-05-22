@@ -25,8 +25,7 @@ const statLatency = document.querySelector("#statLatency");
 const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
 const statRequests = document.querySelector("#statRequests");
-const scoreMinInput = document.querySelector("#scoreMinInput");
-const scoreMaxInput = document.querySelector("#scoreMaxInput");
+const scoreTargetInput = document.querySelector("#scoreTargetInput");
 const clearScoreFilterButton = document.querySelector("#clearScoreFilterButton");
 const filterStatus = document.querySelector("#filterStatus");
 
@@ -54,10 +53,9 @@ let sortState = {
   key: SORT_KEYS.has(requestedSortKey) ? requestedSortKey : "scoreRank",
   direction: SORT_DIRECTIONS.has(params.get("dir")) ? params.get("dir") : "asc",
 };
-let scoreFilter = {
-  min: params.has("scoreMin") && Number.isFinite(Number(params.get("scoreMin"))) ? Number(params.get("scoreMin")) : null,
-  max: params.has("scoreMax") && Number.isFinite(Number(params.get("scoreMax"))) ? Number(params.get("scoreMax")) : null,
-};
+let scoreFilterTarget =
+  params.has("score") && Number.isFinite(Number(params.get("score"))) ? Number(params.get("score")) : null;
+let matchedScore = null;
 let restoredScroll = false;
 
 function ensureHomeLink() {
@@ -167,8 +165,7 @@ function runUrlWithState(scrollY = window.scrollY) {
   if (currentRunId) url.searchParams.set("id", currentRunId);
   url.searchParams.set("sort", sortState.key);
   url.searchParams.set("dir", sortState.direction);
-  if (scoreFilter.min !== null) url.searchParams.set("scoreMin", String(scoreFilter.min));
-  if (scoreFilter.max !== null) url.searchParams.set("scoreMax", String(scoreFilter.max));
+  if (scoreFilterTarget !== null) url.searchParams.set("score", String(scoreFilterTarget));
   url.searchParams.set("y", String(Math.max(0, Math.round(scrollY))));
   return `${url.pathname}${url.search}`;
 }
@@ -353,24 +350,14 @@ function sortedResults(results) {
 }
 
 function scoreInFilter(result) {
+  if (scoreFilterTarget === null) return true;
+  if (matchedScore === null) return false;
   const score = numericValue(result.score);
-  if (score === null) return false;
-  if (scoreFilter.min !== null && score < scoreFilter.min) return false;
-  if (scoreFilter.max !== null && score > scoreFilter.max) return false;
-  return true;
+  return score !== null && score === matchedScore;
 }
 
 function filteredResults(results) {
   return results.filter(scoreInFilter);
-}
-
-function scoreFilterLabel() {
-  if (scoreFilter.min === null && scoreFilter.max === null) return "Showing all scores.";
-  if (scoreFilter.min !== null && scoreFilter.max !== null) {
-    return `Showing scores ${scoreFilter.min} to ${scoreFilter.max}.`;
-  }
-  if (scoreFilter.min !== null) return `Showing scores ${scoreFilter.min} and above.`;
-  return `Showing scores ${scoreFilter.max} and below.`;
 }
 
 function normalizeScoreFilterValue(value) {
@@ -381,25 +368,51 @@ function normalizeScoreFilterValue(value) {
 }
 
 function syncScoreFilterInputs() {
-  if (scoreMinInput) scoreMinInput.value = scoreFilter.min === null ? "" : String(scoreFilter.min);
-  if (scoreMaxInput) scoreMaxInput.value = scoreFilter.max === null ? "" : String(scoreFilter.max);
+  if (scoreTargetInput) scoreTargetInput.value = scoreFilterTarget === null ? "" : String(scoreFilterTarget);
+}
+
+function uniqueScores(results) {
+  return [...new Set(
+    results
+      .map((result) => numericValue(result.score))
+      .filter((score) => score !== null)
+  )].sort((left, right) => left - right);
+}
+
+function nearestScore(results, target) {
+  if (target === null) return null;
+  const scores = uniqueScores(results);
+  if (!scores.length) return null;
+  return scores.reduce((best, score) => {
+    const distance = Math.abs(score - target);
+    const bestDistance = Math.abs(best - target);
+    if (distance < bestDistance) return score;
+    if (distance === bestDistance && score > best) return score;
+    return best;
+  }, scores[0]);
+}
+
+function updateMatchedScore(run) {
+  matchedScore = nearestScore(run?.results || [], scoreFilterTarget);
+}
+
+function scoreFilterLabel() {
+  if (scoreFilterTarget === null) return "Showing all scores.";
+  if (matchedScore === null) return `No completed scores available near ${scoreFilterTarget}.`;
+  if (matchedScore === scoreFilterTarget) return `Showing scores equal to ${matchedScore}.`;
+  return `Closest score to ${scoreFilterTarget} is ${matchedScore}. Showing score ${matchedScore}.`;
 }
 
 function updateScoreFilter() {
-  scoreFilter = {
-    min: normalizeScoreFilterValue(scoreMinInput?.value ?? ""),
-    max: normalizeScoreFilterValue(scoreMaxInput?.value ?? ""),
-  };
-  if (scoreFilter.min !== null && scoreFilter.max !== null && scoreFilter.min > scoreFilter.max) {
-    [scoreFilter.min, scoreFilter.max] = [scoreFilter.max, scoreFilter.min];
-    syncScoreFilterInputs();
-  }
+  scoreFilterTarget = normalizeScoreFilterValue(scoreTargetInput?.value ?? "");
+  if (currentRun) updateMatchedScore(currentRun);
   saveRunViewState();
   if (currentRun) renderRun(currentRun);
 }
 
 function clearScoreFilter() {
-  scoreFilter = { min: null, max: null };
+  scoreFilterTarget = null;
+  matchedScore = null;
   syncScoreFilterInputs();
   saveRunViewState();
   if (currentRun) renderRun(currentRun);
@@ -644,6 +657,7 @@ function renderRun(run) {
   runCount.textContent = String(run.results.length);
   statusEl.textContent = run.error || "";
   renderRunStats(run);
+  updateMatchedScore(run);
   stopButton.disabled = !canStop(run);
   stopButton.textContent = run.status === "stop_requested" ? "Stopping..." : "Stop";
   rerunButton.disabled = false;
@@ -811,8 +825,7 @@ fillButton.addEventListener("click", fillCurrentRun);
 savePromptButton.addEventListener("click", saveCurrentPrompt);
 cancelPromptButton.addEventListener("click", hidePromptEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
-scoreMinInput.addEventListener("input", updateScoreFilter);
-scoreMaxInput.addEventListener("input", updateScoreFilter);
+scoreTargetInput.addEventListener("input", updateScoreFilter);
 clearScoreFilterButton.addEventListener("click", clearScoreFilter);
 document.querySelectorAll("[data-sort-key]").forEach((button) => {
   button.addEventListener("click", () => setSort(button.dataset.sortKey));

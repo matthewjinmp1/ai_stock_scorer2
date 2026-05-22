@@ -543,7 +543,7 @@ button:disabled {
 
 .filter-toolbar {
   display: grid;
-  grid-template-columns: minmax(120px, 170px) minmax(120px, 170px) auto minmax(180px, 1fr);
+  grid-template-columns: minmax(140px, 190px) auto minmax(220px, 1fr);
   gap: 12px;
   align-items: end;
   margin: 18px 0 14px;
