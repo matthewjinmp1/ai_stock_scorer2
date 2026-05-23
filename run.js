@@ -727,16 +727,22 @@ function renderRun(run) {
     .map((result) => {
       const error = result.error ? escapeHtml(result.error) : "";
       const url = resultUrl(result);
+      const logo = result.logo
+        ? `<img class="logo" src="${escapeHtml(result.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
+        : "";
       return `
         <tr class="clickable-row" data-result-url="${url}">
           <td>${result.scoreRank}</td>
           <td><strong>${formatScore(result.score)}</strong></td>
           <td>
-            <div>
+            <div class="company-cell">
+              ${logo}
+              <div>
               <a class="company-link" href="${url}">
                 <strong>${escapeHtml(result.company_name)}</strong>
               </a>
               <span class="ticker">${escapeHtml(result.ticker)}</span>
+              </div>
             </div>
           </td>
           <td>${formatNumber(result.prompt_tokens)}</td>

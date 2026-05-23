@@ -700,12 +700,13 @@ tbody tr:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 260px;
+  min-width: 0;
 }
 
 .logo {
-  width: 32px;
-  height: 32px;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
   border: 1px solid var(--line);
   border-radius: 50%;
   object-fit: contain;

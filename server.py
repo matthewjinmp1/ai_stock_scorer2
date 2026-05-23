@@ -636,7 +636,9 @@ def get_run(run_id):
             return None
         results = connection.execute(
             """
-            SELECT ticker, company_name, rank, market_cap, market_cap_value, price, country,
+            SELECT scoring_results.ticker, company_name, scoring_results.rank,
+                   scoring_results.market_cap, scoring_results.market_cap_value,
+                   scoring_results.price, scoring_results.country,
                    score, raw_response, error, created_at
             FROM scoring_results
             WHERE run_id = ?
@@ -644,6 +646,15 @@ def get_run(run_id):
             """,
             (run_id,),
         ).fetchall()
+        logo_rows = connection.execute(
+            """
+            SELECT ticker, logo
+            FROM companies
+            WHERE ticker IN (SELECT ticker FROM scoring_results WHERE run_id = ?)
+            """,
+            (run_id,),
+        ).fetchall()
+        logos = {row["ticker"]: row["logo"] for row in logo_rows}
     result_stats = ai_request_stats_by_ticker(run_id)
     payload = dict(run)
     payload["results"] = []
@@ -656,6 +667,7 @@ def get_run(run_id):
         result["response_tokens"] = stats.get("response_tokens", 0)
         result["reasoning_tokens"] = stats.get("reasoning_tokens", 0)
         result["cost"] = stats.get("cost", 0)
+        result["logo"] = logos.get(result["ticker"], "")
         payload["results"].append(result)
     payload["model_details"] = model_details(run["model"])
     payload["stats"] = ai_request_stats_for_run(run_id)
