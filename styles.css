@@ -704,13 +704,10 @@ tbody tr:hover {
 }
 
 .logo {
-  flex: 0 0 30px;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--line);
-  border-radius: 50%;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
   object-fit: contain;
-  background: #fff;
 }
 
 .ticker {
