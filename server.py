@@ -1096,10 +1096,10 @@ def mark_interrupted_runs():
 
 
 def parse_numeric_score(text):
-    match = re.search(r"-?\d+(?:\.\d+)?", text or "")
-    if not match:
+    matches = re.findall(r"-?\d+(?:\.\d+)?", text or "")
+    if not matches:
         raise ValueError("Model response did not contain a number")
-    return float(match.group(0))
+    return float(matches[-1])
 
 
 class FatalScoringError(RuntimeError):

@@ -131,6 +131,20 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertEqual(companies[0]["ticker"], "NVDA")
         self.assertEqual(companies[0]["logo"], "https://companiesmarketcap.com/img/company-logos/64/NVDA.png")
 
+    def test_parse_numeric_score_uses_last_number(self):
+        score = server.parse_numeric_score(
+            "The company has 3 strong product lines and roughly 20 major partners.\nScore: 87"
+        )
+        self.assertEqual(score, 87)
+
+    def test_parse_numeric_score_supports_decimal_at_end(self):
+        score = server.parse_numeric_score("Moat looks above average. Final score: 82.5")
+        self.assertEqual(score, 82.5)
+
+    def test_parse_numeric_score_raises_when_no_number(self):
+        with self.assertRaises(ValueError):
+            server.parse_numeric_score("No numeric score provided")
+
 
 class RunWorkerTests(ServerTestCase):
     def test_score_worker_fills_only_incomplete_companies(self):
