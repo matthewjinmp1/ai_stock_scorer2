@@ -216,7 +216,7 @@ button:hover {
 
 .run-options {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(150px, 220px) minmax(0, 1fr);
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 240px) minmax(150px, 220px) minmax(0, 1fr);
   gap: 12px;
   align-items: end;
 }

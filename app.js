@@ -1,6 +1,7 @@
 const promptInput = document.querySelector("#promptInput");
 const runNameInput = document.querySelector("#runNameInput");
 const modelSelect = document.querySelector("#modelSelect");
+const reasoningSelect = document.querySelector("#reasoningSelect");
 const companyCountInput = document.querySelector("#companyCountInput");
 const companyCountHelp = document.querySelector("#companyCountHelp");
 const runButton = document.querySelector("#runButton");
@@ -67,8 +68,12 @@ function formatCost(value) {
   })} cents`;
 }
 
-async function confirmCostEstimate({ model, companyCount, actionLabel }) {
-  const query = new URLSearchParams({ model, companyCount: String(companyCount) });
+async function confirmCostEstimate({ model, reasoningMode, companyCount, actionLabel }) {
+  const query = new URLSearchParams({
+    model,
+    reasoningMode: reasoningMode || "none",
+    companyCount: String(companyCount),
+  });
   const payload = await fetchJson(`/api/cost-estimate?${query.toString()}`);
   const estimate = payload.estimate;
   const sampleText = estimate.sample_size
@@ -138,13 +143,21 @@ async function loadCompanies() {
 async function loadModels() {
   const payload = await fetchJson("/api/models");
   modelSelect.innerHTML = "";
+  reasoningSelect.innerHTML = "";
   for (const model of payload.models) {
     const option = document.createElement("option");
     option.value = model.id;
     option.textContent = model.label;
     modelSelect.append(option);
   }
+  for (const mode of payload.reasoning_modes || []) {
+    const option = document.createElement("option");
+    option.value = mode.id;
+    option.textContent = mode.label;
+    reasoningSelect.append(option);
+  }
   modelSelect.value = payload.default;
+  reasoningSelect.value = payload.default_reasoning_mode || "none";
 }
 
 async function loadRuns() {
@@ -208,9 +221,15 @@ async function createRun() {
   }
   const companyCount = Number(companyCountInput.value);
   const model = modelSelect.value;
+  const reasoningMode = reasoningSelect.value;
   if (!model) {
     statusEl.textContent = "Choose a model first.";
     modelSelect.focus();
+    return;
+  }
+  if (!reasoningMode) {
+    statusEl.textContent = "Choose a reasoning mode first.";
+    reasoningSelect.focus();
     return;
   }
   if (!Number.isInteger(companyCount) || companyCount < 1 || companyCount > companiesAvailable) {
@@ -225,6 +244,7 @@ async function createRun() {
     statusEl.textContent = "Estimating run cost...";
     const confirmed = await confirmCostEstimate({
       model,
+      reasoningMode,
       companyCount,
       actionLabel: "Start this scoring run?",
     });
@@ -237,7 +257,7 @@ async function createRun() {
     const response = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, prompt, companyCount, model }),
+      body: JSON.stringify({ name, prompt, companyCount, model, reasoningMode }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not create run");

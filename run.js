@@ -117,8 +117,12 @@ async function fetchJson(url) {
   return payload;
 }
 
-async function confirmCostEstimate({ model, companyCount, actionLabel }) {
-  const query = new URLSearchParams({ model, companyCount: String(companyCount) });
+async function confirmCostEstimate({ model, reasoningMode, companyCount, actionLabel }) {
+  const query = new URLSearchParams({
+    model,
+    reasoningMode: reasoningMode || "none",
+    companyCount: String(companyCount),
+  });
   const payload = await fetchJson(`/api/cost-estimate?${query.toString()}`);
   const estimate = payload.estimate;
   const sampleText = estimate.sample_size
@@ -287,6 +291,7 @@ function renderRunStats(run) {
   statModel.innerHTML = `
     <span class="model-label">${escapeHtml(model.label || run.model)}</span>
     <span class="model-id">${escapeHtml(model.id || run.model)}</span>
+    <span class="model-id">mode: ${escapeHtml(model.reasoning_label || run.reasoning_mode || "Non-reasoning")}</span>
     <span class="model-id">reasoning: ${escapeHtml(reasoning.effort || "none")}, exclude: ${escapeHtml(
     reasoning.exclude === undefined ? "true" : String(reasoning.exclude)
   )}</span>
@@ -622,6 +627,7 @@ async function extendCurrentRun() {
     statusEl.textContent = "Estimating extension cost...";
     const confirmed = await confirmCostEstimate({
       model: currentRun.model,
+      reasoningMode: currentRun.reasoning_mode,
       companyCount: additionalCount,
       actionLabel: `Extend this run by ${additionalCount} stocks?`,
     });
@@ -664,6 +670,7 @@ async function fillCurrentRun() {
     statusEl.textContent = "Estimating fill cost...";
     const confirmed = await confirmCostEstimate({
       model: currentRun.model,
+      reasoningMode: currentRun.reasoning_mode,
       companyCount: missingCount,
       actionLabel: `Fill ${missingCount} missing score${missingCount === 1 ? "" : "s"}?`,
     });
@@ -830,6 +837,7 @@ async function rerunCurrentPrompt() {
     statusEl.textContent = "Estimating rerun cost...";
     const confirmed = await confirmCostEstimate({
       model: currentRun.model,
+      reasoningMode: currentRun.reasoning_mode,
       companyCount: currentRun.company_count,
       actionLabel: "Start this rerun?",
     });
@@ -845,6 +853,8 @@ async function rerunCurrentPrompt() {
       body: JSON.stringify({
         name: trimmed,
         prompt: currentRun.prompt,
+        model: currentRun.model,
+        reasoningMode: currentRun.reasoning_mode,
         companyCount: currentRun.company_count,
       }),
     });

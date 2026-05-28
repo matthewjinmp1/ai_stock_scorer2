@@ -163,7 +163,7 @@ class RunWorkerTests(ServerTestCase):
 
         calls = []
 
-        def fake_call_openrouter(prompt, company, model, run_id=None):
+        def fake_call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None):
             calls.append((company["ticker"], prompt))
             return {"BBB": "42", "CCC": "55"}[company["ticker"]]
 

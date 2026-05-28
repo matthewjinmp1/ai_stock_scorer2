@@ -40,8 +40,7 @@ PROVIDER_SLUGS = {
 MODEL_OPTIONS = [
     {
         "id": "deepseek/deepseek-v4-flash",
-        "label": "DeepSeek V4 Flash (non-reasoning)",
-        "reasoning": {"effort": "none", "exclude": False},
+        "label": "DeepSeek V4 Flash",
         "provider": {
             "require_parameters": True,
         },
@@ -49,13 +48,25 @@ MODEL_OPTIONS = [
     {
         "id": "xiaomi/mimo-v2.5",
         "label": "Xiaomi MiMo V2.5",
-        "reasoning": {"effort": "none", "exclude": False},
         "provider": {
             "require_parameters": True,
         },
     },
 ]
+REASONING_OPTIONS = [
+    {
+        "id": "none",
+        "label": "Non-reasoning",
+        "reasoning": {"effort": "none", "exclude": False},
+    },
+    {
+        "id": "medium",
+        "label": "Reasoning",
+        "reasoning": {"effort": "medium", "exclude": False},
+    },
+]
 DEFAULT_OPENROUTER_MODEL = MODEL_OPTIONS[0]["id"]
+DEFAULT_REASONING_MODE = REASONING_OPTIONS[0]["id"]
 DEFAULT_SCORING_COMPANY_COUNT = 10
 DEFAULT_SCORING_CONCURRENCY = 20
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
@@ -89,6 +100,14 @@ def openrouter_model():
     return DEFAULT_OPENROUTER_MODEL
 
 
+def reasoning_options():
+    return REASONING_OPTIONS
+
+
+def default_reasoning_mode():
+    return DEFAULT_REASONING_MODE
+
+
 def normalize_model(model):
     requested = (model or DEFAULT_OPENROUTER_MODEL).strip()
     allowed = {option["id"] for option in MODEL_OPTIONS}
@@ -100,6 +119,19 @@ def normalize_model(model):
 def model_config(model):
     normalized = normalize_model(model)
     return next(option for option in MODEL_OPTIONS if option["id"] == normalized)
+
+
+def normalize_reasoning_mode(reasoning_mode):
+    requested = (reasoning_mode or DEFAULT_REASONING_MODE).strip()
+    allowed = {option["id"] for option in REASONING_OPTIONS}
+    if requested not in allowed:
+        raise ValueError("Selected reasoning mode is not available.")
+    return requested
+
+
+def reasoning_config(reasoning_mode):
+    normalized = normalize_reasoning_mode(reasoning_mode)
+    return next(option for option in REASONING_OPTIONS if option["id"] == normalized)
 
 
 def provider_slug(provider):
@@ -179,12 +211,15 @@ def provider_preferences(config):
     return provider
 
 
-def model_details(model):
+def model_details(model, reasoning_mode=None):
     config = model_config(model)
+    reasoning = reasoning_config(reasoning_mode)
     return {
         "id": config["id"],
         "label": config["label"],
-        "reasoning": config["reasoning"],
+        "reasoning_mode": reasoning["id"],
+        "reasoning_label": reasoning["label"],
+        "reasoning": reasoning["reasoning"],
         "provider": provider_preferences(config),
     }
 
@@ -379,6 +414,7 @@ def ensure_scoring_schema():
                 name TEXT,
                 prompt TEXT NOT NULL,
                 model TEXT NOT NULL,
+                reasoning_mode TEXT NOT NULL DEFAULT 'none',
                 status TEXT NOT NULL,
                 company_count INTEGER NOT NULL DEFAULT 0,
                 completed_count INTEGER NOT NULL DEFAULT 0,
@@ -426,11 +462,20 @@ def ensure_scoring_schema():
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN worker_pid INTEGER")
         if "worker_started_at" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN worker_started_at INTEGER")
+        if "reasoning_mode" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN reasoning_mode TEXT NOT NULL DEFAULT 'none'")
         connection.execute(
             """
             UPDATE scoring_runs
             SET name = 'Run #' || id
             WHERE name IS NULL OR trim(name) = ''
+            """
+        )
+        connection.execute(
+            """
+            UPDATE scoring_runs
+            SET reasoning_mode = 'none'
+            WHERE reasoning_mode IS NULL OR trim(reasoning_mode) = ''
             """
         )
         connection.commit()
@@ -537,13 +582,14 @@ def start_scoring_worker_process(run_id, start_index=0):
     return process.pid
 
 
-def create_scoring_run(name, prompt, model, company_count):
+def create_scoring_run(name, prompt, model, company_count, reasoning_mode=None):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
 
     name = normalize_run_name(name)
     prompt = normalize_scoring_prompt(prompt)
     model = normalize_model(model)
+    reasoning_mode = normalize_reasoning_mode(reasoning_mode)
     company_count = normalize_company_count(company_count)
     companies = scoring_companies(company_count)
     if not companies:
@@ -553,10 +599,10 @@ def create_scoring_run(name, prompt, model, company_count):
     with db_connect() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO scoring_runs (name, prompt, model, status, company_count, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO scoring_runs (name, prompt, model, reasoning_mode, status, company_count, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, prompt, model, "queued", len(companies), now),
+            (name, prompt, model, reasoning_mode, "queued", len(companies), now),
         )
         run_id = cursor.lastrowid
         connection.commit()
@@ -633,7 +679,7 @@ def get_run(run_id):
     with db_connect() as connection:
         run = connection.execute(
             """
-            SELECT id, name, prompt, model, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, reasoning_mode, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE id = ? AND deleted_at IS NULL
@@ -677,7 +723,7 @@ def get_run(run_id):
         result["cost"] = stats.get("cost", 0)
         result["logo"] = logos.get(result["ticker"], "")
         payload["results"].append(result)
-    payload["model_details"] = model_details(run["model"])
+    payload["model_details"] = model_details(run["model"], run["reasoning_mode"])
     payload["stats"] = ai_request_stats_for_run(run_id)
     payload["stats"]["recent_average_latency_ms"] = recent_average_latency_ms(run["model"])
     payload["scoring_concurrency"] = scoring_concurrency()
@@ -721,13 +767,17 @@ def ai_request_costs_by_run():
     return costs
 
 
-def cost_estimate(model, company_count):
+def cost_estimate(model, company_count, reasoning_mode=None):
     model = normalize_model(model)
+    reasoning_mode = normalize_reasoning_mode(reasoning_mode)
+    selected_reasoning = reasoning_config(reasoning_mode)["reasoning"]
     company_count = normalize_company_count(company_count)
     costs = []
     for entry in ai_request_entries():
         request = entry.get("request") or {}
         if request.get("model") != model:
+            continue
+        if (request.get("reasoning") or reasoning_config(DEFAULT_REASONING_MODE)["reasoning"]) != selected_reasoning:
             continue
         token_stats = entry.get("token_stats") or {}
         try:
@@ -742,6 +792,7 @@ def cost_estimate(model, company_count):
     average_cost = sum(recent_costs) / sample_size if sample_size else 0.00005
     return {
         "model": model,
+        "reasoning_mode": reasoning_mode,
         "company_count": company_count,
         "estimated_cost": average_cost * company_count,
         "average_request_cost": average_cost,
@@ -866,7 +917,7 @@ def get_result_detail(run_id, ticker):
     with db_connect() as connection:
         run = connection.execute(
             """
-            SELECT id, name, prompt, model, status, created_at, started_at, finished_at, error
+            SELECT id, name, prompt, model, reasoning_mode, status, created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE id = ? AND deleted_at IS NULL
             """,
@@ -917,7 +968,7 @@ def stop_scoring_run(run_id):
         connection.commit()
         updated = connection.execute(
             """
-            SELECT id, name, prompt, model, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, reasoning_mode, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE id = ? AND deleted_at IS NULL
@@ -931,7 +982,7 @@ def list_runs():
     with db_connect() as connection:
         rows = connection.execute(
             """
-            SELECT id, name, prompt, model, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, reasoning_mode, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE deleted_at IS NULL
@@ -1293,12 +1344,13 @@ def sanitized_ai_request_entry(entry):
     return sanitized
 
 
-def call_openrouter(prompt, company, model, run_id=None):
+def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None):
     api_key = os.environ.get("OPENROUTER_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_KEY is not set")
 
     config = model_config(model)
+    reasoning = reasoning_config(reasoning_mode)["reasoning"]
     request_payload = {
         "model": config["id"],
         "messages": [
@@ -1306,7 +1358,7 @@ def call_openrouter(prompt, company, model, run_id=None):
         ],
         "temperature": 0,
         "max_tokens": openrouter_max_tokens(),
-        "reasoning": config["reasoning"],
+        "reasoning": reasoning,
         "provider": provider_preferences(config),
     }
     body = json.dumps(request_payload).encode("utf-8")
@@ -1430,12 +1482,12 @@ def save_result(connection, run_id, company, score, raw_response, error):
     )
 
 
-def score_company_request(run_id, prompt, model, company):
+def score_company_request(run_id, prompt, model, reasoning_mode, company):
     raw_response = None
     score = None
     error = None
     try:
-        raw_response = call_openrouter(prompt, company, model, run_id=run_id)
+        raw_response = call_openrouter(prompt, company, model, reasoning_mode, run_id=run_id)
         score = parse_numeric_score(raw_response)
     except FatalScoringError:
         raise
@@ -1460,7 +1512,7 @@ def score_run_worker(run_id, start_index=0):
     ensure_scoring_schema()
     with db_connect() as connection:
         run = connection.execute(
-            "SELECT name, prompt, model, company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
+            "SELECT name, prompt, model, reasoning_mode, company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
             (run_id,),
         ).fetchone()
         if not run:
@@ -1512,6 +1564,7 @@ def score_run_worker(run_id, start_index=0):
                 run_id,
                 run["prompt"],
                 run["model"],
+                run["reasoning_mode"],
                 company,
             )
             futures[future] = company
@@ -1658,13 +1711,24 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         if parsed.path == "/api/models":
-            self.send_json({"models": openrouter_model_options(), "default": openrouter_model()})
+            self.send_json(
+                {
+                    "models": openrouter_model_options(),
+                    "default": openrouter_model(),
+                    "reasoning_modes": reasoning_options(),
+                    "default_reasoning_mode": default_reasoning_mode(),
+                }
+            )
             return
 
         if parsed.path == "/api/cost-estimate":
             query = dict(parse_qsl(parsed.query))
             try:
-                estimate = cost_estimate(query.get("model"), query.get("companyCount"))
+                estimate = cost_estimate(
+                    query.get("model"),
+                    query.get("companyCount"),
+                    query.get("reasoningMode"),
+                )
                 self.send_json({"estimate": estimate})
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)
@@ -1743,8 +1807,9 @@ class Handler(SimpleHTTPRequestHandler):
                     return
                 prompt = normalize_scoring_prompt(payload.get("prompt"))
                 model = normalize_model(payload.get("model"))
+                reasoning_mode = normalize_reasoning_mode(payload.get("reasoningMode"))
                 company_count = normalize_company_count(payload.get("companyCount"))
-                run_id = create_scoring_run(name, prompt, model, company_count)
+                run_id = create_scoring_run(name, prompt, model, company_count, reasoning_mode)
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)
