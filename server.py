@@ -45,7 +45,15 @@ MODEL_OPTIONS = [
         "provider": {
             "require_parameters": True,
         },
-    }
+    },
+    {
+        "id": "xiaomi/mimo-v2.5",
+        "label": "Xiaomi MiMo V2.5",
+        "reasoning": {"effort": "none", "exclude": False},
+        "provider": {
+            "require_parameters": True,
+        },
+    },
 ]
 DEFAULT_OPENROUTER_MODEL = MODEL_OPTIONS[0]["id"]
 DEFAULT_SCORING_COMPANY_COUNT = 10
