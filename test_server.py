@@ -5,6 +5,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import server
 
@@ -23,6 +24,7 @@ class ServerTestCase(unittest.TestCase):
             "SCORING_WORKER_LOG_PATH": server.SCORING_WORKER_LOG_PATH,
             "call_openrouter": server.call_openrouter,
             "scoring_concurrency": server.scoring_concurrency,
+            "start_scoring_worker_process": server.start_scoring_worker_process,
             "OPENROUTER_KEY": os.environ.get("OPENROUTER_KEY"),
         }
         server.DB_PATH = self.root / "test_companies.db"
@@ -40,6 +42,7 @@ class ServerTestCase(unittest.TestCase):
         server.SCORING_WORKER_LOG_PATH = self.originals["SCORING_WORKER_LOG_PATH"]
         server.call_openrouter = self.originals["call_openrouter"]
         server.scoring_concurrency = self.originals["scoring_concurrency"]
+        server.start_scoring_worker_process = self.originals["start_scoring_worker_process"]
         if self.originals["OPENROUTER_KEY"] is None:
             os.environ.pop("OPENROUTER_KEY", None)
         else:
@@ -102,6 +105,36 @@ class ServerTestCase(unittest.TestCase):
 
 
 class PromptAndParsingTests(ServerTestCase):
+    def test_active_company_universe_uses_latest_fetch(self):
+        with self.connect() as connection:
+            latest_fetch = connection.execute("SELECT MAX(fetched_at) FROM companies").fetchone()[0]
+            connection.execute(
+                """
+                INSERT INTO companies (
+                    ticker, rank, name, market_cap, market_cap_value, price, today,
+                    country, logo, source_url, fetched_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "OLD",
+                    1,
+                    "Old Company",
+                    "$ 4.00 T",
+                    4_000_000_000_000,
+                    "$400",
+                    "0.0%",
+                    "USA",
+                    "https://logos/old.png",
+                    str(server.SOURCE_URL),
+                    latest_fetch - 1,
+                    latest_fetch - 1,
+                ),
+            )
+            connection.commit()
+
+        self.assertEqual([company["ticker"] for company in server.db_companies()], ["AAA", "BBB", "CCC"])
+        self.assertEqual(server.companies_for_tickers(["OLD"])[0]["name"], "Old Company")
+
     def test_prompt_for_company_includes_name_and_ticker(self):
         prompt = server.prompt_for_company(
             "Rate COMPANY from 0 to 100",
@@ -145,8 +178,216 @@ class PromptAndParsingTests(ServerTestCase):
         with self.assertRaises(ValueError):
             server.parse_numeric_score("No numeric score provided")
 
+    def test_response_token_limit_validation(self):
+        self.assertEqual(server.normalize_max_tokens("750"), 750)
+        with self.assertRaisesRegex(ValueError, "1 to 32,768"):
+            server.normalize_max_tokens(0)
+        with self.assertRaisesRegex(ValueError, "whole number"):
+            server.normalize_max_tokens("many")
+
+    def test_call_openrouter_surfaces_embedded_provider_error(self):
+        payload = {
+            "error": {
+                "code": 502,
+                "message": "Upstream error from Nvidia: ResourceExhausted",
+            }
+        }
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        company = server.scoring_companies(1)[0]
+        with mock.patch.dict(os.environ, {"OPENROUTER_MAX_ATTEMPTS": "1"}):
+            with mock.patch.object(server.urllib.request, "urlopen", return_value=FakeResponse()) as urlopen:
+                with self.assertRaisesRegex(RuntimeError, "ResourceExhausted"):
+                    server.call_openrouter("Score COMPANY", company, MODEL, run_id=1)
+
+        request_headers = {key.lower(): value for key, value in urlopen.call_args.args[0].header_items()}
+        self.assertEqual(request_headers["x-openrouter-cache"], "true")
+        self.assertEqual(request_headers["x-openrouter-cache-ttl"], "86400")
+        entry = json.loads(server.AI_REQUEST_LOG_PATH.read_text())[-1]
+        self.assertEqual(entry["response"]["raw_payload"], payload)
+        self.assertIn("ResourceExhausted", entry["response"]["error"]["message"])
+
+    def test_call_openrouter_logs_response_cache_hit(self):
+        payload = {
+            "choices": [{"message": {"content": "77"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0},
+        }
+
+        class FakeResponse:
+            status = 200
+            headers = {
+                "X-OpenRouter-Cache-Status": "HIT",
+                "X-OpenRouter-Cache-Age": "12",
+                "X-OpenRouter-Cache-TTL": "86388",
+            }
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        company = server.scoring_companies(1)[0]
+        with mock.patch.object(server.urllib.request, "urlopen", return_value=FakeResponse()):
+            response = server.call_openrouter("Score COMPANY", company, MODEL, run_id=1)
+
+        self.assertEqual(response, "77")
+        entry = json.loads(server.AI_REQUEST_LOG_PATH.read_text())[-1]
+        self.assertEqual(entry["response"]["cache"]["status"], "HIT")
+        self.assertEqual(entry["token_stats"]["total_tokens"], 0)
+
+    def test_call_openrouter_rejects_token_limited_response(self):
+        payload = {
+            "choices": [
+                {
+                    "message": {"content": "The company has 1 strong product line, but the analysis"},
+                    "finish_reason": "length",
+                }
+            ],
+            "usage": {"prompt_tokens": 12, "completion_tokens": 2000, "total_tokens": 2012},
+        }
+
+        class FakeResponse:
+            status = 200
+            headers = {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        company = server.scoring_companies(1)[0]
+        with mock.patch.object(server.urllib.request, "urlopen", return_value=FakeResponse()):
+            with self.assertRaisesRegex(ValueError, "token limit"):
+                server.call_openrouter("Score COMPANY", company, MODEL, run_id=1)
+
+        entry = json.loads(server.AI_REQUEST_LOG_PATH.read_text())[-1]
+        self.assertFalse(entry["response"]["success"])
+        self.assertEqual(entry["response"]["finish_reason"], "length")
+        self.assertEqual(entry["response"]["visible_content"], payload["choices"][0]["message"]["content"])
+
+    def test_historical_token_limited_score_is_invalidated(self):
+        run_id = self.create_run(company_count=1)
+        company = server.scoring_companies(1)[0]
+        with self.connect() as connection:
+            server.save_result(connection, run_id, company, 1, "Analysis starts with 1", None)
+            server.update_run_counts(connection, run_id)
+            connection.commit()
+        server.AI_REQUEST_LOG_PATH.write_text(
+            json.dumps(
+                [
+                    {
+                        "run_id": run_id,
+                        "company": {"ticker": company["ticker"]},
+                        "response": {"finish_reason": "length"},
+                    }
+                ]
+            )
+        )
+
+        self.assertEqual(server.invalidate_truncated_scoring_results(), 1)
+        with self.connect() as connection:
+            result = connection.execute(
+                "SELECT score, error FROM scoring_results WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            run = connection.execute(
+                "SELECT completed_count, failed_count FROM scoring_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+        self.assertIsNone(result["score"])
+        self.assertEqual(result["error"], server.TOKEN_LIMIT_ERROR)
+        self.assertEqual((run["completed_count"], run["failed_count"]), (0, 1))
+
 
 class RunWorkerTests(ServerTestCase):
+    def test_custom_stock_list_run_uses_saved_members_in_order(self):
+        stock_list = server.save_stock_list("Focused", ["CCC", "AAA"])
+        server.start_scoring_worker_process = lambda run_id, start_index=0: 12345
+        run_id = server.create_scoring_run(
+            "Custom Run",
+            "Score COMPANY",
+            MODEL,
+            reasoning_mode="none",
+            stock_list_id=stock_list["id"],
+            max_tokens=777,
+        )
+
+        run = server.get_run(run_id)
+        self.assertEqual(run["stock_list_name"], "Focused")
+        self.assertEqual(run["company_count"], 2)
+        self.assertEqual(run["company_tickers"], ["CCC", "AAA"])
+        self.assertEqual(run["max_tokens"], 777)
+
+        calls = []
+
+        def fake_call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, max_tokens=None):
+            calls.append((company["ticker"], max_tokens))
+            return "50"
+
+        server.call_openrouter = fake_call_openrouter
+        server.scoring_concurrency = lambda: 1
+        server.score_run_worker(run_id)
+
+        self.assertEqual(calls, [("CCC", 777), ("AAA", 777)])
+
+    def test_custom_stock_list_run_can_limit_members(self):
+        stock_list = server.save_stock_list("Focused", ["CCC", "AAA", "BBB"])
+        server.start_scoring_worker_process = lambda run_id, start_index=0: 12345
+        run_id = server.create_scoring_run(
+            "Partial Custom Run",
+            "Score COMPANY",
+            MODEL,
+            company_count=2,
+            reasoning_mode="none",
+            stock_list_id=stock_list["id"],
+        )
+
+        run = server.get_run(run_id)
+        self.assertEqual(run["company_count"], 2)
+        self.assertEqual(run["company_tickers"], ["CCC", "AAA"])
+
+    def test_custom_stock_list_run_can_extend_to_remaining_members(self):
+        stock_list = server.save_stock_list("Focused", ["CCC", "AAA", "BBB"])
+        server.start_scoring_worker_process = lambda run_id, start_index=0: 12345
+        run_id = server.create_scoring_run(
+            "Partial Custom Run",
+            "Score COMPANY",
+            MODEL,
+            company_count=2,
+            reasoning_mode="none",
+            stock_list_id=stock_list["id"],
+        )
+        with self.connect() as connection:
+            connection.execute("UPDATE scoring_runs SET status = 'completed' WHERE id = ?", (run_id,))
+            connection.commit()
+
+        server.save_stock_list("Focused", ["BBB", "AAA", "CCC"], stock_list["id"])
+        before = server.get_run(run_id)
+        extended = server.extend_scoring_run(run_id, 3)
+
+        self.assertEqual(before["extension_limit"], 3)
+        self.assertEqual(extended["company_count"], 3)
+        self.assertEqual(extended["company_tickers"], ["CCC", "AAA", "BBB"])
+
     def test_score_worker_fills_only_incomplete_companies(self):
         run_id = self.create_run(company_count=3)
         with self.connect() as connection:
@@ -163,7 +404,7 @@ class RunWorkerTests(ServerTestCase):
 
         calls = []
 
-        def fake_call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None):
+        def fake_call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, max_tokens=None):
             calls.append((company["ticker"], prompt))
             return {"BBB": "42", "CCC": "55"}[company["ticker"]]
 
@@ -193,6 +434,17 @@ class RunWorkerTests(ServerTestCase):
 
         run = server.get_run(run_id)
         self.assertEqual(run["results"][0]["logo"], "https://logos/aaa.png")
+
+
+class StockListTests(ServerTestCase):
+    def test_stock_list_can_be_created_and_updated(self):
+        stock_list = server.save_stock_list("Semis", ["AAA", "CCC"])
+        self.assertEqual(stock_list["name"], "Semis")
+        self.assertEqual([company["ticker"] for company in stock_list["companies"]], ["AAA", "CCC"])
+
+        updated = server.save_stock_list("Semis Plus", ["BBB", "AAA"], stock_list["id"])
+        self.assertEqual(updated["name"], "Semis Plus")
+        self.assertEqual([company["ticker"] for company in updated["companies"]], ["BBB", "AAA"])
 
 
 class CostEstimateTests(ServerTestCase):

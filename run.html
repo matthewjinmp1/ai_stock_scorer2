@@ -28,6 +28,7 @@
       <section class="toolbar result-toolbar" aria-label="Ranking controls">
         <button id="renameButton" class="secondary-button" type="button">Rename</button>
         <button id="editPromptButton" class="secondary-button" type="button">Edit Prompt</button>
+        <button id="editRunButton" class="secondary-button" type="button">Edit Run</button>
         <button id="extendButton" class="secondary-button" type="button">Extend</button>
         <button id="fillButton" class="secondary-button" type="button">Fill Missing</button>
         <button id="stopButton" class="danger-button" type="button">Stop</button>
@@ -87,7 +88,31 @@
         </article>
       </section>
 
-      <section class="filter-toolbar" aria-label="Score filters">
+      <nav class="result-view-tabs" role="tablist" aria-label="Run results">
+        <button
+          id="rankingTab"
+          class="result-view-tab is-active"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          data-result-view="ranking"
+        >Ranking <span id="rankingTabCount">0</span></button>
+        <button
+          id="failedTab"
+          class="result-view-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          data-result-view="failed"
+          tabindex="-1"
+        >Failed <span id="failedTabCount">0</span></button>
+      </nav>
+
+      <section id="scoreFilterToolbar" class="filter-toolbar" aria-label="Score filters">
+        <label>
+          <span>Search ranking</span>
+          <input id="rankingSearchInput" type="search" placeholder="Company or ticker" autocomplete="off" />
+        </label>
         <label>
           <span>Find score</span>
           <input id="scoreTargetInput" type="number" min="0" max="100" step="1" placeholder="87" />
@@ -100,8 +125,8 @@
         <p id="filterStatus" class="filter-status">Showing all scores.</p>
       </section>
 
-      <section class="table-wrap" aria-label="Stock score ranking">
-        <table class="ranking-table">
+      <section id="resultsTableWrap" class="table-wrap" aria-label="Successful stock score ranking">
+        <table class="ranking-table ranking-view">
           <thead>
             <tr>
               <th aria-sort="ascending">
@@ -128,6 +153,7 @@
               <th>
                 <button class="sort-button" type="button" data-sort-key="error">Error</button>
               </th>
+              <th>Details</th>
             </tr>
           </thead>
           <tbody id="resultRows"></tbody>

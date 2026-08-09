@@ -29,6 +29,7 @@ const els = {
   requestModel: document.querySelector("#requestModel"),
   responseModel: document.querySelector("#responseModel"),
   httpStatus: document.querySelector("#httpStatus"),
+  cacheStatus: document.querySelector("#cacheStatus"),
   reasoningSetting: document.querySelector("#reasoningSetting"),
   createdAt: document.querySelector("#createdAt"),
   reasoningTraceStats: document.querySelector("#reasoningTraceStats"),
@@ -86,6 +87,14 @@ function displayReasoningTrace(value) {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 
+function syncResponseHeight() {
+  els.responseContent.style.height = "";
+  if (window.matchMedia("(max-width: 820px)").matches) return;
+  window.requestAnimationFrame(() => {
+    els.responseContent.style.height = `${Math.ceil(els.promptSent.getBoundingClientRect().height)}px`;
+  });
+}
+
 async function loadDetail() {
   if (!runId || !ticker) {
     throw new Error("Missing run or ticker.");
@@ -93,7 +102,7 @@ async function loadDetail() {
 
   const backUrl = new URL("/run.html", window.location.origin);
   backUrl.searchParams.set("id", runId);
-  ["sort", "dir", "y"].forEach((key) => {
+  ["sort", "dir", "tab", "score", "q", "y"].forEach((key) => {
     const value = params.get(key);
     if (value) backUrl.searchParams.set(key, value);
   });
@@ -120,7 +129,13 @@ async function loadDetail() {
       responseData.reasoning_content ||
       responseData.reasoning_details
   );
-  const error = responseData.error?.message || responseData.error || result.error || "";
+  const embeddedApiError = responseData.raw_payload?.error;
+  const embeddedApiErrorText =
+    typeof embeddedApiError === "string"
+      ? embeddedApiError
+      : embeddedApiError?.message || "";
+  const error =
+    embeddedApiErrorText || responseData.error?.message || responseData.error || result.error || "";
   const total = Number(tokens.total_tokens || 0);
   const promptTokenCount = Number(tokens.prompt_tokens || 0);
   const completionTokenCount = Number(tokens.completion_tokens || 0);
@@ -149,6 +164,7 @@ async function loadDetail() {
     .filter(Boolean)
     .join(" • ");
   els.responseError.textContent = typeof error === "string" ? error : JSON.stringify(error);
+  syncResponseHeight();
 
   els.promptTokenLabel.textContent = formatNumber(promptTokenCount);
   els.completionTokenLabel.textContent = formatNumber(responseTokenCount);
@@ -161,6 +177,16 @@ async function loadDetail() {
   els.requestModel.textContent = text(request.model);
   els.responseModel.textContent = text(responseData.model);
   els.httpStatus.textContent = text(responseData.http_status);
+  const cache = responseData.cache || {};
+  els.cacheStatus.textContent = cache.status
+    ? [
+        cache.status,
+        cache.age_seconds ? `age ${cache.age_seconds}s` : "",
+        cache.ttl_seconds ? `TTL ${cache.ttl_seconds}s` : "",
+      ]
+        .filter(Boolean)
+        .join(" - ")
+    : text(request.response_cache?.enabled ? "Enabled - status not reported" : null);
   els.reasoningSetting.textContent = reasoningText(request.reasoning);
   els.createdAt.textContent = formatDate(result.created_at);
   els.reasoningTraceStats.textContent = `${formatNumber(reasoningTokenCount)} reasoning tokens`;
@@ -174,6 +200,8 @@ if ("EventSource" in window) {
   const events = new EventSource("/events");
   events.addEventListener("reload", () => window.location.reload());
 }
+
+window.addEventListener("resize", syncResponseHeight);
 
 try {
   await loadDetail();

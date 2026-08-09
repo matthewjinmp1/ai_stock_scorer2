@@ -67,6 +67,10 @@ label span,
   color: var(--muted);
 }
 
+.status:empty {
+  display: none;
+}
+
 .eyebrow {
   margin: 0 0 10px;
   font-size: 0.82rem;
@@ -152,6 +156,11 @@ textarea {
   background: #fff;
 }
 
+#promptInput {
+  overflow-y: hidden;
+  resize: none;
+}
+
 textarea {
   min-height: 130px;
   padding: 12px;
@@ -192,6 +201,183 @@ button:hover {
   background: var(--panel);
 }
 
+.home-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 28px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 12px 30px rgba(29, 45, 68, 0.06);
+}
+
+.home-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.home-tab:hover {
+  color: var(--accent-strong);
+  background: #eef5ff;
+}
+
+.home-tab.is-active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.home-tab-panel[hidden] {
+  display: none;
+}
+
+.list-manager {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.list-manager.home-tab-panel {
+  margin-top: 0;
+}
+
+.runs-heading {
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+
+.runs-panel > .status {
+  min-height: 24px;
+  margin: 0 0 10px;
+}
+
+.section-heading,
+.selected-stocks-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.section-heading {
+  margin-bottom: 16px;
+}
+
+.section-heading .eyebrow {
+  margin-bottom: 4px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.list-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.4fr);
+  gap: 18px;
+}
+
+.list-editor-controls {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.stock-picker-results,
+.selected-stocks {
+  min-height: 156px;
+  max-height: 330px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.stock-picker-empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--muted);
+}
+
+.stock-picker-row,
+.selected-stock-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.stock-picker-row:last-child,
+.selected-stock-row:last-child {
+  border-bottom: 0;
+}
+
+.stock-picker-row img,
+.selected-stock-row img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.stock-picker-copy {
+  min-width: 0;
+}
+
+.stock-picker-copy strong,
+.stock-picker-copy span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stock-picker-copy span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.stock-picker-action {
+  min-width: 42px;
+  padding: 0 12px;
+}
+
+.selected-stocks-panel {
+  min-width: 0;
+}
+
+.selected-stocks-heading {
+  min-height: 42px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.selected-stocks-heading strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.list-actions {
+  margin-top: 14px;
+}
+
+.list-actions .status {
+  flex: 1 1 240px;
+  margin: 0;
+}
+
 .prompt-editor {
   display: grid;
   gap: 12px;
@@ -216,7 +402,7 @@ button:hover {
 
 .run-options {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(180px, 240px) minmax(150px, 220px) minmax(0, 1fr);
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 180px) minmax(190px, 1fr) minmax(120px, 150px) minmax(140px, 170px) minmax(0, 1fr);
   gap: 12px;
   align-items: end;
 }
@@ -372,7 +558,8 @@ button:hover {
 }
 
 .response-text {
-  max-height: 260px;
+  min-height: 150px;
+  max-height: none;
   overflow: auto;
 }
 
@@ -545,9 +732,55 @@ button:disabled {
   font-size: 0.92rem;
 }
 
+.result-view-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 18px 0 14px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 12px 30px rgba(29, 45, 68, 0.06);
+}
+
+.result-view-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+
+.result-view-tab span {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 25px;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: inherit;
+  background: rgba(100, 116, 139, 0.12);
+  font-size: 0.78rem;
+}
+
+.result-view-tab:hover {
+  color: var(--accent-strong);
+  background: #eef5ff;
+}
+
+.result-view-tab.is-active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.result-view-tab.is-active span {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .filter-toolbar {
   display: grid;
-  grid-template-columns: minmax(140px, 190px) auto auto minmax(220px, 1fr);
+  grid-template-columns: minmax(190px, 1fr) minmax(140px, 190px) auto auto minmax(220px, 1fr);
   gap: 12px;
   align-items: end;
   margin: 18px 0 14px;
@@ -556,6 +789,10 @@ button:disabled {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: 0 12px 30px rgba(29, 45, 68, 0.06);
+}
+
+.filter-toolbar[hidden] {
+  display: none;
 }
 
 .score-stepper {
@@ -627,6 +864,78 @@ table {
   width: 6%;
 }
 
+.ranking-table th:nth-child(9),
+.ranking-table td:nth-child(9) {
+  width: 10%;
+}
+
+.ranking-table.ranking-view th:nth-child(1),
+.ranking-table.ranking-view td:nth-child(1),
+.ranking-table.ranking-view th:nth-child(2),
+.ranking-table.ranking-view td:nth-child(2) {
+  width: 7%;
+}
+
+.ranking-table.ranking-view th:nth-child(3),
+.ranking-table.ranking-view td:nth-child(3) {
+  width: 29%;
+}
+
+.ranking-table.ranking-view th:nth-child(4),
+.ranking-table.ranking-view td:nth-child(4),
+.ranking-table.ranking-view th:nth-child(5),
+.ranking-table.ranking-view td:nth-child(5),
+.ranking-table.ranking-view th:nth-child(6),
+.ranking-table.ranking-view td:nth-child(6) {
+  width: 11%;
+}
+
+.ranking-table.ranking-view th:nth-child(7),
+.ranking-table.ranking-view td:nth-child(7) {
+  width: 14%;
+}
+
+.ranking-table.ranking-view th:nth-child(8),
+.ranking-table.ranking-view td:nth-child(8) {
+  display: none;
+}
+
+.ranking-table.failed-view th:nth-child(1),
+.ranking-table.failed-view td:nth-child(1),
+.ranking-table.failed-view th:nth-child(2),
+.ranking-table.failed-view td:nth-child(2) {
+  width: 5%;
+}
+
+.ranking-table.failed-view th:nth-child(3),
+.ranking-table.failed-view td:nth-child(3) {
+  width: 20%;
+}
+
+.ranking-table.failed-view th:nth-child(4),
+.ranking-table.failed-view td:nth-child(4),
+.ranking-table.failed-view th:nth-child(5),
+.ranking-table.failed-view td:nth-child(5),
+.ranking-table.failed-view th:nth-child(6),
+.ranking-table.failed-view td:nth-child(6) {
+  width: 9%;
+}
+
+.ranking-table.failed-view th:nth-child(7),
+.ranking-table.failed-view td:nth-child(7) {
+  width: 11%;
+}
+
+.ranking-table.failed-view th:nth-child(8),
+.ranking-table.failed-view td:nth-child(8) {
+  width: 24%;
+}
+
+.ranking-table.failed-view th:nth-child(9),
+.ranking-table.failed-view td:nth-child(9) {
+  width: 8%;
+}
+
 th,
 td {
   padding: 13px 12px;
@@ -696,6 +1005,45 @@ tbody tr:hover {
   cursor: pointer;
 }
 
+.details-cell {
+  overflow: visible;
+  text-align: right;
+}
+
+.details-link {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid #bfd3ed;
+  border-radius: 6px;
+  color: var(--accent);
+  background: #edf5ff;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.details-link:hover {
+  border-color: var(--accent);
+  background: #e2efff;
+}
+
+.response-only-shell {
+  max-width: 1000px;
+}
+
+.response-only-panel {
+  margin-top: 14px;
+}
+
+.response-only-text {
+  min-height: 260px;
+  max-height: none;
+  overflow: visible;
+}
+
 .company-cell {
   display: flex;
   align-items: center;
@@ -738,6 +1086,7 @@ tbody tr:hover {
   .filter-toolbar,
   .metric-grid,
   .detail-grid,
+  .list-editor-grid,
   .run-options {
     grid-template-columns: 1fr;
   }
@@ -748,5 +1097,11 @@ tbody tr:hover {
 
   .hero-stat {
     width: 100%;
+  }
+
+  .response-text {
+    height: auto;
+    min-height: 150px;
+    max-height: 420px;
   }
 }

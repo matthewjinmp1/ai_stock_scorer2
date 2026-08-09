@@ -2,13 +2,64 @@ const promptInput = document.querySelector("#promptInput");
 const runNameInput = document.querySelector("#runNameInput");
 const modelSelect = document.querySelector("#modelSelect");
 const reasoningSelect = document.querySelector("#reasoningSelect");
+const universeSelect = document.querySelector("#universeSelect");
 const companyCountInput = document.querySelector("#companyCountInput");
+const maxTokensInput = document.querySelector("#maxTokensInput");
 const companyCountHelp = document.querySelector("#companyCountHelp");
+const listEditorSelect = document.querySelector("#listEditorSelect");
+const listNameInput = document.querySelector("#listNameInput");
+const stockSearchInput = document.querySelector("#stockSearchInput");
+const stockSearchResults = document.querySelector("#stockSearchResults");
+const selectedStocks = document.querySelector("#selectedStocks");
+const selectedStockCount = document.querySelector("#selectedStockCount");
+const newListButton = document.querySelector("#newListButton");
+const saveListButton = document.querySelector("#saveListButton");
+const archiveListButton = document.querySelector("#archiveListButton");
+const listStatus = document.querySelector("#listStatus");
 const runButton = document.querySelector("#runButton");
 const statusEl = document.querySelector("#status");
+const runsStatusEl = document.querySelector("#runsStatus");
 const runRows = document.querySelector("#runRows");
-const countLabel = document.querySelector("#countLabel");
+const homeTabs = [...document.querySelectorAll("[data-home-tab]")];
+const homePanels = [...document.querySelectorAll("[data-home-panel]")];
+const pageParams = new URLSearchParams(window.location.search);
+const editRunId = pageParams.get("editRun");
 let companiesAvailable = 0;
+let allCompanies = [];
+let stockLists = [];
+let editingListId = null;
+let selectedTickers = [];
+let topCompanyCount = Number(companyCountInput.value) || 10;
+let runSnapshotUniverse = null;
+
+function resizePromptInput() {
+  promptInput.style.height = "auto";
+  const borderHeight = promptInput.offsetHeight - promptInput.clientHeight;
+  promptInput.style.height = `${promptInput.scrollHeight + borderHeight}px`;
+}
+
+function activeTabFromHash() {
+  const requested = window.location.hash.replace(/^#/, "");
+  return homeTabs.some((tab) => tab.dataset.homeTab === requested) ? requested : "set-run";
+}
+
+function selectHomeTab(tabName, updateHash = true) {
+  const selectedName = homeTabs.some((tab) => tab.dataset.homeTab === tabName)
+    ? tabName
+    : "set-run";
+  for (const tab of homeTabs) {
+    const selected = tab.dataset.homeTab === selectedName;
+    tab.classList.toggle("is-active", selected);
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  }
+  for (const panel of homePanels) {
+    panel.hidden = panel.dataset.homePanel !== selectedName;
+  }
+  if (updateHash && window.location.hash !== `#${selectedName}`) {
+    window.location.hash = selectedName;
+  }
+}
 
 function setRunRows(message) {
   runRows.innerHTML = `<tr><td colspan="7">${escapeHtml(message)}</td></tr>`;
@@ -36,6 +87,136 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function companyByTicker(ticker) {
+  return allCompanies.find((company) => company.ticker === ticker);
+}
+
+function companyPickerRow(company, action, label) {
+  const logo = company.logo
+    ? `<img src="${escapeHtml(company.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
+    : "<span></span>";
+  return `
+    <div class="${action === "add" ? "stock-picker-row" : "selected-stock-row"}">
+      ${logo}
+      <div class="stock-picker-copy">
+        <strong>${escapeHtml(company.name)}</strong>
+        <span>${escapeHtml(company.ticker)} - Market cap rank ${escapeHtml(company.rank)}</span>
+      </div>
+      <button
+        class="${action === "remove" ? "secondary-button " : ""}stock-picker-action"
+        type="button"
+        data-${action}-ticker="${escapeHtml(company.ticker)}"
+        aria-label="${escapeHtml(label)} ${escapeHtml(company.name)}"
+      >${action === "add" ? "Add" : "Remove"}</button>
+    </div>
+  `;
+}
+
+function renderStockPicker() {
+  const query = stockSearchInput.value.trim().toLowerCase();
+  const selected = new Set(selectedTickers);
+  const matches = allCompanies
+    .filter((company) => !selected.has(company.ticker))
+    .filter(
+      (company) =>
+        !query ||
+        company.name.toLowerCase().includes(query) ||
+        company.ticker.toLowerCase().includes(query)
+    )
+    .slice(0, 12);
+
+  stockSearchResults.innerHTML = matches.length
+    ? matches.map((company) => companyPickerRow(company, "add", "Add")).join("")
+    : '<p class="stock-picker-empty">No matching stocks available.</p>';
+
+  const selectedCompanies = selectedTickers.map(companyByTicker).filter(Boolean);
+  selectedStockCount.textContent = String(selectedCompanies.length);
+  selectedStocks.innerHTML = selectedCompanies.length
+    ? selectedCompanies.map((company) => companyPickerRow(company, "remove", "Remove")).join("")
+    : '<p class="stock-picker-empty">Add stocks from the search results.</p>';
+}
+
+function resetListEditor() {
+  editingListId = null;
+  selectedTickers = [];
+  listEditorSelect.value = "";
+  listNameInput.value = "";
+  stockSearchInput.value = "";
+  archiveListButton.disabled = true;
+  listStatus.textContent = "Creating a new list.";
+  renderStockPicker();
+  listNameInput.focus();
+}
+
+function openListEditor(listId) {
+  const stockList = stockLists.find((item) => String(item.id) === String(listId));
+  if (!stockList) {
+    resetListEditor();
+    return;
+  }
+  editingListId = stockList.id;
+  selectedTickers = stockList.companies.map((company) => company.ticker);
+  listEditorSelect.value = String(stockList.id);
+  listNameInput.value = stockList.name;
+  stockSearchInput.value = "";
+  archiveListButton.disabled = false;
+  listStatus.textContent = `${stockList.company_count} stocks saved.`;
+  renderStockPicker();
+}
+
+function renderStockListSelectors(preferredUniverseValue = universeSelect.value) {
+  universeSelect.innerHTML = '<option value="top">Top companies by market cap</option>';
+  listEditorSelect.innerHTML = '<option value="">New list</option>';
+  for (const stockList of stockLists) {
+    const universeOption = document.createElement("option");
+    universeOption.value = `list:${stockList.id}`;
+    universeOption.textContent = `${stockList.name} (${stockList.company_count})`;
+    universeSelect.append(universeOption);
+
+    const editorOption = document.createElement("option");
+    editorOption.value = String(stockList.id);
+    editorOption.textContent = `${stockList.name} (${stockList.company_count})`;
+    listEditorSelect.append(editorOption);
+  }
+  if (runSnapshotUniverse) {
+    const snapshotOption = document.createElement("option");
+    snapshotOption.value = `snapshot:${runSnapshotUniverse.run_id}`;
+    snapshotOption.textContent = `${runSnapshotUniverse.name} (${runSnapshotUniverse.company_count})`;
+    universeSelect.append(snapshotOption);
+  }
+  universeSelect.value = [...universeSelect.options].some((option) => option.value === preferredUniverseValue)
+    ? preferredUniverseValue
+    : "top";
+  listEditorSelect.value = editingListId === null ? "" : String(editingListId);
+  updateUniverseControls();
+}
+
+function selectedUniverse() {
+  if (universeSelect.value.startsWith("list:")) {
+    const listId = Number(universeSelect.value.slice(5));
+    const stockList = stockLists.find((item) => item.id === listId);
+    return stockList ? { ...stockList, kind: "list" } : null;
+  }
+  if (universeSelect.value.startsWith("snapshot:") && runSnapshotUniverse) {
+    return runSnapshotUniverse;
+  }
+  return null;
+}
+
+function updateUniverseControls() {
+  const stockList = selectedUniverse();
+  companyCountInput.disabled = false;
+  if (stockList) {
+    companyCountInput.max = String(stockList.company_count);
+    companyCountInput.value = String(stockList.company_count);
+    companyCountHelp.textContent = `Choose 1-${stockList.company_count}. Scoring starts from the first stocks saved in "${stockList.name}".`;
+  } else {
+    companyCountInput.max = String(companiesAvailable);
+    companyCountInput.value = String(topCompanyCount);
+    companyCountHelp.textContent = `Choose 1-${companiesAvailable}. Scoring starts from the largest companies by market cap.`;
+  }
 }
 
 function formatDate(timestamp) {
@@ -93,7 +274,7 @@ async function renameRun(runId, currentName) {
   if (name === null) return;
   const trimmed = name.trim();
   if (!trimmed) {
-    statusEl.textContent = "Run name is required.";
+    runsStatusEl.textContent = "Run name is required.";
     return;
   }
 
@@ -105,17 +286,17 @@ async function renameRun(runId, currentName) {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not rename run");
-    statusEl.textContent = `Renamed to ${payload.run.name}.`;
+    runsStatusEl.textContent = `Renamed to ${payload.run.name}.`;
     await loadRuns();
   } catch (error) {
-    statusEl.textContent = error.message;
+    runsStatusEl.textContent = error.message;
   }
 }
 
 async function deleteRun(runId, currentName) {
   const label = currentName || `Run #${runId}`;
   const scrollY = window.scrollY;
-  statusEl.textContent = `Archiving ${label}...`;
+  runsStatusEl.textContent = `Archiving ${label}...`;
 
   try {
     const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
@@ -123,21 +304,22 @@ async function deleteRun(runId, currentName) {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not archive run");
-    statusEl.textContent = `Archived ${label}.`;
+    runsStatusEl.textContent = `Archived ${label}.`;
     await loadRuns();
     requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0 }));
   } catch (error) {
-    statusEl.textContent = error.message;
+    runsStatusEl.textContent = error.message;
     requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0 }));
   }
 }
 
 async function loadCompanies() {
   const payload = await fetchJson("/api/companies");
-  companiesAvailable = payload.companies.length;
-  countLabel.textContent = companiesAvailable.toString();
+  allCompanies = payload.companies;
+  companiesAvailable = allCompanies.length;
   companyCountInput.max = String(companiesAvailable);
   companyCountHelp.textContent = `Choose 1-${companiesAvailable}. Scoring starts from the largest companies by market cap.`;
+  renderStockPicker();
 }
 
 async function loadModels() {
@@ -158,6 +340,106 @@ async function loadModels() {
   }
   modelSelect.value = payload.default;
   reasoningSelect.value = payload.default_reasoning_mode || "none";
+  maxTokensInput.value = String(payload.default_max_tokens || 200);
+}
+
+async function loadStockLists(preferredUniverseValue = universeSelect.value) {
+  const payload = await fetchJson("/api/stock-lists");
+  stockLists = payload.lists || [];
+  renderStockListSelectors(preferredUniverseValue);
+}
+
+async function prefillFromRun(runId) {
+  if (!runId) return;
+  const payload = await fetchJson(`/api/runs/${encodeURIComponent(runId)}`);
+  const run = payload.run;
+
+  runNameInput.value = run.name || `Run #${run.id}`;
+  promptInput.value = run.prompt || "";
+  resizePromptInput();
+  topCompanyCount = Number(run.company_count) || topCompanyCount;
+  companyCountInput.value = String(topCompanyCount);
+  maxTokensInput.value = String(run.max_tokens || 200);
+
+  if (![...modelSelect.options].some((option) => option.value === run.model)) {
+    const option = document.createElement("option");
+    option.value = run.model;
+    option.textContent = run.model_details?.label || run.model;
+    modelSelect.append(option);
+  }
+  modelSelect.value = run.model;
+  reasoningSelect.value = run.reasoning_mode || "none";
+
+  if (run.stock_list_id) {
+    runSnapshotUniverse = {
+      kind: "snapshot",
+      run_id: run.id,
+      name: `${run.stock_list_name || run.name || `Run #${run.id}`} snapshot`,
+      company_count: run.company_count,
+      tickers: run.company_tickers || [],
+      stock_list_id: run.stock_list_id,
+    };
+    renderStockListSelectors(`snapshot:${run.id}`);
+  } else {
+    runSnapshotUniverse = null;
+    renderStockListSelectors("top");
+  }
+  statusEl.textContent = `Loaded settings from ${run.name || `Run #${run.id}`}.`;
+}
+
+async function saveCurrentStockList() {
+  const name = listNameInput.value.trim();
+  if (!name) {
+    listStatus.textContent = "Give this list a name first.";
+    listNameInput.focus();
+    return;
+  }
+  if (!selectedTickers.length) {
+    listStatus.textContent = "Add at least one stock before saving.";
+    stockSearchInput.focus();
+    return;
+  }
+
+  saveListButton.disabled = true;
+  try {
+    const isUpdate = editingListId !== null;
+    const response = await fetch(isUpdate ? `/api/stock-lists/${editingListId}` : "/api/stock-lists", {
+      method: isUpdate ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, tickers: selectedTickers }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not save stock list");
+    editingListId = payload.list.id;
+    const universeValue = `list:${payload.list.id}`;
+    await loadStockLists(universeValue);
+    openListEditor(payload.list.id);
+    listStatus.textContent = `Saved ${payload.list.company_count} stocks in ${payload.list.name}.`;
+  } catch (error) {
+    listStatus.textContent = error.message;
+  } finally {
+    saveListButton.disabled = false;
+  }
+}
+
+async function archiveCurrentStockList() {
+  if (editingListId === null) return;
+  const archivedId = editingListId;
+  archiveListButton.disabled = true;
+  listStatus.textContent = "Archiving list...";
+  try {
+    const response = await fetch(`/api/stock-lists/${archivedId}`, { method: "DELETE" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not archive stock list");
+    editingListId = null;
+    selectedTickers = [];
+    await loadStockLists("top");
+    resetListEditor();
+    listStatus.textContent = "List archived. Existing runs keep their saved stock snapshot.";
+  } catch (error) {
+    archiveListButton.disabled = false;
+    listStatus.textContent = error.message;
+  }
 }
 
 async function loadRuns() {
@@ -219,9 +501,12 @@ async function createRun() {
     promptInput.focus();
     return;
   }
+  const stockList = selectedUniverse();
   const companyCount = Number(companyCountInput.value);
+  const maximumCompanyCount = stockList ? stockList.company_count : companiesAvailable;
   const model = modelSelect.value;
   const reasoningMode = reasoningSelect.value;
+  const maxTokens = Number(maxTokensInput.value);
   if (!model) {
     statusEl.textContent = "Choose a model first.";
     modelSelect.focus();
@@ -232,8 +517,13 @@ async function createRun() {
     reasoningSelect.focus();
     return;
   }
-  if (!Number.isInteger(companyCount) || companyCount < 1 || companyCount > companiesAvailable) {
-    statusEl.textContent = `Choose a stock count from 1 to ${companiesAvailable}.`;
+  if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > 32768) {
+    statusEl.textContent = "Choose a response token limit from 1 to 32,768.";
+    maxTokensInput.focus();
+    return;
+  }
+  if (!Number.isInteger(companyCount) || companyCount < 1 || companyCount > maximumCompanyCount) {
+    statusEl.textContent = `Choose a stock count from 1 to ${maximumCompanyCount}.`;
     companyCountInput.focus();
     return;
   }
@@ -257,7 +547,20 @@ async function createRun() {
     const response = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, prompt, companyCount, model, reasoningMode }),
+      body: JSON.stringify({
+        name,
+        prompt,
+        companyCount,
+        model,
+        reasoningMode,
+        maxTokens,
+        stockListId: stockList
+          ? stockList.kind === "snapshot"
+            ? stockList.stock_list_id
+            : stockList.id
+          : null,
+        ...(stockList?.kind === "snapshot" ? { tickers: stockList.tickers } : {}),
+      }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not create run");
@@ -272,6 +575,48 @@ async function createRun() {
 }
 
 runButton.addEventListener("click", createRun);
+promptInput.addEventListener("input", resizePromptInput);
+for (const tab of homeTabs) {
+  tab.addEventListener("click", () => selectHomeTab(tab.dataset.homeTab));
+  tab.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = homeTabs.indexOf(tab);
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? homeTabs.length - 1
+          : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + homeTabs.length) % homeTabs.length;
+    homeTabs[nextIndex].focus();
+    selectHomeTab(homeTabs[nextIndex].dataset.homeTab);
+  });
+}
+window.addEventListener("hashchange", () => selectHomeTab(activeTabFromHash(), false));
+universeSelect.addEventListener("change", updateUniverseControls);
+companyCountInput.addEventListener("input", () => {
+  if (!selectedUniverse()) topCompanyCount = Number(companyCountInput.value) || topCompanyCount;
+});
+listEditorSelect.addEventListener("change", () => {
+  if (listEditorSelect.value) openListEditor(listEditorSelect.value);
+  else resetListEditor();
+});
+newListButton.addEventListener("click", resetListEditor);
+saveListButton.addEventListener("click", saveCurrentStockList);
+archiveListButton.addEventListener("click", archiveCurrentStockList);
+stockSearchInput.addEventListener("input", renderStockPicker);
+stockSearchResults.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-add-ticker]");
+  if (!button || selectedTickers.includes(button.dataset.addTicker)) return;
+  selectedTickers.push(button.dataset.addTicker);
+  renderStockPicker();
+});
+selectedStocks.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-remove-ticker]");
+  if (!button) return;
+  selectedTickers = selectedTickers.filter((ticker) => ticker !== button.dataset.removeTicker);
+  renderStockPicker();
+});
 runRows.addEventListener("click", (event) => {
   const renameButton = event.target.closest("[data-rename-run]");
   if (renameButton) {
@@ -296,7 +641,7 @@ runRows.addEventListener("click", (event) => {
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) {
     loadRuns().catch((error) => {
-      statusEl.textContent = error.message;
+      runsStatusEl.textContent = error.message;
       setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
     });
   }
@@ -308,12 +653,15 @@ if ("EventSource" in window) {
 }
 
 try {
+  selectHomeTab(editRunId ? "set-run" : activeTabFromHash(), Boolean(editRunId));
   setRunRows("Loading saved scoring runs...");
   await loadCompanies();
   await loadModels();
+  await loadStockLists();
+  if (editRunId) await prefillFromRun(editRunId);
   await loadRuns();
-  statusEl.textContent = "Ready.";
 } catch (error) {
   statusEl.textContent = error.message;
+  runsStatusEl.textContent = error.message;
   setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
 }

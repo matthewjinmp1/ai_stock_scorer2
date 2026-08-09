@@ -8,20 +8,45 @@
   </head>
   <body>
     <main class="shell">
-      <section class="hero">
-        <div>
-          <p class="eyebrow">AI Stock Scorer</p>
-          <h1>Score the top 1000 stocks with one prompt</h1>
-          <p class="lede">Enter a quantitative scoring prompt. The server runs it against the stored company universe and saves the ranking for later.</p>
-        </div>
-        <div class="hero-stat">
-          <span id="updatedLabel">Stored universe</span>
-          <strong id="countLabel">0</strong>
-          <small>companies ready</small>
-        </div>
-      </section>
+      <nav class="home-tabs" role="tablist" aria-label="Stock scorer sections">
+        <button
+          id="setRunTab"
+          class="home-tab is-active"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="setRunPanel"
+          data-home-tab="set-run"
+        >Set Run</button>
+        <button
+          id="stockListsTab"
+          class="home-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="stockListsPanel"
+          data-home-tab="stock-lists"
+          tabindex="-1"
+        >Stock Lists</button>
+        <button
+          id="runsTab"
+          class="home-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="runsPanel"
+          data-home-tab="runs"
+          tabindex="-1"
+        >Runs</button>
+      </nav>
 
-      <section class="prompt-panel" aria-label="Run stock scoring prompt">
+      <section
+        id="setRunPanel"
+        class="prompt-panel home-tab-panel"
+        role="tabpanel"
+        aria-labelledby="setRunTab"
+        data-home-panel="set-run"
+      >
         <label>
           <span>Run name</span>
           <input id="runNameInput" type="text" maxlength="120" placeholder="Example: Innovation score test" />
@@ -40,33 +65,109 @@
             <select id="reasoningSelect"></select>
           </label>
           <label>
+            <span>Stock universe</span>
+            <select id="universeSelect">
+              <option value="top">Top companies by market cap</option>
+            </select>
+          </label>
+          <label>
             <span>Stocks to score</span>
             <input id="companyCountInput" type="number" min="1" max="1000" value="10" />
+          </label>
+          <label>
+            <span>Response token limit</span>
+            <input id="maxTokensInput" type="number" min="1" max="32768" value="200" />
           </label>
           <p id="companyCountHelp">Starting from the largest companies by market cap.</p>
         </div>
         <div class="actions">
           <button id="runButton" type="button">Run score</button>
         </div>
+        <p id="status" class="status" role="status"></p>
       </section>
 
-      <p id="status" class="status" role="status"></p>
+      <section
+        id="stockListsPanel"
+        class="list-manager home-tab-panel"
+        role="tabpanel"
+        aria-labelledby="stockListsTab stockListsTitle"
+        data-home-panel="stock-lists"
+        hidden
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Custom universes</p>
+            <h2 id="stockListsTitle">Stock lists</h2>
+          </div>
+          <button id="newListButton" class="secondary-button" type="button">New list</button>
+        </div>
 
-      <section class="table-wrap" aria-label="Saved scoring runs">
-        <table>
-          <thead>
-            <tr>
-              <th>Run</th>
-              <th>Name</th>
-              <th>Status</th>
-              <th>Progress</th>
-              <th>Cost</th>
-              <th>Created</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="runRows"></tbody>
-        </table>
+        <div class="list-editor-grid">
+          <div class="list-editor-controls">
+            <label>
+              <span>Saved list</span>
+              <select id="listEditorSelect">
+                <option value="">New list</option>
+              </select>
+            </label>
+            <label>
+              <span>List name</span>
+              <input id="listNameInput" type="text" maxlength="120" placeholder="Example: Semiconductor leaders" />
+            </label>
+            <label>
+              <span>Find stocks</span>
+              <input id="stockSearchInput" type="search" placeholder="Search company or ticker" autocomplete="off" />
+            </label>
+            <div id="stockSearchResults" class="stock-picker-results" aria-live="polite"></div>
+          </div>
+
+          <div class="selected-stocks-panel">
+            <div class="selected-stocks-heading">
+              <span>Selected stocks</span>
+              <strong id="selectedStockCount">0</strong>
+            </div>
+            <div id="selectedStocks" class="selected-stocks"></div>
+          </div>
+        </div>
+
+        <div class="actions list-actions">
+          <button id="saveListButton" type="button">Save list</button>
+          <button id="archiveListButton" class="danger-button" type="button" disabled>Archive list</button>
+          <p id="listStatus" class="status" role="status"></p>
+        </div>
+      </section>
+
+      <section
+        id="runsPanel"
+        class="home-tab-panel runs-panel"
+        role="tabpanel"
+        aria-labelledby="runsTab runsTitle"
+        data-home-panel="runs"
+        hidden
+      >
+        <div class="section-heading runs-heading">
+          <div>
+            <p class="eyebrow">Saved rankings</p>
+            <h2 id="runsTitle">Runs</h2>
+          </div>
+        </div>
+        <p id="runsStatus" class="status" role="status"></p>
+        <div class="table-wrap" aria-label="Saved scoring runs">
+          <table>
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Cost</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="runRows"></tbody>
+          </table>
+        </div>
       </section>
     </main>
     <script src="/app.js" type="module"></script>

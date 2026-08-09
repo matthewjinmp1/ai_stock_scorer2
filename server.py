@@ -39,8 +39,8 @@ PROVIDER_SLUGS = {
 }
 MODEL_OPTIONS = [
     {
-        "id": "deepseek/deepseek-v4-flash",
-        "label": "DeepSeek V4 Flash",
+        "id": "deepseek/deepseek-v4-flash-0731",
+        "label": "DeepSeek V4 Flash 0731",
         "provider": {
             "require_parameters": True,
         },
@@ -52,7 +52,24 @@ MODEL_OPTIONS = [
             "require_parameters": True,
         },
     },
+    {
+        "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "label": "NVIDIA Nemotron 3 Ultra (free)",
+        "provider": {
+            "require_parameters": True,
+        },
+    },
 ]
+LEGACY_MODEL_OPTIONS = [
+    {
+        "id": "deepseek/deepseek-v4-flash",
+        "label": "DeepSeek V4 Flash (legacy)",
+        "provider": {
+            "require_parameters": True,
+        },
+    },
+]
+ALL_MODEL_OPTIONS = MODEL_OPTIONS + LEGACY_MODEL_OPTIONS
 REASONING_OPTIONS = [
     {
         "id": "none",
@@ -70,6 +87,10 @@ DEFAULT_REASONING_MODE = REASONING_OPTIONS[0]["id"]
 DEFAULT_SCORING_COMPANY_COUNT = 10
 DEFAULT_SCORING_CONCURRENCY = 20
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
+OPENROUTER_MAX_ATTEMPTS = 3
+MAX_OPENROUTER_RESPONSE_TOKENS = 32768
+OPENROUTER_RESPONSE_CACHE_TTL_SECONDS = 86400
+TOKEN_LIMIT_ERROR = "Invalid response: model hit the response token limit before completing."
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
@@ -110,7 +131,7 @@ def default_reasoning_mode():
 
 def normalize_model(model):
     requested = (model or DEFAULT_OPENROUTER_MODEL).strip()
-    allowed = {option["id"] for option in MODEL_OPTIONS}
+    allowed = {option["id"] for option in ALL_MODEL_OPTIONS}
     if requested not in allowed:
         raise ValueError("Selected model is not available.")
     return requested
@@ -118,7 +139,7 @@ def normalize_model(model):
 
 def model_config(model):
     normalized = normalize_model(model)
-    return next(option for option in MODEL_OPTIONS if option["id"] == normalized)
+    return next(option for option in ALL_MODEL_OPTIONS if option["id"] == normalized)
 
 
 def normalize_reasoning_mode(reasoning_mode):
@@ -226,6 +247,39 @@ def model_details(model, reasoning_mode=None):
 
 def openrouter_max_tokens():
     return int(os.environ.get("OPENROUTER_MAX_TOKENS", str(OPENROUTER_MAX_TOKENS)))
+
+
+def normalize_max_tokens(value):
+    if value is None or value == "":
+        value = openrouter_max_tokens()
+    try:
+        value = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Response token limit must be a whole number.") from exc
+    if value < 1 or value > MAX_OPENROUTER_RESPONSE_TOKENS:
+        raise ValueError(f"Choose a response token limit from 1 to {MAX_OPENROUTER_RESPONSE_TOKENS:,}.")
+    return value
+
+
+def openrouter_max_attempts():
+    try:
+        value = int(os.environ.get("OPENROUTER_MAX_ATTEMPTS", str(OPENROUTER_MAX_ATTEMPTS)))
+    except ValueError:
+        value = OPENROUTER_MAX_ATTEMPTS
+    return max(1, min(5, value))
+
+
+def openrouter_cache_ttl_seconds():
+    try:
+        value = int(
+            os.environ.get(
+                "OPENROUTER_CACHE_TTL_SECONDS",
+                str(OPENROUTER_RESPONSE_CACHE_TTL_SECONDS),
+            )
+        )
+    except ValueError:
+        value = OPENROUTER_RESPONSE_CACHE_TTL_SECONDS
+    return max(1, min(86400, value))
 
 
 def scoring_concurrency():
@@ -415,6 +469,8 @@ def ensure_scoring_schema():
                 prompt TEXT NOT NULL,
                 model TEXT NOT NULL,
                 reasoning_mode TEXT NOT NULL DEFAULT 'none',
+                max_tokens INTEGER NOT NULL DEFAULT 200,
+                stock_list_id INTEGER,
                 status TEXT NOT NULL,
                 company_count INTEGER NOT NULL DEFAULT 0,
                 completed_count INTEGER NOT NULL DEFAULT 0,
@@ -446,8 +502,34 @@ def ensure_scoring_schema():
                 UNIQUE(run_id, ticker)
             );
 
+            CREATE TABLE IF NOT EXISTS stock_lists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                deleted_at INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS stock_list_members (
+                list_id INTEGER NOT NULL,
+                ticker TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY(list_id, ticker),
+                FOREIGN KEY(list_id) REFERENCES stock_lists(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS scoring_run_companies (
+                run_id INTEGER NOT NULL,
+                ticker TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY(run_id, ticker),
+                FOREIGN KEY(run_id) REFERENCES scoring_runs(id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_scoring_runs_created_at ON scoring_runs(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_scoring_results_run_score ON scoring_results(run_id, score DESC);
+            CREATE INDEX IF NOT EXISTS idx_stock_list_members_position ON stock_list_members(list_id, position);
+            CREATE INDEX IF NOT EXISTS idx_scoring_run_companies_position ON scoring_run_companies(run_id, position);
             """
         )
         columns = {
@@ -464,6 +546,10 @@ def ensure_scoring_schema():
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN worker_started_at INTEGER")
         if "reasoning_mode" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN reasoning_mode TEXT NOT NULL DEFAULT 'none'")
+        if "max_tokens" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN max_tokens INTEGER NOT NULL DEFAULT 200")
+        if "stock_list_id" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN stock_list_id INTEGER")
         connection.execute(
             """
             UPDATE scoring_runs
@@ -477,6 +563,9 @@ def ensure_scoring_schema():
             SET reasoning_mode = 'none'
             WHERE reasoning_mode IS NULL OR trim(reasoning_mode) = ''
             """
+        )
+        connection.execute(
+            "UPDATE scoring_runs SET max_tokens = 200 WHERE max_tokens IS NULL OR max_tokens < 1"
         )
         connection.commit()
 
@@ -495,12 +584,14 @@ def row_to_company(row):
     }
 
 
-def db_companies():
+def db_companies(active_only=True):
+    where_clause = "WHERE fetched_at = (SELECT MAX(fetched_at) FROM companies)" if active_only else ""
     with db_connect() as connection:
         rows = connection.execute(
-            """
+            f"""
             SELECT ticker, rank, name, market_cap, market_cap_value, price, today, country, logo
             FROM companies
+            {where_clause}
             ORDER BY rank
             """
         ).fetchall()
@@ -509,6 +600,174 @@ def db_companies():
 
 def scoring_companies(company_count):
     return db_companies()[:company_count]
+
+
+def normalize_stock_list_name(value):
+    name = (value or "").strip()
+    if not name:
+        raise ValueError("List name is required.")
+    if len(name) > 120:
+        raise ValueError("List name must be 120 characters or fewer.")
+    return name
+
+
+def companies_for_tickers(tickers):
+    requested = []
+    seen = set()
+    for ticker in tickers or []:
+        normalized = str(ticker or "").strip().upper()
+        if normalized and normalized not in seen:
+            requested.append(normalized)
+            seen.add(normalized)
+    if not requested:
+        raise ValueError("Choose at least one stock for the list.")
+
+    companies = {company["ticker"].upper(): company for company in db_companies(active_only=False)}
+    missing = [ticker for ticker in requested if ticker not in companies]
+    if missing:
+        raise ValueError(f"Unknown ticker{'s' if len(missing) != 1 else ''}: {', '.join(missing)}")
+    return [companies[ticker] for ticker in requested]
+
+
+def get_stock_list(list_id):
+    try:
+        list_id = int(list_id)
+    except (TypeError, ValueError):
+        return None
+    with db_connect() as connection:
+        stock_list = connection.execute(
+            """
+            SELECT id, name, created_at, updated_at
+            FROM stock_lists
+            WHERE id = ? AND deleted_at IS NULL
+            """,
+            (list_id,),
+        ).fetchone()
+        if not stock_list:
+            return None
+        rows = connection.execute(
+            """
+            SELECT companies.ticker, companies.rank, companies.name, companies.market_cap,
+                   companies.market_cap_value, companies.price, companies.today,
+                   companies.country, companies.logo
+            FROM stock_list_members
+            JOIN companies ON companies.ticker = stock_list_members.ticker
+            WHERE stock_list_members.list_id = ?
+            ORDER BY stock_list_members.position
+            """,
+            (list_id,),
+        ).fetchall()
+    payload = dict(stock_list)
+    payload["companies"] = [row_to_company(row) for row in rows]
+    payload["company_count"] = len(payload["companies"])
+    return payload
+
+
+def list_stock_lists():
+    with db_connect() as connection:
+        ids = [
+            row["id"]
+            for row in connection.execute(
+                "SELECT id FROM stock_lists WHERE deleted_at IS NULL ORDER BY updated_at DESC, id DESC"
+            ).fetchall()
+        ]
+    return [stock_list for list_id in ids if (stock_list := get_stock_list(list_id))]
+
+
+def save_stock_list(name, tickers, list_id=None):
+    name = normalize_stock_list_name(name)
+    companies = companies_for_tickers(tickers)
+    now = int(time.time())
+    with db_connect() as connection:
+        if list_id is None:
+            cursor = connection.execute(
+                "INSERT INTO stock_lists (name, created_at, updated_at) VALUES (?, ?, ?)",
+                (name, now, now),
+            )
+            list_id = cursor.lastrowid
+        else:
+            try:
+                list_id = int(list_id)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Stock list not found.") from exc
+            existing = connection.execute(
+                "SELECT id FROM stock_lists WHERE id = ? AND deleted_at IS NULL",
+                (list_id,),
+            ).fetchone()
+            if not existing:
+                return None
+            connection.execute(
+                "UPDATE stock_lists SET name = ?, updated_at = ? WHERE id = ?",
+                (name, now, list_id),
+            )
+            connection.execute("DELETE FROM stock_list_members WHERE list_id = ?", (list_id,))
+
+        connection.executemany(
+            "INSERT INTO stock_list_members (list_id, ticker, position) VALUES (?, ?, ?)",
+            [(list_id, company["ticker"], position) for position, company in enumerate(companies)],
+        )
+        connection.commit()
+    return get_stock_list(list_id)
+
+
+def archive_stock_list(list_id):
+    now = int(time.time())
+    with db_connect() as connection:
+        cursor = connection.execute(
+            "UPDATE stock_lists SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+            (now, now, list_id),
+        )
+        connection.commit()
+    return cursor.rowcount > 0
+
+
+def snapshot_run_companies(connection, run_id, companies):
+    connection.execute("DELETE FROM scoring_run_companies WHERE run_id = ?", (run_id,))
+    connection.executemany(
+        "INSERT INTO scoring_run_companies (run_id, ticker, position) VALUES (?, ?, ?)",
+        [(run_id, company["ticker"], position) for position, company in enumerate(companies)],
+    )
+
+
+def scoring_companies_for_run(run_id):
+    with db_connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT companies.ticker, companies.rank, companies.name, companies.market_cap,
+                   companies.market_cap_value, companies.price, companies.today,
+                   companies.country, companies.logo
+            FROM scoring_run_companies
+            JOIN companies ON companies.ticker = scoring_run_companies.ticker
+            WHERE scoring_run_companies.run_id = ?
+            ORDER BY scoring_run_companies.position
+            """,
+            (run_id,),
+        ).fetchall()
+        if rows:
+            return [row_to_company(row) for row in rows]
+        run = connection.execute(
+            "SELECT company_count FROM scoring_runs WHERE id = ?",
+            (run_id,),
+        ).fetchone()
+    return scoring_companies(run["company_count"]) if run else []
+
+
+def extension_companies_for_run(run_id, stock_list_id=None):
+    existing = scoring_companies_for_run(run_id)
+    if stock_list_id is not None:
+        stock_list = get_stock_list(stock_list_id)
+        source = stock_list["companies"] if stock_list else []
+    else:
+        source = db_companies()
+
+    companies = list(existing)
+    seen = {company["ticker"] for company in companies}
+    for company in source:
+        if company["ticker"] in seen:
+            continue
+        companies.append(company)
+        seen.add(company["ticker"])
+    return companies
 
 
 def normalize_company_count(value):
@@ -582,7 +841,16 @@ def start_scoring_worker_process(run_id, start_index=0):
     return process.pid
 
 
-def create_scoring_run(name, prompt, model, company_count, reasoning_mode=None):
+def create_scoring_run(
+    name,
+    prompt,
+    model,
+    company_count=None,
+    reasoning_mode=None,
+    stock_list_id=None,
+    tickers=None,
+    max_tokens=None,
+):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
 
@@ -590,8 +858,32 @@ def create_scoring_run(name, prompt, model, company_count, reasoning_mode=None):
     prompt = normalize_scoring_prompt(prompt)
     model = normalize_model(model)
     reasoning_mode = normalize_reasoning_mode(reasoning_mode)
-    company_count = normalize_company_count(company_count)
-    companies = scoring_companies(company_count)
+    max_tokens = normalize_max_tokens(max_tokens)
+    selected_list = None
+    if stock_list_id is not None:
+        if tickers is not None:
+            try:
+                stock_list_id = int(stock_list_id)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Selected stock list was not found.") from exc
+        else:
+            selected_list = get_stock_list(stock_list_id)
+            if not selected_list:
+                raise ValueError("Selected stock list was not found.")
+            stock_list_id = selected_list["id"]
+
+    if tickers is not None:
+        companies = companies_for_tickers(tickers)
+    elif selected_list:
+        companies = selected_list["companies"]
+    else:
+        company_count = normalize_company_count(company_count)
+        companies = scoring_companies(company_count)
+    if (tickers is not None or selected_list) and company_count is not None:
+        company_count = normalize_company_count(company_count)
+        if company_count > len(companies):
+            raise ValueError(f"Company count cannot exceed {len(companies)} for the selected stock list.")
+        companies = companies[:company_count]
     if not companies:
         raise RuntimeError("No companies found. Run ./fetch_companies_to_db.py first.")
 
@@ -599,12 +891,15 @@ def create_scoring_run(name, prompt, model, company_count, reasoning_mode=None):
     with db_connect() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO scoring_runs (name, prompt, model, reasoning_mode, status, company_count, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO scoring_runs (
+                name, prompt, model, reasoning_mode, max_tokens, stock_list_id, status, company_count, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, prompt, model, reasoning_mode, "queued", len(companies), now),
+            (name, prompt, model, reasoning_mode, max_tokens, stock_list_id, "queued", len(companies), now),
         )
         run_id = cursor.lastrowid
+        snapshot_run_companies(connection, run_id, companies)
         connection.commit()
 
     start_scoring_worker_process(run_id)
@@ -616,7 +911,7 @@ def extend_scoring_run(run_id, company_count):
     with db_connect() as connection:
         run = connection.execute(
             """
-            SELECT id, status, company_count
+            SELECT id, status, company_count, stock_list_id
             FROM scoring_runs
             WHERE id = ? AND deleted_at IS NULL
             """,
@@ -628,6 +923,11 @@ def extend_scoring_run(run_id, company_count):
             raise ValueError("Wait for the current run to finish before extending it.")
         if target_count <= run["company_count"]:
             raise ValueError(f"Choose a stock count above {run['company_count']}.")
+        extension_companies = extension_companies_for_run(run_id, run["stock_list_id"])
+        if target_count > len(extension_companies):
+            raise ValueError(
+                f"Company count cannot exceed {len(extension_companies)} for this run's stock universe."
+            )
 
         connection.execute(
             """
@@ -637,6 +937,7 @@ def extend_scoring_run(run_id, company_count):
             """,
             (target_count, "queued", int(time.time()), run_id),
         )
+        snapshot_run_companies(connection, run_id, extension_companies[:target_count])
         connection.commit()
         start_index = run["company_count"]
 
@@ -679,10 +980,15 @@ def get_run(run_id):
     with db_connect() as connection:
         run = connection.execute(
             """
-            SELECT id, name, prompt, model, reasoning_mode, status, company_count, completed_count, failed_count,
-                   created_at, started_at, finished_at, error
+            SELECT scoring_runs.id, scoring_runs.name, scoring_runs.prompt, scoring_runs.model,
+                   scoring_runs.reasoning_mode, scoring_runs.max_tokens, scoring_runs.stock_list_id,
+                   stock_lists.name AS stock_list_name,
+                   scoring_runs.status, scoring_runs.company_count, scoring_runs.completed_count,
+                   scoring_runs.failed_count, scoring_runs.created_at, scoring_runs.started_at,
+                   scoring_runs.finished_at, scoring_runs.error
             FROM scoring_runs
-            WHERE id = ? AND deleted_at IS NULL
+            LEFT JOIN stock_lists ON stock_lists.id = scoring_runs.stock_list_id
+            WHERE scoring_runs.id = ? AND scoring_runs.deleted_at IS NULL
             """,
             (run_id,),
         ).fetchone()
@@ -728,6 +1034,8 @@ def get_run(run_id):
     payload["stats"]["recent_average_latency_ms"] = recent_average_latency_ms(run["model"])
     payload["scoring_concurrency"] = scoring_concurrency()
     payload["incomplete_count"] = incomplete_company_count(run_id)
+    payload["company_tickers"] = [company["ticker"] for company in scoring_companies_for_run(run_id)]
+    payload["extension_limit"] = len(extension_companies_for_run(run_id, run["stock_list_id"]))
     return payload
 
 
@@ -776,6 +1084,8 @@ def cost_estimate(model, company_count, reasoning_mode=None):
     for entry in ai_request_entries():
         request = entry.get("request") or {}
         if request.get("model") != model:
+            continue
+        if (entry.get("response", {}).get("cache") or {}).get("status") == "HIT":
             continue
         if (request.get("reasoning") or reasoning_config(DEFAULT_REASONING_MODE)["reasoning"]) != selected_reasoning:
             continue
@@ -917,7 +1227,7 @@ def get_result_detail(run_id, ticker):
     with db_connect() as connection:
         run = connection.execute(
             """
-            SELECT id, name, prompt, model, reasoning_mode, status, created_at, started_at, finished_at, error
+            SELECT id, name, prompt, model, reasoning_mode, max_tokens, status, created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE id = ? AND deleted_at IS NULL
             """,
@@ -968,7 +1278,7 @@ def stop_scoring_run(run_id):
         connection.commit()
         updated = connection.execute(
             """
-            SELECT id, name, prompt, model, reasoning_mode, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, reasoning_mode, max_tokens, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE id = ? AND deleted_at IS NULL
@@ -982,7 +1292,7 @@ def list_runs():
     with db_connect() as connection:
         rows = connection.execute(
             """
-            SELECT id, name, prompt, model, reasoning_mode, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, reasoning_mode, max_tokens, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE deleted_at IS NULL
@@ -1080,6 +1390,44 @@ def update_run_counts(connection, run_id):
     )
 
 
+def invalidate_truncated_scoring_results():
+    latest_entries = {}
+    for entry in ai_request_entries():
+        company = entry.get("company") or {}
+        ticker = (company.get("ticker") or "").upper()
+        run_id = entry.get("run_id")
+        if run_id is not None and ticker:
+            latest_entries[(run_id, ticker)] = entry
+
+    truncated = [
+        (run_id, ticker)
+        for (run_id, ticker), entry in latest_entries.items()
+        if (entry.get("response") or {}).get("finish_reason") == "length"
+    ]
+    if not truncated:
+        return 0
+
+    affected_runs = set()
+    invalidated = 0
+    with db_connect() as connection:
+        for run_id, ticker in truncated:
+            cursor = connection.execute(
+                """
+                UPDATE scoring_results
+                SET score = NULL, error = ?
+                WHERE run_id = ? AND UPPER(ticker) = ? AND error IS NULL
+                """,
+                (TOKEN_LIMIT_ERROR, run_id, ticker),
+            )
+            if cursor.rowcount:
+                invalidated += cursor.rowcount
+                affected_runs.add(run_id)
+        for run_id in affected_runs:
+            update_run_counts(connection, run_id)
+        connection.commit()
+    return invalidated
+
+
 def result_tickers_for_run(run_id):
     with db_connect() as connection:
         rows = connection.execute(
@@ -1115,7 +1463,7 @@ def incomplete_company_count(run_id):
     complete_tickers = completed_score_tickers_for_run(run_id)
     return sum(
         1
-        for company in scoring_companies(run["company_count"])
+        for company in scoring_companies_for_run(run_id)
         if company["ticker"] not in complete_tickers
     )
 
@@ -1212,7 +1560,53 @@ def openrouter_http_error_details(error):
     }
 
 
-def ai_log_entry(run_id, company, request_payload, started_at, response_payload=None, error=None, http_status=None):
+def openrouter_payload_error_details(payload, http_status=None):
+    if not isinstance(payload, dict):
+        return {
+            "message": "OpenRouter returned an invalid response payload.",
+            "status": http_status,
+            "body": payload,
+            "retryable": True,
+        }
+
+    error = payload.get("error")
+    if error:
+        if isinstance(error, dict):
+            code = error.get("code")
+            detail = error.get("message") or json.dumps(error)
+        else:
+            code = None
+            detail = str(error)
+        status = code or http_status
+        prefix = f"OpenRouter API {status}" if status else "OpenRouter API error"
+        return {
+            "message": f"{prefix}: {detail}",
+            "status": status,
+            "body": payload,
+            "retryable": status in (408, 409, 429, 500, 502, 503, 504),
+        }
+
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return {
+            "message": "OpenRouter returned no completion choices.",
+            "status": http_status,
+            "body": payload,
+            "retryable": True,
+        }
+    return None
+
+
+def ai_log_entry(
+    run_id,
+    company,
+    request_payload,
+    started_at,
+    response_payload=None,
+    error=None,
+    http_status=None,
+    cache_metadata=None,
+):
     choice = None
     message = {}
     if response_payload and response_payload.get("choices"):
@@ -1236,6 +1630,10 @@ def ai_log_entry(run_id, company, request_payload, started_at, response_payload=
             "max_tokens": request_payload.get("max_tokens"),
             "reasoning": request_payload.get("reasoning"),
             "provider_preferences": request_payload.get("provider"),
+            "response_cache": {
+                "enabled": True,
+                "ttl_seconds": openrouter_cache_ttl_seconds(),
+            },
             "prompt_sent": request_payload["messages"][0]["content"],
         },
         "response": {
@@ -1251,6 +1649,7 @@ def ai_log_entry(run_id, company, request_payload, started_at, response_payload=
             "reasoning_details": message.get("reasoning_details"),
             "finish_reason": choice.get("finish_reason") if choice else None,
             "raw_payload": sanitized_ai_payload(response_payload),
+            "cache": cache_metadata,
             "error": error,
         },
         "token_stats": response_payload.get("usage") if response_payload else None,
@@ -1344,7 +1743,7 @@ def sanitized_ai_request_entry(entry):
     return sanitized
 
 
-def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None):
+def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, max_tokens=None):
     api_key = os.environ.get("OPENROUTER_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_KEY is not set")
@@ -1357,7 +1756,7 @@ def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None):
             {"role": "user", "content": prompt_for_company(prompt, company)},
         ],
         "temperature": 0,
-        "max_tokens": openrouter_max_tokens(),
+        "max_tokens": normalize_max_tokens(max_tokens),
         "reasoning": reasoning,
         "provider": provider_preferences(config),
     }
@@ -1370,46 +1769,82 @@ def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None):
             "Content-Type": "application/json",
             "HTTP-Referer": "http://localhost",
             "X-Title": "AI Stock Scorer",
+            "X-OpenRouter-Cache": "true",
+            "X-OpenRouter-Cache-TTL": str(openrouter_cache_ttl_seconds()),
         },
         method="POST",
     )
-    started_at = time.time()
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            http_status = response.status
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        details = openrouter_http_error_details(exc)
+    max_attempts = openrouter_max_attempts()
+    for attempt in range(1, max_attempts + 1):
+        started_at = time.time()
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                http_status = response.status
+                payload = json.loads(response.read().decode("utf-8"))
+                response_headers = getattr(response, "headers", None)
+                header_value = response_headers.get if response_headers is not None else lambda _name: None
+                cache_metadata = {
+                    "status": header_value("X-OpenRouter-Cache-Status"),
+                    "age_seconds": header_value("X-OpenRouter-Cache-Age"),
+                    "ttl_seconds": header_value("X-OpenRouter-Cache-TTL"),
+                }
+        except urllib.error.HTTPError as exc:
+            details = openrouter_http_error_details(exc)
+            append_ai_request_log(
+                ai_log_entry(
+                    run_id,
+                    company,
+                    request_payload,
+                    started_at,
+                    error=details,
+                    http_status=details["status"],
+                )
+            )
+            message = details["message"]
+            if exc.code in (401, 403):
+                raise FatalScoringError(message) from exc
+            raise RuntimeError(message) from exc
+        except Exception as exc:
+            append_ai_request_log(
+                ai_log_entry(
+                    run_id,
+                    company,
+                    request_payload,
+                    started_at,
+                    error={"message": str(exc), "type": exc.__class__.__name__},
+                )
+            )
+            raise
+
+        payload_error = openrouter_payload_error_details(payload, http_status)
+        if not payload_error:
+            break
+        payload_error["attempt"] = attempt
+        payload_error["max_attempts"] = max_attempts
         append_ai_request_log(
             ai_log_entry(
                 run_id,
                 company,
                 request_payload,
                 started_at,
-                error=details,
-                http_status=details["status"],
+                response_payload=payload,
+                error=payload_error,
+                http_status=http_status,
+                cache_metadata=cache_metadata,
             )
         )
-        message = details["message"]
-        if exc.code in (401, 403):
-            raise FatalScoringError(message) from exc
-        raise RuntimeError(message) from exc
-    except Exception as exc:
-        append_ai_request_log(
-            ai_log_entry(
-                run_id,
-                company,
-                request_payload,
-                started_at,
-                error={"message": str(exc), "type": exc.__class__.__name__},
-            )
-        )
-        raise
+        if payload_error["retryable"] and attempt < max_attempts:
+            time.sleep(attempt)
+            continue
+        raise RuntimeError(payload_error["message"])
 
     maybe_block_reasoning_provider(run_id, company, request_payload, payload)
 
     try:
-        message = payload["choices"][0].get("message", {})
+        choice = payload["choices"][0]
+        if choice.get("finish_reason") == "length":
+            raise ValueError(TOKEN_LIMIT_ERROR)
+        message = choice.get("message", {})
         content = message.get("content")
         if content is None:
             raise ValueError(
@@ -1427,6 +1862,7 @@ def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None):
                 response_payload=payload,
                 error={"message": str(exc), "type": exc.__class__.__name__},
                 http_status=http_status,
+                cache_metadata=cache_metadata,
             )
         )
         raise
@@ -1439,6 +1875,7 @@ def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None):
             started_at,
             response_payload=payload,
             http_status=http_status,
+            cache_metadata=cache_metadata,
         )
     )
     return content
@@ -1482,12 +1919,19 @@ def save_result(connection, run_id, company, score, raw_response, error):
     )
 
 
-def score_company_request(run_id, prompt, model, reasoning_mode, company):
+def score_company_request(run_id, prompt, model, reasoning_mode, company, max_tokens):
     raw_response = None
     score = None
     error = None
     try:
-        raw_response = call_openrouter(prompt, company, model, reasoning_mode, run_id=run_id)
+        raw_response = call_openrouter(
+            prompt,
+            company,
+            model,
+            reasoning_mode,
+            run_id=run_id,
+            max_tokens=max_tokens,
+        )
         score = parse_numeric_score(raw_response)
     except FatalScoringError:
         raise
@@ -1512,7 +1956,7 @@ def score_run_worker(run_id, start_index=0):
     ensure_scoring_schema()
     with db_connect() as connection:
         run = connection.execute(
-            "SELECT name, prompt, model, reasoning_mode, company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
+            "SELECT name, prompt, model, reasoning_mode, max_tokens, company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
             (run_id,),
         ).fetchone()
         if not run:
@@ -1526,7 +1970,7 @@ def score_run_worker(run_id, start_index=0):
     fatal_error = None
     stopped = False
     try:
-        companies = scoring_companies(run["company_count"])
+        companies = scoring_companies_for_run(run_id)
         if start_index:
             companies = companies[start_index:]
         completed_tickers = completed_score_tickers_for_run(run_id)
@@ -1566,6 +2010,7 @@ def score_run_worker(run_id, start_index=0):
                 run["model"],
                 run["reasoning_mode"],
                 company,
+                run["max_tokens"],
             )
             futures[future] = company
             return True
@@ -1717,8 +2162,14 @@ class Handler(SimpleHTTPRequestHandler):
                     "default": openrouter_model(),
                     "reasoning_modes": reasoning_options(),
                     "default_reasoning_mode": default_reasoning_mode(),
+                    "default_max_tokens": openrouter_max_tokens(),
                 }
             )
+            return
+
+        if parsed.path == "/api/stock-lists":
+            ensure_scoring_schema()
+            self.send_json({"lists": list_stock_lists()})
             return
 
         if parsed.path == "/api/cost-estimate":
@@ -1787,6 +2238,18 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/stock-lists":
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                stock_list = save_stock_list(payload.get("name"), payload.get("tickers"))
+                self.send_json({"list": stock_list}, 201)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
         stop_match = re.fullmatch(r"/api/runs/(\d+)/stop", parsed.path)
         if stop_match:
             ensure_scoring_schema()
@@ -1808,8 +2271,16 @@ class Handler(SimpleHTTPRequestHandler):
                 prompt = normalize_scoring_prompt(payload.get("prompt"))
                 model = normalize_model(payload.get("model"))
                 reasoning_mode = normalize_reasoning_mode(payload.get("reasoningMode"))
-                company_count = normalize_company_count(payload.get("companyCount"))
-                run_id = create_scoring_run(name, prompt, model, company_count, reasoning_mode)
+                run_id = create_scoring_run(
+                    name,
+                    prompt,
+                    model,
+                    payload.get("companyCount"),
+                    reasoning_mode,
+                    stock_list_id=payload.get("stockListId"),
+                    tickers=payload.get("tickers") if "tickers" in payload else None,
+                    max_tokens=payload.get("maxTokens"),
+                )
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)
@@ -1851,6 +2322,26 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_PATCH(self):
         parsed = urlparse(self.path)
+        stock_list_match = re.fullmatch(r"/api/stock-lists/(\d+)", parsed.path)
+        if stock_list_match:
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                stock_list = save_stock_list(
+                    payload.get("name"),
+                    payload.get("tickers"),
+                    int(stock_list_match.group(1)),
+                )
+                if not stock_list:
+                    self.send_json({"error": "Stock list not found"}, 404)
+                    return
+                self.send_json({"list": stock_list})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
         run_match = re.fullmatch(r"/api/runs/(\d+)", parsed.path)
         if run_match:
             ensure_scoring_schema()
@@ -1872,6 +2363,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        stock_list_match = re.fullmatch(r"/api/stock-lists/(\d+)", parsed.path)
+        if stock_list_match:
+            ensure_scoring_schema()
+            archived = archive_stock_list(int(stock_list_match.group(1)))
+            if not archived:
+                self.send_json({"error": "Stock list not found"}, 404)
+                return
+            self.send_json({"archived": True})
+            return
+
         run_match = re.fullmatch(r"/api/runs/(\d+)", parsed.path)
         if run_match:
             ensure_scoring_schema()
@@ -1886,6 +2387,9 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main():
     ensure_scoring_schema()
+    invalidated = invalidate_truncated_scoring_results()
+    if invalidated:
+        print(f"Marked {invalidated} token-limited scoring responses invalid.")
     mark_interrupted_runs()
     port = 3001
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)

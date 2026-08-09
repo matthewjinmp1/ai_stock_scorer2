@@ -3,6 +3,7 @@ const stopButton = document.querySelector("#stopButton");
 const rerunButton = document.querySelector("#rerunButton");
 const renameButton = document.querySelector("#renameButton");
 const editPromptButton = document.querySelector("#editPromptButton");
+const editRunButton = document.querySelector("#editRunButton");
 const extendButton = document.querySelector("#extendButton");
 const fillButton = document.querySelector("#fillButton");
 const deleteButton = document.querySelector("#deleteButton");
@@ -30,6 +31,12 @@ const scoreDownButton = document.querySelector("#scoreDownButton");
 const scoreUpButton = document.querySelector("#scoreUpButton");
 const clearScoreFilterButton = document.querySelector("#clearScoreFilterButton");
 const filterStatus = document.querySelector("#filterStatus");
+const rankingSearchInput = document.querySelector("#rankingSearchInput");
+const scoreFilterToolbar = document.querySelector("#scoreFilterToolbar");
+const resultsTableWrap = document.querySelector("#resultsTableWrap");
+const rankingTable = document.querySelector(".ranking-table");
+const rankingTabCount = document.querySelector("#rankingTabCount");
+const failedTabCount = document.querySelector("#failedTabCount");
 
 const SORT_KEYS = new Set([
   "scoreRank",
@@ -42,6 +49,7 @@ const SORT_KEYS = new Set([
   "error",
 ]);
 const SORT_DIRECTIONS = new Set(["asc", "desc"]);
+const RESULT_VIEWS = new Set(["ranking", "failed"]);
 
 let currentRunId = params.get("id");
 let pollTimer = null;
@@ -57,8 +65,10 @@ let sortState = {
 };
 let scoreFilterTarget =
   params.has("score") && Number.isFinite(Number(params.get("score"))) ? Number(params.get("score")) : null;
+let rankingSearchQuery = (params.get("q") || "").trim();
 let matchedScore = null;
 let restoredScroll = false;
+let activeResultView = RESULT_VIEWS.has(params.get("tab")) ? params.get("tab") : "ranking";
 
 function ensureHomeLink() {
   let nav = document.querySelector(".page-nav");
@@ -144,7 +154,11 @@ function formatNumber(value) {
 
 function formatMs(value) {
   if (value === null || value === undefined) return "--";
-  return `${Number(value).toLocaleString()} ms`;
+  const seconds = Number(value) / 1000;
+  return `${seconds.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} seconds`;
 }
 
 function formatDuration(ms) {
@@ -171,7 +185,9 @@ function runUrlWithState(scrollY = window.scrollY) {
   if (currentRunId) url.searchParams.set("id", currentRunId);
   url.searchParams.set("sort", sortState.key);
   url.searchParams.set("dir", sortState.direction);
+  url.searchParams.set("tab", activeResultView);
   if (scoreFilterTarget !== null) url.searchParams.set("score", String(scoreFilterTarget));
+  if (rankingSearchQuery) url.searchParams.set("q", rankingSearchQuery);
   url.searchParams.set("y", String(Math.max(0, Math.round(scrollY))));
   return `${url.pathname}${url.search}`;
 }
@@ -182,6 +198,22 @@ function resultUrl(result, scrollY = window.scrollY) {
   url.searchParams.set("ticker", result.ticker);
   url.searchParams.set("sort", sortState.key);
   url.searchParams.set("dir", sortState.direction);
+  url.searchParams.set("tab", activeResultView);
+  if (scoreFilterTarget !== null) url.searchParams.set("score", String(scoreFilterTarget));
+  if (rankingSearchQuery) url.searchParams.set("q", rankingSearchQuery);
+  url.searchParams.set("y", String(Math.max(0, Math.round(scrollY))));
+  return `${url.pathname}${url.search}`;
+}
+
+function responseUrl(result, scrollY = window.scrollY) {
+  const url = new URL("/response.html", window.location.origin);
+  url.searchParams.set("run", currentRunId);
+  url.searchParams.set("ticker", result.ticker);
+  url.searchParams.set("sort", sortState.key);
+  url.searchParams.set("dir", sortState.direction);
+  url.searchParams.set("tab", activeResultView);
+  if (scoreFilterTarget !== null) url.searchParams.set("score", String(scoreFilterTarget));
+  if (rankingSearchQuery) url.searchParams.set("q", rankingSearchQuery);
   url.searchParams.set("y", String(Math.max(0, Math.round(scrollY))));
   return `${url.pathname}${url.search}`;
 }
@@ -295,6 +327,7 @@ function renderRunStats(run) {
     <span class="model-id">reasoning: ${escapeHtml(reasoning.effort || "none")}, exclude: ${escapeHtml(
     reasoning.exclude === undefined ? "true" : String(reasoning.exclude)
   )}</span>
+    <span class="model-id">response limit: ${escapeHtml(formatNumber(run.max_tokens))} tokens</span>
     <span class="model-id">provider routing: all except blocked</span>
     <span class="model-id">blocked: ${escapeHtml((provider.ignore || []).join(", ") || "none")}</span>
   `;
@@ -364,7 +397,48 @@ function scoreInFilter(result) {
 }
 
 function filteredResults(results) {
-  return results.filter(scoreInFilter);
+  const query = rankingSearchQuery.toLowerCase();
+  return results.filter(scoreInFilter).filter((result) => {
+    if (!query) return true;
+    return `${result.company_name || ""} ${result.ticker || ""}`.toLowerCase().includes(query);
+  });
+}
+
+function isSuccessfulResult(result) {
+  return result.score !== null && result.score !== undefined && !result.error;
+}
+
+function resultsForView(run, view = activeResultView) {
+  const results = run?.results || [];
+  return view === "failed"
+    ? results.filter((result) => !isSuccessfulResult(result))
+    : results.filter(isSuccessfulResult);
+}
+
+function updateResultViewTabs(run) {
+  rankingTabCount.textContent = String(resultsForView(run, "ranking").length);
+  failedTabCount.textContent = String(resultsForView(run, "failed").length);
+
+  document.querySelectorAll("[data-result-view]").forEach((button) => {
+    const isActive = button.dataset.resultView === activeResultView;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+    button.tabIndex = isActive ? 0 : -1;
+  });
+  scoreFilterToolbar.hidden = activeResultView !== "ranking";
+  rankingTable.classList.toggle("ranking-view", activeResultView === "ranking");
+  rankingTable.classList.toggle("failed-view", activeResultView === "failed");
+  resultsTableWrap.setAttribute(
+    "aria-label",
+    activeResultView === "ranking" ? "Successful stock score ranking" : "Failed stock responses"
+  );
+}
+
+function setResultView(view) {
+  if (!RESULT_VIEWS.has(view) || view === activeResultView) return;
+  activeResultView = view;
+  saveRunViewState();
+  if (currentRun) renderRun(currentRun);
 }
 
 function normalizeScoreFilterValue(value) {
@@ -400,7 +474,7 @@ function nearestScore(results, target) {
 }
 
 function updateMatchedScore(run) {
-  matchedScore = nearestScore(run?.results || [], scoreFilterTarget);
+  matchedScore = nearestScore(resultsForView(run, "ranking"), scoreFilterTarget);
 }
 
 function activeScoreForStepper() {
@@ -410,7 +484,7 @@ function activeScoreForStepper() {
 }
 
 function nextScoreBucket(direction) {
-  const scores = uniqueScores(currentRun?.results || []);
+  const scores = uniqueScores(resultsForView(currentRun, "ranking"));
   if (!scores.length) return null;
   const activeScore = activeScoreForStepper();
   if (activeScore === null) return direction > 0 ? scores[0] : scores[scores.length - 1];
@@ -425,7 +499,7 @@ function nextScoreBucket(direction) {
 
 function updateScoreStepperButtons() {
   if (!scoreDownButton || !scoreUpButton) return;
-  const scores = uniqueScores(currentRun?.results || []);
+  const scores = uniqueScores(resultsForView(currentRun, "ranking"));
   const activeScore = activeScoreForStepper();
   scoreDownButton.disabled = !scores.length || (activeScore !== null && !scores.some((score) => score < activeScore));
   scoreUpButton.disabled = !scores.length || (activeScore !== null && !scores.some((score) => score > activeScore));
@@ -442,10 +516,18 @@ function stepScoreFilter(direction) {
 }
 
 function scoreFilterLabel() {
-  if (scoreFilterTarget === null) return "Showing all scores.";
-  if (matchedScore === null) return `No completed scores available near ${scoreFilterTarget}.`;
-  if (matchedScore === scoreFilterTarget) return `Showing scores equal to ${matchedScore}.`;
-  return `Closest score to ${scoreFilterTarget} is ${matchedScore}. Showing score ${matchedScore}.`;
+  let scoreLabel;
+  if (scoreFilterTarget === null) scoreLabel = "Showing all scores.";
+  else if (matchedScore === null) scoreLabel = `No completed scores available near ${scoreFilterTarget}.`;
+  else if (matchedScore === scoreFilterTarget) scoreLabel = `Showing scores equal to ${matchedScore}.`;
+  else scoreLabel = `Closest score to ${scoreFilterTarget} is ${matchedScore}. Showing score ${matchedScore}.`;
+  return rankingSearchQuery ? `${scoreLabel} Matching "${rankingSearchQuery}".` : scoreLabel;
+}
+
+function updateRankingSearch() {
+  rankingSearchQuery = rankingSearchInput.value.trim();
+  saveRunViewState();
+  if (currentRun) renderRun(currentRun);
 }
 
 function updateScoreFilter() {
@@ -458,6 +540,8 @@ function updateScoreFilter() {
 function clearScoreFilter() {
   scoreFilterTarget = null;
   matchedScore = null;
+  rankingSearchQuery = "";
+  rankingSearchInput.value = "";
   syncScoreFilterInputs();
   saveRunViewState();
   if (currentRun) renderRun(currentRun);
@@ -603,10 +687,14 @@ async function extendCurrentRun() {
     statusEl.textContent = "Pick a saved run before extending.";
     return;
   }
-
-  const nextCount = Math.min(100, Number(currentRun.company_count || 0) + 10);
+  const extensionLimit = Number(currentRun.extension_limit || currentRun.company_count || 0);
+  if (extensionLimit <= Number(currentRun.company_count || 0)) {
+    statusEl.textContent = "This run already includes its entire stock universe.";
+    return;
+  }
+  const nextCount = Math.min(extensionLimit, Number(currentRun.company_count || 0) + 10);
   const value = window.prompt(
-    `Extend to how many total stocks? Current total is ${currentRun.company_count}.`,
+    `Extend to how many total stocks? Current total is ${currentRun.company_count}; this universe has ${extensionLimit}.`,
     String(nextCount)
   );
   if (value === null) return;
@@ -618,6 +706,10 @@ async function extendCurrentRun() {
   }
   if (companyCount <= Number(currentRun.company_count || 0)) {
     statusEl.textContent = `Choose a stock count above ${currentRun.company_count}.`;
+    return;
+  }
+  if (companyCount > extensionLimit) {
+    statusEl.textContent = `Choose a stock count no higher than ${extensionLimit}.`;
     return;
   }
 
@@ -705,47 +797,59 @@ function renderRun(run) {
   statusEl.textContent = run.error || "";
   renderRunStats(run);
   updateMatchedScore(run);
+  updateResultViewTabs(run);
   stopButton.disabled = !canStop(run);
   stopButton.textContent = run.status === "stop_requested" ? "Stopping..." : "Stop";
   rerunButton.disabled = false;
   renameButton.disabled = false;
   editPromptButton.disabled = false;
-  extendButton.disabled = canStop(run);
+  editRunButton.disabled = false;
+  extendButton.disabled = canStop(run) || Number(run.extension_limit || 0) <= Number(run.company_count || 0);
   fillButton.disabled = canStop(run) || !incompleteCount(run);
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="8">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="9">Waiting for scores...</td></tr>';
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
     return;
   }
 
   updateSortHeaders();
-  const visibleResults = sortedResults(filteredResults(run.results));
-  filterStatus.textContent = `${scoreFilterLabel()} ${visibleResults.length}/${run.results.length} rows visible.`;
+  const viewResults = resultsForView(run);
+  const visibleResults = sortedResults(
+    activeResultView === "ranking" ? filteredResults(viewResults) : viewResults
+  );
+  filterStatus.textContent = `${scoreFilterLabel()} ${visibleResults.length}/${viewResults.length} rows visible.`;
   updateScoreStepperButtons();
   if (!visibleResults.length) {
-    resultRows.innerHTML = '<tr><td colspan="8">No scores match this filter.</td></tr>';
+    const emptyMessage =
+      activeResultView === "failed"
+        ? "No failed responses in this run."
+        : viewResults.length
+          ? "No scores match this filter."
+          : "No successful scores yet.";
+    resultRows.innerHTML = `<tr><td colspan="9">${emptyMessage}</td></tr>`;
     restoreScrollPosition();
     return;
   }
   resultRows.innerHTML = visibleResults
     .map((result) => {
       const error = result.error ? escapeHtml(result.error) : "";
-      const url = resultUrl(result);
+      const responsePageUrl = responseUrl(result);
+      const detailsUrl = resultUrl(result);
       const logo = result.logo
         ? `<img class="logo" src="${escapeHtml(result.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
         : "";
       return `
-        <tr class="clickable-row" data-result-url="${url}">
+        <tr class="clickable-row" data-response-url="${responsePageUrl}">
           <td>${result.scoreRank}</td>
           <td><strong>${formatScore(result.score)}</strong></td>
           <td>
             <div class="company-cell">
               ${logo}
               <div>
-              <a class="company-link" href="${url}">
+              <a class="company-link" href="${responsePageUrl}">
                 <strong>${escapeHtml(result.company_name)}</strong>
               </a>
               <span class="ticker">${escapeHtml(result.ticker)}</span>
@@ -757,6 +861,7 @@ function renderRun(run) {
           <td>${formatNumber(result.reasoning_tokens)}</td>
           <td>${formatCents(result.cost)}</td>
           <td class="error-cell">${error}</td>
+          <td class="details-cell"><a class="details-link" href="${detailsUrl}">Details</a></td>
         </tr>
       `;
     })
@@ -770,12 +875,13 @@ async function loadCurrentRun() {
     rerunButton.disabled = true;
     renameButton.disabled = true;
     editPromptButton.disabled = true;
+    editRunButton.disabled = true;
     extendButton.disabled = true;
     fillButton.disabled = true;
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="8">Create a scoring run first.</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="9">Create a scoring run first.</td></tr>';
     return;
   }
 
@@ -787,6 +893,14 @@ async function loadCurrentRun() {
   if (payload.run.status === "queued" || payload.run.status === "running" || payload.run.status === "stop_requested") {
     pollTimer = window.setTimeout(loadCurrentRun, 2500);
   }
+}
+
+function editCurrentRun() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before editing its settings.";
+    return;
+  }
+  window.location.href = `/?editRun=${encodeURIComponent(currentRun.id)}`;
 }
 
 async function stopCurrentRun() {
@@ -855,6 +969,9 @@ async function rerunCurrentPrompt() {
         prompt: currentRun.prompt,
         model: currentRun.model,
         reasoningMode: currentRun.reasoning_mode,
+        maxTokens: currentRun.max_tokens,
+        stockListId: currentRun.stock_list_id,
+        ...(currentRun.stock_list_id ? { tickers: currentRun.company_tickers } : {}),
         companyCount: currentRun.company_count,
       }),
     });
@@ -864,6 +981,7 @@ async function rerunCurrentPrompt() {
     currentRunId = String(payload.runId);
     history.replaceState(null, "", `/run.html?id=${currentRunId}`);
     sortState = { key: "scoreRank", direction: "asc" };
+    activeResultView = "ranking";
     restoredScroll = true;
     if (pollTimer) window.clearTimeout(pollTimer);
     await loadCurrentRun();
@@ -878,23 +996,34 @@ stopButton.addEventListener("click", stopCurrentRun);
 rerunButton.addEventListener("click", rerunCurrentPrompt);
 renameButton.addEventListener("click", renameCurrentRun);
 editPromptButton.addEventListener("click", showPromptEditor);
+editRunButton.addEventListener("click", editCurrentRun);
 extendButton.addEventListener("click", extendCurrentRun);
 fillButton.addEventListener("click", fillCurrentRun);
 savePromptButton.addEventListener("click", saveCurrentPrompt);
 cancelPromptButton.addEventListener("click", hidePromptEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
 scoreTargetInput.addEventListener("input", updateScoreFilter);
+rankingSearchInput.addEventListener("input", updateRankingSearch);
 scoreDownButton.addEventListener("click", () => stepScoreFilter(-1));
 scoreUpButton.addEventListener("click", () => stepScoreFilter(1));
 clearScoreFilterButton.addEventListener("click", clearScoreFilter);
 document.querySelectorAll("[data-sort-key]").forEach((button) => {
   button.addEventListener("click", () => setSort(button.dataset.sortKey));
 });
+document.querySelectorAll("[data-result-view]").forEach((button) => {
+  button.addEventListener("click", () => setResultView(button.dataset.resultView));
+});
 resultRows.addEventListener("click", (event) => {
-  const row = event.target.closest("[data-result-url]");
+  const row = event.target.closest("[data-response-url]");
   if (!row) return;
-  const link = row.querySelector(".company-link");
-  const destination = new URL(link?.getAttribute("href") || row.dataset.resultUrl, window.location.origin);
+  const detailsLink = event.target.closest(".details-link");
+  const responseLink = row.querySelector(".company-link");
+  const destination = new URL(
+    detailsLink?.getAttribute("href") ||
+      responseLink?.getAttribute("href") ||
+      row.dataset.responseUrl,
+    window.location.origin
+  );
   destination.searchParams.set("sort", sortState.key);
   destination.searchParams.set("dir", sortState.direction);
   destination.searchParams.set("y", String(Math.max(0, Math.round(window.scrollY))));
@@ -911,6 +1040,7 @@ if ("EventSource" in window) {
 try {
   ensureHomeLink();
   syncScoreFilterInputs();
+  rankingSearchInput.value = rankingSearchQuery;
   startEtaTimer();
   await loadCurrentRun();
 } catch (error) {
