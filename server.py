@@ -5,6 +5,7 @@ import html
 import json
 import os
 import re
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -89,6 +90,7 @@ DEFAULT_SCORING_COMPANY_COUNT = 10
 DEFAULT_SCORING_CONCURRENCY = 20
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
 OPENROUTER_MAX_ATTEMPTS = 3
+OPENROUTER_ATTEMPT_TIMEOUT_SECONDS = 90
 MAX_OPENROUTER_RESPONSE_TOKENS = 32768
 OPENROUTER_RESPONSE_CACHE_TTL_SECONDS = 86400
 TOKEN_LIMIT_ERROR = "Invalid response: model hit the response token limit before completing."
@@ -268,6 +270,55 @@ def openrouter_max_attempts():
     except ValueError:
         value = OPENROUTER_MAX_ATTEMPTS
     return max(1, min(5, value))
+
+
+def openrouter_attempt_timeout_seconds():
+    try:
+        value = float(
+            os.environ.get(
+                "OPENROUTER_ATTEMPT_TIMEOUT_SECONDS",
+                str(OPENROUTER_ATTEMPT_TIMEOUT_SECONDS),
+            )
+        )
+    except (TypeError, ValueError):
+        value = OPENROUTER_ATTEMPT_TIMEOUT_SECONDS
+    return max(1, value)
+
+
+def read_http_response_with_deadline(response, timeout_seconds):
+    timed_out = threading.Event()
+
+    def abort_response():
+        timed_out.set()
+        try:
+            sock = response.fp.raw._sock
+            sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+        try:
+            response.close()
+        except Exception:
+            pass
+
+    timer = threading.Timer(timeout_seconds, abort_response)
+    timer.daemon = True
+    timer.start()
+    try:
+        payload = response.read()
+    except Exception as exc:
+        if timed_out.is_set():
+            raise TimeoutError(
+                f"OpenRouter request exceeded the {timeout_seconds:g}-second attempt limit."
+            ) from exc
+        raise
+    finally:
+        timer.cancel()
+
+    if timed_out.is_set():
+        raise TimeoutError(
+            f"OpenRouter request exceeded the {timeout_seconds:g}-second attempt limit."
+        )
+    return payload
 
 
 def openrouter_cache_ttl_seconds():
@@ -1856,7 +1907,11 @@ def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, ma
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 http_status = response.status
-                payload = json.loads(response.read().decode("utf-8"))
+                response_body = read_http_response_with_deadline(
+                    response,
+                    openrouter_attempt_timeout_seconds(),
+                )
+                payload = json.loads(response_body.decode("utf-8"))
                 response_headers = getattr(response, "headers", None)
                 header_value = response_headers.get if response_headers is not None else lambda _name: None
                 cache_metadata = {

@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -105,6 +106,23 @@ class ServerTestCase(unittest.TestCase):
 
 
 class PromptAndParsingTests(ServerTestCase):
+    def test_http_response_deadline_interrupts_a_stalled_read(self):
+        class StalledResponse:
+            def __init__(self):
+                self.closed = threading.Event()
+
+            def read(self):
+                self.closed.wait(1)
+                raise OSError("response closed")
+
+            def close(self):
+                self.closed.set()
+
+        started_at = time.monotonic()
+        with self.assertRaisesRegex(TimeoutError, "attempt limit"):
+            server.read_http_response_with_deadline(StalledResponse(), 0.02)
+        self.assertLess(time.monotonic() - started_at, 0.5)
+
     def test_run_stats_include_average_response_tokens_without_reasoning(self):
         entries = [
             {
