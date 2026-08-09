@@ -250,18 +250,31 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertIn("ResourceExhausted", entry["response"]["error"]["message"])
 
     def test_call_openrouter_logs_response_cache_hit(self):
-        payload = {
+        miss_payload = {
+            "choices": [{"message": {"content": "77"}, "finish_reason": "stop"}],
+            "usage": {
+                "prompt_tokens": 5,
+                "completion_tokens": 7,
+                "total_tokens": 12,
+                "cost": 0.01,
+                "cost_details": {"upstream_inference_cost": 0.009},
+            },
+        }
+        hit_payload = {
             "choices": [{"message": {"content": "77"}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "cost": 0},
         }
 
         class FakeResponse:
             status = 200
-            headers = {
-                "X-OpenRouter-Cache-Status": "HIT",
-                "X-OpenRouter-Cache-Age": "12",
-                "X-OpenRouter-Cache-TTL": "86388",
-            }
+
+            def __init__(self, payload, status):
+                self.payload = payload
+                self.headers = {
+                    "X-OpenRouter-Cache-Status": status,
+                    "X-OpenRouter-Cache-Age": "12" if status == "HIT" else None,
+                    "X-OpenRouter-Cache-TTL": "86388",
+                }
 
             def __enter__(self):
                 return self
@@ -270,16 +283,32 @@ class PromptAndParsingTests(ServerTestCase):
                 return False
 
             def read(self):
-                return json.dumps(payload).encode("utf-8")
+                return json.dumps(self.payload).encode("utf-8")
 
         company = server.scoring_companies(1)[0]
-        with mock.patch.object(server.urllib.request, "urlopen", return_value=FakeResponse()):
-            response = server.call_openrouter("Score COMPANY", company, MODEL, run_id=1)
+        responses = [FakeResponse(miss_payload, "MISS"), FakeResponse(hit_payload, "HIT")]
+        with mock.patch.object(server.urllib.request, "urlopen", side_effect=responses):
+            server.call_openrouter("Score COMPANY", company, MODEL, run_id=1)
+            response = server.call_openrouter("Score COMPANY", company, MODEL, run_id=2)
 
         self.assertEqual(response, "77")
-        entry = json.loads(server.AI_REQUEST_LOG_PATH.read_text())[-1]
-        self.assertEqual(entry["response"]["cache"]["status"], "HIT")
-        self.assertEqual(entry["token_stats"]["total_tokens"], 0)
+        raw_entry = json.loads(server.AI_REQUEST_LOG_PATH.read_text())[-1]
+        self.assertEqual(raw_entry["response"]["cache"]["status"], "HIT")
+        self.assertEqual(raw_entry["token_stats"]["total_tokens"], 0)
+
+        entry = server.find_ai_request_entry(2, company["ticker"])
+        self.assertEqual(entry["token_stats"]["prompt_tokens"], 5)
+        self.assertEqual(entry["token_stats"]["completion_tokens"], 7)
+        self.assertEqual(entry["token_stats"]["total_tokens"], 12)
+        self.assertEqual(entry["token_stats"]["cost"], 0)
+        self.assertEqual(entry["token_stats"]["cost_details"]["upstream_inference_cost"], 0)
+        self.assertTrue(entry["token_stats"]["cache_reused_token_counts"])
+        self.assertEqual(entry["response"]["cache"]["token_stats_source"], "matched_prior_request")
+
+        stats = server.ai_request_stats_for_run(2)
+        self.assertEqual(stats["total_tokens"], 12)
+        self.assertEqual(stats["response_tokens"], 7)
+        self.assertEqual(stats["cost"], 0)
 
     def test_call_openrouter_rejects_token_limited_response(self):
         payload = {

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import concurrent.futures
+import copy
 import html
 import json
 import os
@@ -1049,11 +1050,74 @@ def ai_request_entries():
         return []
 
 
+def ai_request_cache_key(entry):
+    request = entry.get("request") or entry
+    provider = request.get("provider_preferences")
+    if provider is None:
+        provider = request.get("provider")
+    signature = {
+        "model": request.get("model"),
+        "messages": request.get("messages"),
+        "temperature": request.get("temperature"),
+        "max_tokens": request.get("max_tokens"),
+        "reasoning": request.get("reasoning"),
+        "provider": provider,
+    }
+    return json.dumps(signature, sort_keys=True, separators=(",", ":"))
+
+
+def token_stats_have_counts(token_stats):
+    if not isinstance(token_stats, dict):
+        return False
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        try:
+            if float(token_stats.get(key) or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def zero_token_costs(token_stats):
+    copied = copy.deepcopy(token_stats)
+    copied["cost"] = 0
+    cost_details = copied.get("cost_details")
+    if isinstance(cost_details, dict):
+        copied["cost_details"] = {key: 0 for key in cost_details}
+    copied["cache_reused_token_counts"] = True
+    return copied
+
+
+def effective_ai_request_entries(entries=None):
+    entries = ai_request_entries() if entries is None else entries
+    prior_token_stats = {}
+    effective_entries = []
+    for entry in entries:
+        cache_key = ai_request_cache_key(entry)
+        token_stats = entry.get("token_stats") or {}
+        cache = (entry.get("response") or {}).get("cache") or {}
+        effective_entry = entry
+
+        if cache.get("status") == "HIT" and not token_stats_have_counts(token_stats):
+            prior_stats = prior_token_stats.get(cache_key)
+            if prior_stats:
+                effective_entry = copy.deepcopy(entry)
+                effective_entry["token_stats"] = zero_token_costs(prior_stats)
+                effective_cache = (effective_entry.get("response") or {}).setdefault("cache", {})
+                effective_cache["token_stats_source"] = "matched_prior_request"
+
+        effective_entries.append(effective_entry)
+        effective_stats = effective_entry.get("token_stats") or {}
+        if token_stats_have_counts(effective_stats):
+            prior_token_stats[cache_key] = effective_stats
+    return effective_entries
+
+
 def find_ai_request_entry(run_id, ticker):
     ticker = ticker.upper()
     matches = [
         entry
-        for entry in ai_request_entries()
+        for entry in effective_ai_request_entries()
         if entry.get("run_id") == run_id
         and (entry.get("company", {}).get("ticker") or "").upper() == ticker
     ]
@@ -1147,7 +1211,7 @@ def ai_request_stats_for_run(run_id):
         "average_response_tokens": None,
         "average_latency_ms": None,
     }
-    for entry in ai_request_entries():
+    for entry in effective_ai_request_entries():
         if entry.get("run_id") != run_id:
             continue
 
@@ -1189,7 +1253,7 @@ def ai_request_stats_for_run(run_id):
 
 def ai_request_stats_by_ticker(run_id):
     stats = {}
-    for entry in ai_request_entries():
+    for entry in effective_ai_request_entries():
         if entry.get("run_id") != run_id:
             continue
         ticker = (entry.get("company", {}).get("ticker") or "").upper()
