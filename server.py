@@ -480,6 +480,7 @@ def ensure_scoring_schema():
                 started_at INTEGER,
                 finished_at INTEGER,
                 deleted_at INTEGER,
+                starred INTEGER NOT NULL DEFAULT 0,
                 error TEXT,
                 worker_pid INTEGER,
                 worker_started_at INTEGER
@@ -551,6 +552,8 @@ def ensure_scoring_schema():
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN max_tokens INTEGER NOT NULL DEFAULT 200")
         if "stock_list_id" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN stock_list_id INTEGER")
+        if "starred" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN starred INTEGER NOT NULL DEFAULT 0")
         connection.execute(
             """
             UPDATE scoring_runs
@@ -983,6 +986,7 @@ def get_run(run_id):
             """
             SELECT scoring_runs.id, scoring_runs.name, scoring_runs.prompt, scoring_runs.model,
                    scoring_runs.reasoning_mode, scoring_runs.max_tokens, scoring_runs.stock_list_id,
+                   scoring_runs.starred,
                    stock_lists.name AS stock_list_name,
                    scoring_runs.status, scoring_runs.company_count, scoring_runs.completed_count,
                    scoring_runs.failed_count, scoring_runs.created_at, scoring_runs.started_at,
@@ -1360,12 +1364,11 @@ def list_runs():
     with db_connect() as connection:
         rows = connection.execute(
             """
-            SELECT id, name, prompt, model, reasoning_mode, max_tokens, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, reasoning_mode, max_tokens, starred, status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE deleted_at IS NULL
             ORDER BY created_at DESC, id DESC
-            LIMIT 100
             """
         ).fetchall()
     costs = ai_request_costs_by_run()
@@ -1381,7 +1384,7 @@ def rename_scoring_run(run_id, name):
     return update_scoring_run(run_id, name=name)
 
 
-def update_scoring_run(run_id, name=None, prompt=None):
+def update_scoring_run(run_id, name=None, prompt=None, starred=None):
     updates = []
     values = []
     if name is not None:
@@ -1390,6 +1393,11 @@ def update_scoring_run(run_id, name=None, prompt=None):
     if prompt is not None:
         updates.append("prompt = ?")
         values.append(normalize_scoring_prompt(prompt))
+    if starred is not None:
+        if not isinstance(starred, bool):
+            raise ValueError("Starred must be true or false.")
+        updates.append("starred = ?")
+        values.append(1 if starred else 0)
     if not updates:
         return get_run(run_id)
 
@@ -2419,6 +2427,7 @@ class Handler(SimpleHTTPRequestHandler):
                     int(run_match.group(1)),
                     name=payload.get("name") if "name" in payload else None,
                     prompt=payload.get("prompt") if "prompt" in payload else None,
+                    starred=payload.get("starred") if "starred" in payload else None,
                 )
                 if not run:
                     self.send_json({"error": "Run not found"}, 404)

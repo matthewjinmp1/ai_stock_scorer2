@@ -379,6 +379,20 @@ class PromptAndParsingTests(ServerTestCase):
 
 
 class RunWorkerTests(ServerTestCase):
+    def test_run_can_be_starred_and_unstarred(self):
+        run_id = self.create_run(company_count=1)
+
+        starred = server.update_scoring_run(run_id, starred=True)
+        self.assertEqual(starred["starred"], 1)
+        listed = next(run for run in server.list_runs() if run["id"] == run_id)
+        self.assertEqual(listed["starred"], 1)
+
+        unstarred = server.update_scoring_run(run_id, starred=False)
+        self.assertEqual(unstarred["starred"], 0)
+
+        with self.assertRaisesRegex(ValueError, "true or false"):
+            server.update_scoring_run(run_id, starred="yes")
+
     def test_custom_stock_list_run_uses_saved_members_in_order(self):
         stock_list = server.save_stock_list("Focused", ["CCC", "AAA"])
         server.start_scoring_worker_process = lambda run_id, start_index=0: 12345

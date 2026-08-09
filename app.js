@@ -19,7 +19,9 @@ const listStatus = document.querySelector("#listStatus");
 const runButton = document.querySelector("#runButton");
 const statusEl = document.querySelector("#status");
 const runsStatusEl = document.querySelector("#runsStatus");
+const starredRunsStatusEl = document.querySelector("#starredRunsStatus");
 const runRows = document.querySelector("#runRows");
+const starredRunRows = document.querySelector("#starredRunRows");
 const homeTabs = [...document.querySelectorAll("[data-home-tab]")];
 const homePanels = [...document.querySelectorAll("[data-home-panel]")];
 const pageParams = new URLSearchParams(window.location.search);
@@ -61,8 +63,13 @@ function selectHomeTab(tabName, updateHash = true) {
   }
 }
 
-function setRunRows(message) {
-  runRows.innerHTML = `<tr><td colspan="7">${escapeHtml(message)}</td></tr>`;
+function setRunRows(message, target = runRows) {
+  target.innerHTML = `<tr><td colspan="7">${escapeHtml(message)}</td></tr>`;
+}
+
+function setRunsStatus(message) {
+  runsStatusEl.textContent = message;
+  starredRunsStatusEl.textContent = message;
 }
 
 async function fetchJson(url) {
@@ -274,7 +281,7 @@ async function renameRun(runId, currentName) {
   if (name === null) return;
   const trimmed = name.trim();
   if (!trimmed) {
-    runsStatusEl.textContent = "Run name is required.";
+    setRunsStatus("Run name is required.");
     return;
   }
 
@@ -286,17 +293,38 @@ async function renameRun(runId, currentName) {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not rename run");
-    runsStatusEl.textContent = `Renamed to ${payload.run.name}.`;
+    setRunsStatus(`Renamed to ${payload.run.name}.`);
     await loadRuns();
   } catch (error) {
-    runsStatusEl.textContent = error.message;
+    setRunsStatus(error.message);
+  }
+}
+
+async function toggleRunStar(runId, shouldStar, currentName) {
+  const label = currentName || `Run #${runId}`;
+  const scrollY = window.scrollY;
+  setRunsStatus(`${shouldStar ? "Starring" : "Unstarring"} ${label}...`);
+  try {
+    const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ starred: shouldStar }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not update starred run");
+    setRunsStatus(`${shouldStar ? "Starred" : "Unstarred"} ${label}.`);
+    await loadRuns();
+    requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0 }));
+  } catch (error) {
+    setRunsStatus(error.message);
+    requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0 }));
   }
 }
 
 async function deleteRun(runId, currentName) {
   const label = currentName || `Run #${runId}`;
   const scrollY = window.scrollY;
-  runsStatusEl.textContent = `Archiving ${label}...`;
+  setRunsStatus(`Archiving ${label}...`);
 
   try {
     const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
@@ -304,11 +332,11 @@ async function deleteRun(runId, currentName) {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not archive run");
-    runsStatusEl.textContent = `Archived ${label}.`;
+    setRunsStatus(`Archived ${label}.`);
     await loadRuns();
     requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0 }));
   } catch (error) {
-    runsStatusEl.textContent = error.message;
+    setRunsStatus(error.message);
     requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0 }));
   }
 }
@@ -444,14 +472,29 @@ async function archiveCurrentStockList() {
 
 async function loadRuns() {
   setRunRows("Loading saved scoring runs...");
+  setRunRows("Loading starred scoring runs...", starredRunRows);
   const payload = await fetchJson("/api/runs");
 
   if (!payload.runs.length) {
     setRunRows("No saved scoring runs yet.");
+    setRunRows("No starred runs yet.", starredRunRows);
     return;
   }
 
-  runRows.innerHTML = payload.runs
+  renderRunTable(runRows, payload.runs, "No saved scoring runs yet.");
+  renderRunTable(
+    starredRunRows,
+    payload.runs.filter((run) => run.starred),
+    "No starred runs yet. Star a run from the Runs tab."
+  );
+}
+
+function renderRunTable(target, runs, emptyMessage) {
+  if (!runs.length) {
+    setRunRows(emptyMessage, target);
+    return;
+  }
+  target.innerHTML = runs
     .map(
       (run) => `
         <tr class="clickable-row" data-run-id="${run.id}">
@@ -463,6 +506,13 @@ async function loadRuns() {
           <td>${formatDate(run.created_at)}</td>
           <td class="row-actions">
             <div class="row-actions-inner">
+              <button
+                class="link-button"
+                type="button"
+                data-star-run="${run.id}"
+                data-starred="${run.starred ? "false" : "true"}"
+                data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
+              >${run.starred ? "Unstar" : "Star"}</button>
               <button
                 class="link-button"
                 type="button"
@@ -617,7 +667,18 @@ selectedStocks.addEventListener("click", (event) => {
   selectedTickers = selectedTickers.filter((ticker) => ticker !== button.dataset.removeTicker);
   renderStockPicker();
 });
-runRows.addEventListener("click", (event) => {
+function handleRunTableClick(event) {
+  const starButton = event.target.closest("[data-star-run]");
+  if (starButton) {
+    event.preventDefault();
+    toggleRunStar(
+      starButton.dataset.starRun,
+      starButton.dataset.starred === "true",
+      starButton.dataset.runName
+    );
+    return;
+  }
+
   const renameButton = event.target.closest("[data-rename-run]");
   if (renameButton) {
     event.preventDefault();
@@ -636,13 +697,17 @@ runRows.addEventListener("click", (event) => {
   if (row) {
     window.location.href = `/run.html?id=${encodeURIComponent(row.dataset.runId)}`;
   }
-});
+}
+
+runRows.addEventListener("click", handleRunTableClick);
+starredRunRows.addEventListener("click", handleRunTableClick);
 
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) {
     loadRuns().catch((error) => {
-      runsStatusEl.textContent = error.message;
+      setRunsStatus(error.message);
       setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
+      setRunRows("Starred runs could not be loaded. Refresh the page to try again.", starredRunRows);
     });
   }
 });
@@ -655,6 +720,7 @@ if ("EventSource" in window) {
 try {
   selectHomeTab(editRunId ? "set-run" : activeTabFromHash(), Boolean(editRunId));
   setRunRows("Loading saved scoring runs...");
+  setRunRows("Loading starred scoring runs...", starredRunRows);
   await loadCompanies();
   await loadModels();
   await loadStockLists();
@@ -662,6 +728,7 @@ try {
   await loadRuns();
 } catch (error) {
   statusEl.textContent = error.message;
-  runsStatusEl.textContent = error.message;
+  setRunsStatus(error.message);
   setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
+  setRunRows("Starred runs could not be loaded. Refresh the page to try again.", starredRunRows);
 }

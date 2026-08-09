@@ -38,6 +38,16 @@
           data-home-tab="runs"
           tabindex="-1"
         >Runs</button>
+        <button
+          id="starredRunsTab"
+          class="home-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="starredRunsPanel"
+          data-home-tab="starred-runs"
+          tabindex="-1"
+        >Starred Runs</button>
       </nav>
 
       <section
@@ -166,6 +176,39 @@
               </tr>
             </thead>
             <tbody id="runRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        id="starredRunsPanel"
+        class="home-tab-panel runs-panel"
+        role="tabpanel"
+        aria-labelledby="starredRunsTab starredRunsTitle"
+        data-home-panel="starred-runs"
+        hidden
+      >
+        <div class="section-heading runs-heading">
+          <div>
+            <p class="eyebrow">Pinned rankings</p>
+            <h2 id="starredRunsTitle">Starred Runs</h2>
+          </div>
+        </div>
+        <p id="starredRunsStatus" class="status" role="status"></p>
+        <div class="table-wrap" aria-label="Starred scoring runs">
+          <table>
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Progress</th>
+                <th>Cost</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="starredRunRows"></tbody>
           </table>
         </div>
       </section>
