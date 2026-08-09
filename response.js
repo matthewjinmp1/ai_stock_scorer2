@@ -8,6 +8,7 @@ const els = {
   scoreValue: document.querySelector("#scoreValue"),
   tickerLabel: document.querySelector("#tickerLabel"),
   backLink: document.querySelector("#backLink"),
+  reasoningLink: document.querySelector("#reasoningLink"),
   status: document.querySelector("#status"),
   responseContent: document.querySelector("#responseContent"),
   finishReason: document.querySelector("#finishReason"),
@@ -44,6 +45,10 @@ function setBackLink() {
     if (value) url.searchParams.set(key, value);
   });
   els.backLink.href = `${url.pathname}${url.search}`;
+
+  const reasoningUrl = new URL("/reasoning.html", window.location.origin);
+  params.forEach((value, key) => reasoningUrl.searchParams.set(key, value));
+  els.reasoningLink.href = `${reasoningUrl.pathname}${reasoningUrl.search}`;
 }
 
 async function loadResponse() {

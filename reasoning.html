@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AI Response</title>
+    <title>Reasoning Trace</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -14,33 +14,32 @@
 
       <section class="hero compact-hero">
         <div>
-          <p class="eyebrow">AI Response</p>
-          <h1 id="title">Stock Response</h1>
+          <p class="eyebrow">Reasoning Trace</p>
+          <h1 id="title">Stock Reasoning</h1>
           <p id="subtitle" class="lede"></p>
         </div>
         <div class="hero-stat">
-          <span>Score</span>
-          <strong id="scoreValue">--</strong>
-          <small id="tickerLabel"></small>
+          <span>Reasoning</span>
+          <strong id="reasoningTokens">--</strong>
+          <small>tokens</small>
         </div>
       </section>
 
-      <section class="toolbar detail-toolbar multi-action-toolbar" aria-label="Response controls">
+      <section class="toolbar detail-toolbar multi-action-toolbar" aria-label="Reasoning controls">
+        <a id="responseLink" class="secondary-link" href="/response.html">Back to response</a>
         <a id="backLink" class="secondary-link" href="/run.html">Back to ranking</a>
-        <a id="reasoningLink" class="secondary-link" href="/reasoning.html">Reasoning trace</a>
       </section>
 
       <p id="status" class="status" role="status"></p>
 
       <article class="detail-panel response-only-panel">
         <div class="panel-heading">
-          <h2>AI Response</h2>
-          <span id="finishReason"></span>
+          <h2>Reasoning Trace</h2>
+          <span id="reasoningStats"></span>
         </div>
-        <div class="text-block response-only-text" id="responseContent">--</div>
-        <p id="responseError" class="error-cell"></p>
+        <div class="text-block response-only-text" id="reasoningContent">--</div>
       </article>
     </main>
-    <script src="/response.js" type="module"></script>
+    <script src="/reasoning.js" type="module"></script>
   </body>
 </html>
