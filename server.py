@@ -1144,6 +1144,7 @@ def ai_request_stats_for_run(run_id):
         "successful_request_count": 0,
         "failed_request_count": 0,
         "total_latency_ms": 0,
+        "average_response_tokens": None,
         "average_latency_ms": None,
     }
     for entry in ai_request_entries():
@@ -1179,6 +1180,9 @@ def ai_request_stats_for_run(run_id):
             pass
 
     if stats["request_count"]:
+        stats["average_response_tokens"] = round(
+            stats["response_tokens"] / stats["request_count"], 1
+        )
         stats["average_latency_ms"] = round(stats["total_latency_ms"] / stats["request_count"])
     return stats
 

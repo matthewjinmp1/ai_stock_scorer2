@@ -105,6 +105,37 @@ class ServerTestCase(unittest.TestCase):
 
 
 class PromptAndParsingTests(ServerTestCase):
+    def test_run_stats_include_average_response_tokens_without_reasoning(self):
+        entries = [
+            {
+                "run_id": 7,
+                "response": {"success": True},
+                "token_stats": {
+                    "completion_tokens": 120,
+                    "completion_tokens_details": {"reasoning_tokens": 20},
+                },
+            },
+            {
+                "run_id": 7,
+                "response": {"success": False},
+                "token_stats": {
+                    "completion_tokens": 80,
+                    "completion_tokens_details": {"reasoning_tokens": 0},
+                },
+            },
+            {
+                "run_id": 8,
+                "response": {"success": True},
+                "token_stats": {"completion_tokens": 999},
+            },
+        ]
+
+        with mock.patch.object(server, "ai_request_entries", return_value=entries):
+            stats = server.ai_request_stats_for_run(7)
+
+        self.assertEqual(stats["response_tokens"], 180)
+        self.assertEqual(stats["average_response_tokens"], 90.0)
+
     def test_active_company_universe_uses_latest_fetch(self):
         with self.connect() as connection:
             latest_fetch = connection.execute("SELECT MAX(fetched_at) FROM companies").fetchone()[0]
