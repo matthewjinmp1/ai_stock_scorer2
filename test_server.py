@@ -154,6 +154,22 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertEqual(stats["response_tokens"], 180)
         self.assertEqual(stats["average_response_tokens"], 90.0)
 
+    def test_request_stats_by_ticker_include_duration(self):
+        entries = [
+            {
+                "run_id": 7,
+                "company": {"ticker": "AAA"},
+                "response": {"success": True},
+                "timing": {"duration_ms": 18425},
+                "token_stats": {"prompt_tokens": 10, "completion_tokens": 20},
+            }
+        ]
+
+        with mock.patch.object(server, "ai_request_entries", return_value=entries):
+            stats = server.ai_request_stats_by_ticker(7)
+
+        self.assertEqual(stats["AAA"]["duration_ms"], 18425)
+
     def test_active_company_universe_uses_latest_fetch(self):
         with self.connect() as connection:
             latest_fetch = connection.execute("SELECT MAX(fetched_at) FROM companies").fetchone()[0]

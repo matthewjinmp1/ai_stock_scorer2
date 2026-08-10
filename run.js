@@ -46,6 +46,7 @@ const SORT_KEYS = new Set([
   "inputTokens",
   "responseTokens",
   "reasoningTokens",
+  "durationMs",
   "cost",
   "error",
 ]);
@@ -354,6 +355,7 @@ function sortValue(result, key) {
   if (key === "inputTokens") return numericValue(result.prompt_tokens);
   if (key === "responseTokens") return numericValue(result.response_tokens);
   if (key === "reasoningTokens") return numericValue(result.reasoning_tokens);
+  if (key === "durationMs") return numericValue(result.duration_ms);
   if (key === "cost") return numericValue(result.cost);
   if (key === "error") return (result.error || "").toLowerCase();
   return result.scoreRank;
@@ -568,7 +570,7 @@ function setSort(key) {
   if (sortState.key === key) {
     sortState = { key, direction: sortState.direction === "asc" ? "desc" : "asc" };
   } else {
-    const direction = ["score", "inputTokens", "responseTokens", "reasoningTokens", "cost"].includes(key)
+    const direction = ["score", "inputTokens", "responseTokens", "reasoningTokens", "durationMs", "cost"].includes(key)
       ? "desc"
       : "asc";
     sortState = { key, direction };
@@ -811,7 +813,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="9">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="10">Waiting for scores...</td></tr>';
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
     return;
@@ -831,7 +833,7 @@ function renderRun(run) {
         : viewResults.length
           ? "No scores match this filter."
           : "No successful scores yet.";
-    resultRows.innerHTML = `<tr><td colspan="9">${emptyMessage}</td></tr>`;
+    resultRows.innerHTML = `<tr><td colspan="10">${emptyMessage}</td></tr>`;
     restoreScrollPosition();
     return;
   }
@@ -861,6 +863,7 @@ function renderRun(run) {
           <td>${formatNumber(result.prompt_tokens)}</td>
           <td>${formatNumber(result.response_tokens)}</td>
           <td>${formatNumber(result.reasoning_tokens)}</td>
+          <td>${formatMs(result.duration_ms)}</td>
           <td>${formatCents(result.cost)}</td>
           <td class="error-cell">${error}</td>
           <td class="details-cell"><a class="details-link" href="${detailsUrl}">Details</a></td>

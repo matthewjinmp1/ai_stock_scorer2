@@ -1082,6 +1082,7 @@ def get_run(run_id):
         result["completion_tokens"] = stats.get("completion_tokens", 0)
         result["response_tokens"] = stats.get("response_tokens", 0)
         result["reasoning_tokens"] = stats.get("reasoning_tokens", 0)
+        result["duration_ms"] = stats.get("duration_ms")
         result["cost"] = stats.get("cost", 0)
         result["logo"] = logos.get(result["ticker"], "")
         payload["results"].append(result)
@@ -1326,6 +1327,7 @@ def ai_request_stats_by_ticker(run_id):
                 "completion_tokens": 0,
                 "response_tokens": 0,
                 "reasoning_tokens": 0,
+                "duration_ms": None,
             },
         )
         for key in ("cost", "total_tokens", "prompt_tokens", "completion_tokens"):
@@ -1341,6 +1343,10 @@ def ai_request_stats_by_ticker(run_id):
             pass
         try:
             current["reasoning_tokens"] += int(completion_details.get("reasoning_tokens") or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            current["duration_ms"] = int((entry.get("timing") or {}).get("duration_ms"))
         except (TypeError, ValueError):
             pass
     return stats
