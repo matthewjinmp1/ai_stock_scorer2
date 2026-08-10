@@ -1270,6 +1270,7 @@ def ai_request_stats_for_run(run_id):
         "failed_request_count": 0,
         "total_latency_ms": 0,
         "average_response_tokens": None,
+        "average_reasoning_tokens": None,
         "average_latency_ms": None,
     }
     for entry in effective_ai_request_entries():
@@ -1307,6 +1308,9 @@ def ai_request_stats_for_run(run_id):
     if stats["request_count"]:
         stats["average_response_tokens"] = round(
             stats["response_tokens"] / stats["request_count"], 1
+        )
+        stats["average_reasoning_tokens"] = round(
+            stats["reasoning_tokens"] / stats["request_count"], 1
         )
         stats["average_latency_ms"] = round(stats["total_latency_ms"] / stats["request_count"])
     return stats

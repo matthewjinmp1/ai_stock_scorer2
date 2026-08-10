@@ -164,6 +164,8 @@ class PromptAndParsingTests(ServerTestCase):
 
         self.assertEqual(stats["response_tokens"], 180)
         self.assertEqual(stats["average_response_tokens"], 90.0)
+        self.assertEqual(stats["reasoning_tokens"], 20)
+        self.assertEqual(stats["average_reasoning_tokens"], 10.0)
 
     def test_request_stats_by_ticker_include_duration(self):
         entries = [

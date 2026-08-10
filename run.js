@@ -24,6 +24,7 @@ const statEta = document.querySelector("#statEta");
 const statCost = document.querySelector("#statCost");
 const statTokens = document.querySelector("#statTokens");
 const statAverageResponseTokens = document.querySelector("#statAverageResponseTokens");
+const statAverageReasoningTokens = document.querySelector("#statAverageReasoningTokens");
 const statLatency = document.querySelector("#statLatency");
 const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
@@ -348,6 +349,7 @@ function renderRunStats(run) {
   statCost.textContent = formatCents(stats.cost);
   statTokens.textContent = formatNumber(stats.total_tokens);
   statAverageResponseTokens.textContent = formatNumber(stats.average_response_tokens);
+  statAverageReasoningTokens.textContent = formatNumber(stats.average_reasoning_tokens);
   statLatency.textContent = formatMs(stats.average_latency_ms);
   statScoreRange.textContent =
     minScore === null ? "--" : `${formatScore(minScore)}-${formatScore(maxScore)}`;
