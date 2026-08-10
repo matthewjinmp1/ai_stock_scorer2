@@ -44,6 +44,10 @@
           <span>Prompt</span>
           <textarea id="runEditorPrompt" rows="8"></textarea>
         </label>
+        <label>
+          <span>Response token limit</span>
+          <input id="runEditorMaxTokens" type="number" min="1" max="32768" step="1" />
+        </label>
         <div class="actions">
           <button id="saveRunButton" type="button">Save changes</button>
           <button id="cancelRunEditButton" class="secondary-button" type="button">Cancel</button>

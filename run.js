@@ -9,6 +9,7 @@ const deleteButton = document.querySelector("#deleteButton");
 const runEditor = document.querySelector("#runEditor");
 const runEditorName = document.querySelector("#runEditorName");
 const runEditorPrompt = document.querySelector("#runEditorPrompt");
+const runEditorMaxTokens = document.querySelector("#runEditorMaxTokens");
 const saveRunButton = document.querySelector("#saveRunButton");
 const cancelRunEditButton = document.querySelector("#cancelRunEditButton");
 const runTitle = document.querySelector("#runTitle");
@@ -596,6 +597,7 @@ function showRunEditor() {
   runEditor.hidden = false;
   runEditorName.value = currentRun.name || `Run #${currentRun.id}`;
   runEditorPrompt.value = currentRun.prompt || "";
+  runEditorMaxTokens.value = String(currentRun.max_tokens || 200);
   runEditorName.focus();
 }
 
@@ -611,6 +613,7 @@ async function saveCurrentRun() {
 
   const name = runEditorName.value.trim();
   const prompt = runEditorPrompt.value.trim();
+  const maxTokens = Number(runEditorMaxTokens.value);
   if (!name) {
     statusEl.textContent = "Run name is required.";
     runEditorName.focus();
@@ -626,6 +629,11 @@ async function saveCurrentRun() {
     runEditorPrompt.focus();
     return;
   }
+  if (!Number.isInteger(maxTokens) || maxTokens < 1 || maxTokens > 32768) {
+    statusEl.textContent = "Choose a response token limit from 1 to 32,768.";
+    runEditorMaxTokens.focus();
+    return;
+  }
 
   saveRunButton.disabled = true;
   statusEl.textContent = "Saving run...";
@@ -633,7 +641,7 @@ async function saveCurrentRun() {
     const response = await fetch(`/api/runs/${currentRun.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, prompt }),
+      body: JSON.stringify({ name, prompt, maxTokens }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not save run");

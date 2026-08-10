@@ -1446,7 +1446,7 @@ def rename_scoring_run(run_id, name):
     return update_scoring_run(run_id, name=name)
 
 
-def update_scoring_run(run_id, name=None, prompt=None, starred=None):
+def update_scoring_run(run_id, name=None, prompt=None, starred=None, max_tokens=None):
     updates = []
     values = []
     if name is not None:
@@ -1455,6 +1455,9 @@ def update_scoring_run(run_id, name=None, prompt=None, starred=None):
     if prompt is not None:
         updates.append("prompt = ?")
         values.append(normalize_scoring_prompt(prompt))
+    if max_tokens is not None:
+        updates.append("max_tokens = ?")
+        values.append(normalize_max_tokens(max_tokens))
     if starred is not None:
         if not isinstance(starred, bool):
             raise ValueError("Starred must be true or false.")
@@ -2498,6 +2501,7 @@ class Handler(SimpleHTTPRequestHandler):
                     name=payload.get("name") if "name" in payload else None,
                     prompt=payload.get("prompt") if "prompt" in payload else None,
                     starred=payload.get("starred") if "starred" in payload else None,
+                    max_tokens=payload.get("maxTokens") if "maxTokens" in payload else None,
                 )
                 if not run:
                     self.send_json({"error": "Run not found"}, 404)

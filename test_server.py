@@ -431,10 +431,12 @@ class RunWorkerTests(ServerTestCase):
             run_id,
             name="Updated ranking",
             prompt="Updated score for COMPANY",
+            max_tokens=2400,
         )
 
         self.assertEqual(updated["name"], "Updated ranking")
         self.assertEqual(updated["prompt"], "Updated score for COMPANY")
+        self.assertEqual(updated["max_tokens"], 2400)
 
     def test_run_can_be_starred_and_unstarred(self):
         run_id = self.create_run(company_count=1)
