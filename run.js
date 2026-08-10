@@ -163,6 +163,14 @@ function formatMs(value) {
   })} seconds`;
 }
 
+function formatCompactSeconds(value) {
+  if (value === null || value === undefined) return "--";
+  return `${(Number(value) / 1000).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}s`;
+}
+
 function formatDuration(ms) {
   if (ms === null || ms === undefined) return "--";
   const seconds = Math.max(0, Math.ceil(Number(ms) / 1000));
@@ -863,7 +871,7 @@ function renderRun(run) {
           <td>${formatNumber(result.prompt_tokens)}</td>
           <td>${formatNumber(result.response_tokens)}</td>
           <td>${formatNumber(result.reasoning_tokens)}</td>
-          <td>${formatMs(result.duration_ms)}</td>
+          <td>${formatCompactSeconds(result.duration_ms)}</td>
           <td>${formatCents(result.cost)}</td>
           <td class="error-cell">${error}</td>
           <td class="details-cell"><a class="details-link" href="${detailsUrl}">Details</a></td>
