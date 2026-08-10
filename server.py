@@ -91,6 +91,8 @@ DEFAULT_SCORING_CONCURRENCY = 20
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
 OPENROUTER_MAX_ATTEMPTS = 3
 OPENROUTER_ATTEMPT_TIMEOUT_SECONDS = 90
+OPENROUTER_TIMEOUT_SECONDS_PER_TOKEN = 0.08
+OPENROUTER_MAX_ATTEMPT_TIMEOUT_SECONDS = 900
 MAX_OPENROUTER_RESPONSE_TOKENS = 32768
 OPENROUTER_RESPONSE_CACHE_TTL_SECONDS = 86400
 TOKEN_LIMIT_ERROR = "Invalid response: model hit the response token limit before completing."
@@ -272,14 +274,17 @@ def openrouter_max_attempts():
     return max(1, min(5, value))
 
 
-def openrouter_attempt_timeout_seconds():
-    try:
-        value = float(
-            os.environ.get(
-                "OPENROUTER_ATTEMPT_TIMEOUT_SECONDS",
-                str(OPENROUTER_ATTEMPT_TIMEOUT_SECONDS),
-            )
+def openrouter_attempt_timeout_seconds(max_tokens=None):
+    configured_value = os.environ.get("OPENROUTER_ATTEMPT_TIMEOUT_SECONDS")
+    if configured_value is None:
+        token_limit = normalize_max_tokens(max_tokens)
+        scaled_timeout = token_limit * OPENROUTER_TIMEOUT_SECONDS_PER_TOKEN
+        return min(
+            OPENROUTER_MAX_ATTEMPT_TIMEOUT_SECONDS,
+            max(OPENROUTER_ATTEMPT_TIMEOUT_SECONDS, scaled_timeout),
         )
+    try:
+        value = float(configured_value)
     except (TypeError, ValueError):
         value = OPENROUTER_ATTEMPT_TIMEOUT_SECONDS
     return max(1, value)
@@ -1761,6 +1766,9 @@ def ai_log_entry(
             "messages": request_payload.get("messages"),
             "temperature": request_payload.get("temperature"),
             "max_tokens": request_payload.get("max_tokens"),
+            "attempt_timeout_seconds": openrouter_attempt_timeout_seconds(
+                request_payload.get("max_tokens")
+            ),
             "reasoning": request_payload.get("reasoning"),
             "provider_preferences": request_payload.get("provider"),
             "response_cache": {
@@ -1908,14 +1916,15 @@ def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, ma
         method="POST",
     )
     max_attempts = openrouter_max_attempts()
+    attempt_timeout_seconds = openrouter_attempt_timeout_seconds(request_payload["max_tokens"])
     for attempt in range(1, max_attempts + 1):
         started_at = time.time()
         try:
-            with urllib.request.urlopen(request, timeout=60) as response:
+            with urllib.request.urlopen(request, timeout=attempt_timeout_seconds) as response:
                 http_status = response.status
                 response_body = read_http_response_with_deadline(
                     response,
-                    openrouter_attempt_timeout_seconds(),
+                    attempt_timeout_seconds,
                 )
                 payload = json.loads(response_body.decode("utf-8"))
                 response_headers = getattr(response, "headers", None)

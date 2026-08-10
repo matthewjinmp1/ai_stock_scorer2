@@ -123,6 +123,17 @@ class PromptAndParsingTests(ServerTestCase):
             server.read_http_response_with_deadline(StalledResponse(), 0.02)
         self.assertLess(time.monotonic() - started_at, 0.5)
 
+    def test_openrouter_timeout_scales_with_response_token_limit(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("OPENROUTER_ATTEMPT_TIMEOUT_SECONDS", None)
+            self.assertEqual(server.openrouter_attempt_timeout_seconds(200), 90)
+            self.assertEqual(server.openrouter_attempt_timeout_seconds(3000), 240)
+            self.assertEqual(server.openrouter_attempt_timeout_seconds(32768), 900)
+
+    def test_openrouter_timeout_allows_an_explicit_override(self):
+        with mock.patch.dict(os.environ, {"OPENROUTER_ATTEMPT_TIMEOUT_SECONDS": "150"}):
+            self.assertEqual(server.openrouter_attempt_timeout_seconds(3000), 150)
+
     def test_run_stats_include_average_response_tokens_without_reasoning(self):
         entries = [
             {
