@@ -8,12 +8,16 @@ const els = {
   scoreValue: document.querySelector("#scoreValue"),
   tickerLabel: document.querySelector("#tickerLabel"),
   backLink: document.querySelector("#backLink"),
-  reasoningLink: document.querySelector("#reasoningLink"),
   status: document.querySelector("#status"),
   responseContent: document.querySelector("#responseContent"),
   finishReason: document.querySelector("#finishReason"),
   responseError: document.querySelector("#responseError"),
+  reasoningContent: document.querySelector("#reasoningContent"),
+  reasoningStats: document.querySelector("#reasoningStats"),
 };
+
+const responseTabs = [...document.querySelectorAll("[data-response-view]")];
+const responsePanels = [...document.querySelectorAll("[data-response-panel]")];
 
 function text(value, fallback = "--") {
   return value === undefined || value === null || value === "" ? fallback : String(value);
@@ -37,6 +41,33 @@ function errorText(responseData, result) {
   );
 }
 
+function displayReasoningTrace(value) {
+  if (value === undefined || value === null || value === "") return "";
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+}
+
+function setResponseView(view, preserveScroll = true) {
+  const scrollY = window.scrollY;
+  responseTabs.forEach((button) => {
+    const isActive = button.dataset.responseView === view;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+    button.tabIndex = isActive ? 0 : -1;
+  });
+  responsePanels.forEach((panel) => {
+    panel.hidden = panel.dataset.responsePanel !== view;
+  });
+  if (preserveScroll) {
+    const restoreScroll = () => window.scrollTo({ top: scrollY, left: 0 });
+    restoreScroll();
+    queueMicrotask(restoreScroll);
+    requestAnimationFrame(() => {
+      restoreScroll();
+      requestAnimationFrame(restoreScroll);
+    });
+  }
+}
+
 function setBackLink() {
   const url = new URL("/run.html", window.location.origin);
   url.searchParams.set("id", runId);
@@ -45,10 +76,6 @@ function setBackLink() {
     if (value) url.searchParams.set(key, value);
   });
   els.backLink.href = `${url.pathname}${url.search}`;
-
-  const reasoningUrl = new URL("/reasoning.html", window.location.origin);
-  params.forEach((value, key) => reasoningUrl.searchParams.set(key, value));
-  els.reasoningLink.href = `${reasoningUrl.pathname}${reasoningUrl.search}`;
 }
 
 async function loadResponse() {
@@ -65,6 +92,14 @@ async function loadResponse() {
   const responseData = aiRequest?.response || {};
   const visibleResponse = responseData.visible_content ?? result.raw_response;
   const error = errorText(responseData, result);
+  const completionDetails = aiRequest?.token_stats?.completion_tokens_details || {};
+  const reasoningTokenCount = Number(completionDetails.reasoning_tokens || 0);
+  const reasoningTrace = displayReasoningTrace(
+    aiRequest?.chain_of_thought ||
+      responseData.reasoning ||
+      responseData.reasoning_content ||
+      responseData.reasoning_details
+  );
 
   document.title = `${result.company_name} AI Response`;
   els.title.textContent = result.company_name;
@@ -80,7 +115,25 @@ async function loadResponse() {
     .filter(Boolean)
     .join(" • ");
   els.responseError.textContent = error;
+  els.reasoningStats.textContent = `${reasoningTokenCount.toLocaleString()} reasoning tokens`;
+  els.reasoningContent.textContent =
+    reasoningTrace ||
+    aiRequest?.chain_of_thought_note ||
+    "Reasoning text was not exposed by the model/API for this request.";
 }
+
+responseTabs.forEach((button) => {
+  button.addEventListener("click", () => setResponseView(button.dataset.responseView));
+  button.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    event.preventDefault();
+    const offset = event.key === "ArrowRight" ? 1 : -1;
+    const index = responseTabs.indexOf(button);
+    const next = responseTabs[(index + offset + responseTabs.length) % responseTabs.length];
+    setResponseView(next.dataset.responseView);
+    next.focus();
+  });
+});
 
 if ("EventSource" in window) {
   const events = new EventSource("/events");

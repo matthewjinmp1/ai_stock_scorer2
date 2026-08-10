@@ -25,21 +25,65 @@
         </div>
       </section>
 
-      <section class="toolbar detail-toolbar multi-action-toolbar" aria-label="Response controls">
+      <section class="toolbar detail-toolbar" aria-label="Response controls">
         <a id="backLink" class="secondary-link" href="/run.html">Back to ranking</a>
-        <a id="reasoningLink" class="secondary-link" href="/reasoning.html">Reasoning trace</a>
       </section>
 
       <p id="status" class="status" role="status"></p>
 
-      <article class="detail-panel response-only-panel">
-        <div class="panel-heading">
-          <h2>AI Response</h2>
-          <span id="finishReason"></span>
-        </div>
-        <div class="text-block response-only-text" id="responseContent">--</div>
-        <p id="responseError" class="error-cell"></p>
-      </article>
+      <nav class="result-view-tabs" role="tablist" aria-label="Response content">
+        <button
+          id="responseTab"
+          class="result-view-tab is-active"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="responsePanel"
+          data-response-view="response"
+        >AI Response</button>
+        <button
+          id="reasoningTab"
+          class="result-view-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="reasoningPanel"
+          data-response-view="reasoning"
+          tabindex="-1"
+        >Reasoning Trace</button>
+      </nav>
+
+      <section class="response-view-stack">
+        <article
+          id="responsePanel"
+          class="detail-panel response-only-panel response-view-panel"
+          role="tabpanel"
+          aria-labelledby="responseTab"
+          data-response-panel="response"
+        >
+          <div class="panel-heading">
+            <h2>AI Response</h2>
+            <span id="finishReason"></span>
+          </div>
+          <div class="text-block response-only-text" id="responseContent">--</div>
+          <p id="responseError" class="error-cell"></p>
+        </article>
+
+        <article
+          id="reasoningPanel"
+          class="detail-panel response-only-panel response-view-panel"
+          role="tabpanel"
+          aria-labelledby="reasoningTab"
+          data-response-panel="reasoning"
+          hidden
+        >
+          <div class="panel-heading">
+            <h2>Reasoning Trace</h2>
+            <span id="reasoningStats"></span>
+          </div>
+          <div class="text-block response-only-text" id="reasoningContent">--</div>
+        </article>
+      </section>
     </main>
     <script src="/response.js" type="module"></script>
   </body>

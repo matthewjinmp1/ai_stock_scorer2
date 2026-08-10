@@ -444,10 +444,6 @@ button:hover {
   padding: 0 20px;
 }
 
-.detail-toolbar.multi-action-toolbar {
-  grid-template-columns: repeat(2, minmax(220px, max-content));
-}
-
 .detail-shell {
   max-width: 1320px;
 }
@@ -1048,6 +1044,20 @@ tbody tr:hover {
   overflow: visible;
 }
 
+.response-view-stack {
+  display: grid;
+}
+
+.response-view-panel {
+  grid-area: 1 / 1;
+}
+
+.response-view-panel[hidden] {
+  display: block;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .company-cell {
   display: flex;
   align-items: center;
@@ -1103,10 +1113,6 @@ tbody tr:hover {
     width: 100%;
   }
 
-  .detail-toolbar.multi-action-toolbar {
-    width: 100%;
-    grid-template-columns: 1fr;
-  }
 
   .response-text {
     height: auto;
