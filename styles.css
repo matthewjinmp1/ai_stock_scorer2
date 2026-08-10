@@ -800,6 +800,16 @@ button:disabled {
   display: none;
 }
 
+.failed-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 14px 0;
+}
+
+.failed-actions[hidden] {
+  display: none;
+}
+
 .score-stepper {
   display: flex;
   gap: 8px;

@@ -560,6 +560,32 @@ class RunWorkerTests(ServerTestCase):
         self.assertEqual(run["failed_count"], 0)
         self.assertEqual([(row["ticker"], row["score"]) for row in results], [("AAA", 88), ("BBB", 42), ("CCC", 55)])
 
+    def test_redrive_failed_run_targets_only_failed_tickers(self):
+        run_id = self.create_run(company_count=3)
+        companies = server.scoring_companies(3)
+        with self.connect() as connection:
+            server.save_result(connection, run_id, companies[0], 88, "88", None)
+            server.save_result(connection, run_id, companies[1], None, None, "Provider timeout")
+            server.update_run_counts(connection, run_id)
+            connection.execute(
+                "UPDATE scoring_runs SET status = ? WHERE id = ?",
+                ("completed", run_id),
+            )
+            connection.commit()
+
+        worker_calls = []
+
+        def fake_start_worker(run_id, start_index=0, target_tickers=None):
+            worker_calls.append((run_id, start_index, target_tickers))
+            return 12345
+
+        server.start_scoring_worker_process = fake_start_worker
+        run = server.redrive_failed_scoring_run(run_id)
+
+        self.assertEqual(worker_calls, [(run_id, 0, ["BBB"])])
+        self.assertEqual(run["status"], "queued")
+        self.assertEqual(run["failed_count"], 1)
+
     def test_get_run_includes_company_logos(self):
         run_id = self.create_run(company_count=1)
         with self.connect() as connection:

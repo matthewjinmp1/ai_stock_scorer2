@@ -5,6 +5,7 @@ const editRunButton = document.querySelector("#editRunButton");
 const copyRunButton = document.querySelector("#copyRunButton");
 const extendButton = document.querySelector("#extendButton");
 const fillButton = document.querySelector("#fillButton");
+const redriveFailedButton = document.querySelector("#redriveFailedButton");
 const deleteButton = document.querySelector("#deleteButton");
 const runEditor = document.querySelector("#runEditor");
 const runEditorName = document.querySelector("#runEditorName");
@@ -40,6 +41,7 @@ const resultsTableWrap = document.querySelector("#resultsTableWrap");
 const rankingTable = document.querySelector(".ranking-table");
 const rankingTabCount = document.querySelector("#rankingTabCount");
 const failedTabCount = document.querySelector("#failedTabCount");
+const failedActions = document.querySelector("#failedActions");
 
 const SORT_KEYS = new Set([
   "scoreRank",
@@ -441,6 +443,7 @@ function updateResultViewTabs(run) {
     button.tabIndex = isActive ? 0 : -1;
   });
   scoreFilterToolbar.hidden = activeResultView !== "ranking";
+  failedActions.hidden = activeResultView !== "failed";
   rankingTable.classList.toggle("ranking-view", activeResultView === "ranking");
   rankingTable.classList.toggle("failed-view", activeResultView === "failed");
   resultsTableWrap.setAttribute(
@@ -785,6 +788,51 @@ async function fillCurrentRun() {
   }
 }
 
+async function redriveFailedStocks() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before redriving failed stocks.";
+    return;
+  }
+
+  const failedCount = resultsForView(currentRun, "failed").length;
+  if (!failedCount) {
+    statusEl.textContent = "This run has no failed stocks to redrive.";
+    return;
+  }
+
+  redriveFailedButton.disabled = true;
+  try {
+    statusEl.textContent = "Estimating redrive cost...";
+    const confirmed = await confirmCostEstimate({
+      model: currentRun.model,
+      reasoningMode: currentRun.reasoning_mode,
+      companyCount: failedCount,
+      actionLabel: `Redrive all ${failedCount} failed stock${failedCount === 1 ? "" : "s"}?`,
+    });
+    if (!confirmed) {
+      statusEl.textContent = "Redrive canceled before any AI requests were sent.";
+      return;
+    }
+
+    statusEl.textContent = `Redriving ${failedCount} failed stock${failedCount === 1 ? "" : "s"}...`;
+    const response = await fetch(`/api/runs/${currentRun.id}/redrive-failed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not redrive failed stocks");
+    renderRun(payload.run);
+    if (pollTimer) window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(loadCurrentRun, 1000);
+  } catch (error) {
+    statusEl.textContent = error.message;
+  } finally {
+    redriveFailedButton.disabled =
+      !currentRun || canStop(currentRun) || !resultsForView(currentRun, "failed").length;
+  }
+}
+
 function renderRun(run) {
   currentRun = run;
   runTitle.textContent = run.name || `Run #${run.id}`;
@@ -802,6 +850,7 @@ function renderRun(run) {
   copyRunButton.disabled = false;
   extendButton.disabled = canStop(run) || Number(run.extension_limit || 0) <= Number(run.company_count || 0);
   fillButton.disabled = canStop(run) || !incompleteCount(run);
+  redriveFailedButton.disabled = canStop(run) || !resultsForView(run, "failed").length;
   deleteButton.disabled = false;
 
   if (!run.results.length) {
@@ -874,6 +923,7 @@ async function loadCurrentRun() {
     copyRunButton.disabled = true;
     extendButton.disabled = true;
     fillButton.disabled = true;
+    redriveFailedButton.disabled = true;
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
@@ -994,6 +1044,7 @@ editRunButton.addEventListener("click", showRunEditor);
 copyRunButton.addEventListener("click", copyCurrentRun);
 extendButton.addEventListener("click", extendCurrentRun);
 fillButton.addEventListener("click", fillCurrentRun);
+redriveFailedButton.addEventListener("click", redriveFailedStocks);
 saveRunButton.addEventListener("click", saveCurrentRun);
 cancelRunEditButton.addEventListener("click", hideRunEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);

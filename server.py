@@ -877,10 +877,13 @@ def process_is_running(pid):
         return False
 
 
-def start_scoring_worker_process(run_id, start_index=0):
+def start_scoring_worker_process(run_id, start_index=0, target_tickers=None):
+    command = [sys.executable, str(SCORING_WORKER_PATH), str(run_id), str(start_index)]
+    if target_tickers:
+        command.append(",".join(target_tickers))
     with SCORING_WORKER_LOG_PATH.open("ab") as log_file:
         process = subprocess.Popen(
-            [sys.executable, str(SCORING_WORKER_PATH), str(run_id), str(start_index)],
+            command,
             cwd=str(ROOT),
             stdout=log_file,
             stderr=log_file,
@@ -1033,6 +1036,52 @@ def fill_incomplete_scoring_run(run_id):
         connection.commit()
 
     start_scoring_worker_process(run_id)
+    return get_run(run_id)
+
+
+def failed_tickers_for_run(run_id):
+    with db_connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT ticker
+            FROM scoring_results
+            WHERE run_id = ? AND error IS NOT NULL
+            ORDER BY rank ASC
+            """,
+            (run_id,),
+        ).fetchall()
+    return [row["ticker"] for row in rows]
+
+
+def redrive_failed_scoring_run(run_id):
+    with db_connect() as connection:
+        run = connection.execute(
+            """
+            SELECT id, status
+            FROM scoring_runs
+            WHERE id = ? AND deleted_at IS NULL
+            """,
+            (run_id,),
+        ).fetchone()
+        if not run:
+            return None
+        if run["status"] in ("queued", "running", "stop_requested"):
+            raise ValueError("Wait for the current run to finish before redriving failed stocks.")
+        target_tickers = failed_tickers_for_run(run_id)
+        if not target_tickers:
+            raise ValueError("This run has no failed stocks to redrive.")
+
+        connection.execute(
+            """
+            UPDATE scoring_runs
+            SET status = ?, started_at = ?, finished_at = NULL, error = NULL
+            WHERE id = ?
+            """,
+            ("queued", int(time.time()), run_id),
+        )
+        connection.commit()
+
+    start_scoring_worker_process(run_id, target_tickers=target_tickers)
     return get_run(run_id)
 
 
@@ -2105,7 +2154,7 @@ def save_scoring_result(run_id, company, score, raw_response, error):
     return True
 
 
-def score_run_worker(run_id, start_index=0):
+def score_run_worker(run_id, start_index=0, target_tickers=None):
     ensure_scoring_schema()
     with db_connect() as connection:
         run = connection.execute(
@@ -2126,6 +2175,9 @@ def score_run_worker(run_id, start_index=0):
         companies = scoring_companies_for_run(run_id)
         if start_index:
             companies = companies[start_index:]
+        if target_tickers:
+            target_set = {ticker.upper() for ticker in target_tickers}
+            companies = [company for company in companies if company["ticker"].upper() in target_set]
         completed_tickers = completed_score_tickers_for_run(run_id)
         companies = [company for company in companies if company["ticker"] not in completed_tickers]
         if not companies:
@@ -2234,6 +2286,7 @@ def score_run_worker(run_id, start_index=0):
 def watched_signature():
     files = [
         "server.py",
+        "scoring_worker.py",
         "index.html",
         "styles.css",
         "app.js",
@@ -2462,6 +2515,20 @@ class Handler(SimpleHTTPRequestHandler):
             ensure_scoring_schema()
             try:
                 run = fill_incomplete_scoring_run(int(fill_match.group(1)))
+                if not run:
+                    self.send_json({"error": "Run not found"}, 404)
+                    return
+                self.send_json({"run": run})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+        redrive_match = re.fullmatch(r"/api/runs/(\d+)/redrive-failed", parsed.path)
+        if redrive_match:
+            ensure_scoring_schema()
+            try:
+                run = redrive_failed_scoring_run(int(redrive_match.group(1)))
                 if not run:
                     self.send_json({"error": "Run not found"}, 404)
                     return
