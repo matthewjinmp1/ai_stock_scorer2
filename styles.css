@@ -1044,18 +1044,8 @@ tbody tr:hover {
   overflow: visible;
 }
 
-.response-view-stack {
-  display: grid;
-}
-
-.response-view-panel {
-  grid-area: 1 / 1;
-}
-
 .response-view-panel[hidden] {
-  display: block;
-  visibility: hidden;
-  pointer-events: none;
+  display: none;
 }
 
 .company-cell {
