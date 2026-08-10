@@ -424,6 +424,18 @@ class PromptAndParsingTests(ServerTestCase):
 
 
 class RunWorkerTests(ServerTestCase):
+    def test_run_name_and_prompt_can_be_edited_together(self):
+        run_id = self.create_run(company_count=1)
+
+        updated = server.update_scoring_run(
+            run_id,
+            name="Updated ranking",
+            prompt="Updated score for COMPANY",
+        )
+
+        self.assertEqual(updated["name"], "Updated ranking")
+        self.assertEqual(updated["prompt"], "Updated score for COMPANY")
+
     def test_run_can_be_starred_and_unstarred(self):
         run_id = self.create_run(company_count=1)
 

@@ -26,9 +26,8 @@
       </section>
 
       <section class="toolbar result-toolbar" aria-label="Ranking controls">
-        <button id="renameButton" class="secondary-button" type="button">Rename</button>
-        <button id="editPromptButton" class="secondary-button" type="button">Edit Prompt</button>
         <button id="editRunButton" class="secondary-button" type="button">Edit Run</button>
+        <button id="copyRunButton" class="secondary-button" type="button">Copy Run</button>
         <button id="extendButton" class="secondary-button" type="button">Extend</button>
         <button id="fillButton" class="secondary-button" type="button">Fill Missing</button>
         <button id="stopButton" class="danger-button" type="button">Stop</button>
@@ -36,14 +35,18 @@
         <button id="rerunButton" type="button">Rerun</button>
       </section>
 
-      <section id="promptEditor" class="prompt-editor" hidden aria-label="Edit scoring prompt">
+      <section id="runEditor" class="prompt-editor run-editor" hidden aria-label="Edit run">
         <label>
-          <span>Saved prompt</span>
-          <textarea id="promptEditorInput" rows="8"></textarea>
+          <span>Run name</span>
+          <input id="runEditorName" type="text" maxlength="120" />
+        </label>
+        <label>
+          <span>Prompt</span>
+          <textarea id="runEditorPrompt" rows="8"></textarea>
         </label>
         <div class="actions">
-          <button id="savePromptButton" type="button">Save prompt</button>
-          <button id="cancelPromptButton" class="secondary-button" type="button">Cancel</button>
+          <button id="saveRunButton" type="button">Save changes</button>
+          <button id="cancelRunEditButton" class="secondary-button" type="button">Cancel</button>
         </div>
       </section>
 

@@ -393,6 +393,11 @@ button:hover {
   display: none;
 }
 
+.run-editor label {
+  display: grid;
+  gap: 6px;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
