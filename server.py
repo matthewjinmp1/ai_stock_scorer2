@@ -1053,7 +1053,7 @@ def failed_tickers_for_run(run_id):
     return [row["ticker"] for row in rows]
 
 
-def redrive_failed_scoring_run(run_id):
+def redrive_failed_scoring_run(run_id, requested_tickers=None):
     with db_connect() as connection:
         run = connection.execute(
             """
@@ -1067,9 +1067,22 @@ def redrive_failed_scoring_run(run_id):
             return None
         if run["status"] in ("queued", "running", "stop_requested"):
             raise ValueError("Wait for the current run to finish before redriving failed stocks.")
-        target_tickers = failed_tickers_for_run(run_id)
-        if not target_tickers:
+        failed_tickers = failed_tickers_for_run(run_id)
+        if not failed_tickers:
             raise ValueError("This run has no failed stocks to redrive.")
+        if requested_tickers is None:
+            target_tickers = failed_tickers
+        else:
+            requested = {
+                str(ticker).strip().upper()
+                for ticker in requested_tickers
+                if str(ticker).strip()
+            }
+            target_tickers = [
+                ticker for ticker in failed_tickers if ticker.upper() in requested
+            ]
+            if not requested or len(target_tickers) != len(requested):
+                raise ValueError("Only currently failed stocks can be redriven.")
 
         connection.execute(
             """
@@ -2529,6 +2542,25 @@ class Handler(SimpleHTTPRequestHandler):
             ensure_scoring_schema()
             try:
                 run = redrive_failed_scoring_run(int(redrive_match.group(1)))
+                if not run:
+                    self.send_json({"error": "Run not found"}, 404)
+                    return
+                self.send_json({"run": run})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+        redrive_result_match = re.fullmatch(
+            r"/api/runs/(\d+)/results/([^/]+)/redrive", parsed.path
+        )
+        if redrive_result_match:
+            ensure_scoring_schema()
+            try:
+                ticker = unquote(redrive_result_match.group(2)).strip().upper()
+                run = redrive_failed_scoring_run(
+                    int(redrive_result_match.group(1)), [ticker]
+                )
                 if not run:
                     self.send_json({"error": "Run not found"}, 404)
                     return

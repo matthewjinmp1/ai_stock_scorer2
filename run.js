@@ -833,6 +833,44 @@ async function redriveFailedStocks() {
   }
 }
 
+async function redriveFailedStock(ticker, button) {
+  if (!currentRun || !ticker) return;
+
+  button.disabled = true;
+  try {
+    statusEl.textContent = `Estimating redrive cost for ${ticker}...`;
+    const confirmed = await confirmCostEstimate({
+      model: currentRun.model,
+      reasoningMode: currentRun.reasoning_mode,
+      companyCount: 1,
+      actionLabel: `Redrive ${ticker}?`,
+    });
+    if (!confirmed) {
+      statusEl.textContent = "Redrive canceled before any AI requests were sent.";
+      return;
+    }
+
+    statusEl.textContent = `Redriving ${ticker}...`;
+    const response = await fetch(
+      `/api/runs/${currentRun.id}/results/${encodeURIComponent(ticker)}/redrive`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      }
+    );
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `Could not redrive ${ticker}`);
+    renderRun(payload.run);
+    if (pollTimer) window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(loadCurrentRun, 1000);
+  } catch (error) {
+    statusEl.textContent = error.message;
+  } finally {
+    if (button.isConnected) button.disabled = !currentRun || canStop(currentRun);
+  }
+}
+
 function renderRun(run) {
   currentRun = run;
   runTitle.textContent = run.name || `Run #${run.id}`;
@@ -883,6 +921,12 @@ function renderRun(run) {
       const error = result.error ? escapeHtml(result.error) : "";
       const responsePageUrl = responseUrl(result);
       const detailsUrl = resultUrl(result);
+      const rowRedrive =
+        activeResultView === "failed"
+          ? `<button class="details-link row-redrive-button" type="button" data-redrive-ticker="${escapeHtml(
+              result.ticker
+            )}" ${canStop(run) ? "disabled" : ""}>Redrive</button>`
+          : "";
       const logo = result.logo
         ? `<img class="logo" src="${escapeHtml(result.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
         : "";
@@ -907,7 +951,12 @@ function renderRun(run) {
           <td>${formatCompactSeconds(result.duration_ms)}</td>
           <td>${formatCents(result.cost)}</td>
           <td class="error-cell">${error}</td>
-          <td class="details-cell"><a class="details-link" href="${detailsUrl}">Details</a></td>
+          <td class="details-cell">
+            <div class="row-detail-actions">
+              ${rowRedrive}
+              <a class="details-link" href="${detailsUrl}">Details</a>
+            </div>
+          </td>
         </tr>
       `;
     })
@@ -1060,6 +1109,13 @@ document.querySelectorAll("[data-result-view]").forEach((button) => {
   button.addEventListener("click", () => setResultView(button.dataset.resultView));
 });
 resultRows.addEventListener("click", (event) => {
+  const redriveButton = event.target.closest("[data-redrive-ticker]");
+  if (redriveButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    redriveFailedStock(redriveButton.dataset.redriveTicker, redriveButton);
+    return;
+  }
   const row = event.target.closest("[data-response-url]");
   if (!row) return;
   const detailsLink = event.target.closest(".details-link");
