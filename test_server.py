@@ -183,6 +183,26 @@ class PromptAndParsingTests(ServerTestCase):
 
         self.assertEqual(stats["AAA"]["duration_ms"], 18425)
 
+    def test_request_stats_by_ticker_include_token_budget_percent(self):
+        entries = [
+            {
+                "run_id": 7,
+                "company": {"ticker": "AAA"},
+                "request": {"max_tokens": 2000},
+                "response": {"success": True},
+                "token_stats": {
+                    "completion_tokens": 1250,
+                    "completion_tokens_details": {"reasoning_tokens": 800},
+                },
+            }
+        ]
+
+        with mock.patch.object(server, "ai_request_entries", return_value=entries):
+            stats = server.ai_request_stats_by_ticker(7)
+
+        self.assertEqual(stats["AAA"]["token_budget"], 2000)
+        self.assertEqual(stats["AAA"]["token_budget_used_percent"], 62.5)
+
     def test_active_company_universe_uses_latest_fetch(self):
         with self.connect() as connection:
             latest_fetch = connection.execute("SELECT MAX(fetched_at) FROM companies").fetchone()[0]

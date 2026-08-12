@@ -51,6 +51,7 @@ const SORT_KEYS = new Set([
   "inputTokens",
   "responseTokens",
   "reasoningTokens",
+  "tokenBudgetPercent",
   "durationMs",
   "cost",
   "error",
@@ -125,6 +126,12 @@ function formatCents(value) {
     minimumFractionDigits: 4,
     maximumFractionDigits: 4,
   })} cents`;
+}
+
+function formatPercent(value) {
+  const number = Number(value);
+  if (value === null || value === undefined || !Number.isFinite(number)) return "--";
+  return `${number.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
 }
 
 async function fetchJson(url) {
@@ -370,6 +377,7 @@ function sortValue(result, key) {
   if (key === "inputTokens") return numericValue(result.prompt_tokens);
   if (key === "responseTokens") return numericValue(result.response_tokens);
   if (key === "reasoningTokens") return numericValue(result.reasoning_tokens);
+  if (key === "tokenBudgetPercent") return numericValue(result.token_budget_used_percent);
   if (key === "durationMs") return numericValue(result.duration_ms);
   if (key === "cost") return numericValue(result.cost);
   if (key === "error") return (result.error || "").toLowerCase();
@@ -894,7 +902,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="10">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="11">Waiting for scores...</td></tr>';
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
     return;
@@ -914,7 +922,7 @@ function renderRun(run) {
         : viewResults.length
           ? "No scores match this filter."
           : "No successful scores yet.";
-    resultRows.innerHTML = `<tr><td colspan="10">${emptyMessage}</td></tr>`;
+    resultRows.innerHTML = `<tr><td colspan="11">${emptyMessage}</td></tr>`;
     restoreScrollPosition();
     return;
   }
@@ -950,6 +958,7 @@ function renderRun(run) {
           <td>${formatNumber(result.prompt_tokens)}</td>
           <td>${formatNumber(result.response_tokens)}</td>
           <td>${formatNumber(result.reasoning_tokens)}</td>
+          <td>${formatPercent(result.token_budget_used_percent)}</td>
           <td>${formatCompactSeconds(result.duration_ms)}</td>
           <td>${formatCents(result.cost)}</td>
           <td class="error-cell">${error}</td>
@@ -978,7 +987,7 @@ async function loadCurrentRun() {
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="10">Create a scoring run first.</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="11">Create a scoring run first.</td></tr>';
     return;
   }
 

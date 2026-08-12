@@ -1173,6 +1173,8 @@ def get_run(run_id):
         result["completion_tokens"] = stats.get("completion_tokens", 0)
         result["response_tokens"] = stats.get("response_tokens", 0)
         result["reasoning_tokens"] = stats.get("reasoning_tokens", 0)
+        result["token_budget"] = stats.get("token_budget", 0)
+        result["token_budget_used_percent"] = stats.get("token_budget_used_percent")
         result["duration_ms"] = stats.get("duration_ms")
         result["cost"] = stats.get("cost", 0)
         result["logo"] = logos.get(result["ticker"], "")
@@ -1422,9 +1424,15 @@ def ai_request_stats_by_ticker(run_id):
                 "completion_tokens": 0,
                 "response_tokens": 0,
                 "reasoning_tokens": 0,
+                "token_budget": 0,
+                "token_budget_used_percent": None,
                 "duration_ms": None,
             },
         )
+        try:
+            current["token_budget"] += int((entry.get("request") or {}).get("max_tokens") or 0)
+        except (TypeError, ValueError):
+            pass
         for key in ("cost", "total_tokens", "prompt_tokens", "completion_tokens"):
             try:
                 current[key] += float(token_stats.get(key) or 0)
@@ -1444,6 +1452,12 @@ def ai_request_stats_by_ticker(run_id):
             current["duration_ms"] = int((entry.get("timing") or {}).get("duration_ms"))
         except (TypeError, ValueError):
             pass
+    for current in stats.values():
+        if current["token_budget"] > 0:
+            current["token_budget_used_percent"] = round(
+                current["completion_tokens"] / current["token_budget"] * 100,
+                1,
+            )
     return stats
 
 
