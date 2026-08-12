@@ -128,6 +128,14 @@ function formatCents(value) {
   })} cents`;
 }
 
+function formatCompactCents(value) {
+  const cents = Number(value || 0) * 100;
+  return `${cents.toLocaleString(undefined, {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  })}¢`;
+}
+
 function formatPercent(value) {
   const number = Number(value);
   if (value === null || value === undefined || !Number.isFinite(number)) return "--";
@@ -960,7 +968,7 @@ function renderRun(run) {
           <td>${formatNumber(result.reasoning_tokens)}</td>
           <td>${formatPercent(result.token_budget_used_percent)}</td>
           <td>${formatCompactSeconds(result.duration_ms)}</td>
-          <td>${formatCents(result.cost)}</td>
+          <td>${formatCompactCents(result.cost)}</td>
           <td class="error-cell">${error}</td>
           <td class="details-cell">
             <div class="row-detail-actions">
