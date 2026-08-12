@@ -21,6 +21,7 @@ const statusEl = document.querySelector("#status");
 const resultRows = document.querySelector("#resultRows");
 const statModel = document.querySelector("#statModel");
 const statProgress = document.querySelector("#statProgress");
+const statQueueCount = document.querySelector("#statQueueCount");
 const statEta = document.querySelector("#statEta");
 const statCost = document.querySelector("#statCost");
 const statTokens = document.querySelector("#statTokens");
@@ -346,6 +347,7 @@ function renderRunStats(run) {
     <span class="model-id">blocked: ${escapeHtml((provider.ignore || []).join(", ") || "none")}</span>
   `;
   statProgress.textContent = progress(run);
+  statQueueCount.textContent = formatNumber(run.queue_count || 0);
   updateEtaState(run);
   renderEta(run);
   statCost.textContent = formatCents(stats.cost);

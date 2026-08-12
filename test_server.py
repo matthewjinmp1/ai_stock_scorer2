@@ -585,6 +585,7 @@ class RunWorkerTests(ServerTestCase):
         self.assertEqual(worker_calls, [(run_id, 0, ["BBB"])])
         self.assertEqual(run["status"], "queued")
         self.assertEqual(run["failed_count"], 1)
+        self.assertEqual(run["queue_count"], 1)
 
     def test_redrive_single_failed_stock_targets_only_requested_ticker(self):
         run_id = self.create_run(company_count=3)
@@ -611,6 +612,33 @@ class RunWorkerTests(ServerTestCase):
 
         self.assertEqual(worker_calls, [(run_id, 0, ["CCC"])])
         self.assertEqual(run["status"], "queued")
+        self.assertEqual(run["queue_count"], 1)
+
+    def test_worker_queue_count_includes_active_and_waiting_stocks(self):
+        run_id = self.create_run(company_count=3)
+        observed_queue_counts = []
+
+        def fake_call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, max_tokens=None):
+            with self.connect() as connection:
+                row = connection.execute(
+                    "SELECT queue_count FROM scoring_runs WHERE id = ?",
+                    (run_id,),
+                ).fetchone()
+            observed_queue_counts.append(row["queue_count"])
+            return "50"
+
+        server.call_openrouter = fake_call_openrouter
+        server.scoring_concurrency = lambda: 1
+        server.score_run_worker(run_id)
+
+        with self.connect() as connection:
+            run = connection.execute(
+                "SELECT status, queue_count FROM scoring_runs WHERE id = ?",
+                (run_id,),
+            ).fetchone()
+
+        self.assertEqual(observed_queue_counts, [3, 2, 1])
+        self.assertEqual((run["status"], run["queue_count"]), ("completed", 0))
 
     def test_redrive_single_stock_rejects_successful_ticker(self):
         run_id = self.create_run(company_count=2)

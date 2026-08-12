@@ -532,6 +532,7 @@ def ensure_scoring_schema():
                 company_count INTEGER NOT NULL DEFAULT 0,
                 completed_count INTEGER NOT NULL DEFAULT 0,
                 failed_count INTEGER NOT NULL DEFAULT 0,
+                queue_count INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 started_at INTEGER,
                 finished_at INTEGER,
@@ -610,6 +611,8 @@ def ensure_scoring_schema():
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN stock_list_id INTEGER")
         if "starred" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN starred INTEGER NOT NULL DEFAULT 0")
+        if "queue_count" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN queue_count INTEGER NOT NULL DEFAULT 0")
         connection.execute(
             """
             UPDATE scoring_runs
@@ -955,11 +958,23 @@ def create_scoring_run(
         cursor = connection.execute(
             """
             INSERT INTO scoring_runs (
-                name, prompt, model, reasoning_mode, max_tokens, stock_list_id, status, company_count, created_at
+                name, prompt, model, reasoning_mode, max_tokens, stock_list_id, status,
+                company_count, queue_count, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, prompt, model, reasoning_mode, max_tokens, stock_list_id, "queued", len(companies), now),
+            (
+                name,
+                prompt,
+                model,
+                reasoning_mode,
+                max_tokens,
+                stock_list_id,
+                "queued",
+                len(companies),
+                len(companies),
+                now,
+            ),
         )
         run_id = cursor.lastrowid
         snapshot_run_companies(connection, run_id, companies)
@@ -995,10 +1010,17 @@ def extend_scoring_run(run_id, company_count):
         connection.execute(
             """
             UPDATE scoring_runs
-            SET company_count = ?, status = ?, started_at = ?, finished_at = NULL, error = NULL
+            SET company_count = ?, queue_count = ?, status = ?, started_at = ?,
+                finished_at = NULL, error = NULL
             WHERE id = ?
             """,
-            (target_count, "queued", int(time.time()), run_id),
+            (
+                target_count,
+                target_count - run["company_count"],
+                "queued",
+                int(time.time()),
+                run_id,
+            ),
         )
         snapshot_run_companies(connection, run_id, extension_companies[:target_count])
         connection.commit()
@@ -1022,16 +1044,17 @@ def fill_incomplete_scoring_run(run_id):
             return None
         if run["status"] in ("queued", "running", "stop_requested"):
             raise ValueError("Wait for the current run to finish before filling missing scores.")
-        if incomplete_company_count(run_id) <= 0:
+        missing_count = incomplete_company_count(run_id)
+        if missing_count <= 0:
             raise ValueError("This run already has a completed score for every selected stock.")
 
         connection.execute(
             """
             UPDATE scoring_runs
-            SET status = ?, started_at = ?, finished_at = NULL, error = NULL
+            SET status = ?, queue_count = ?, started_at = ?, finished_at = NULL, error = NULL
             WHERE id = ?
             """,
-            ("queued", int(time.time()), run_id),
+            ("queued", missing_count, int(time.time()), run_id),
         )
         connection.commit()
 
@@ -1087,10 +1110,10 @@ def redrive_failed_scoring_run(run_id, requested_tickers=None):
         connection.execute(
             """
             UPDATE scoring_runs
-            SET status = ?, started_at = ?, finished_at = NULL, error = NULL
+            SET status = ?, queue_count = ?, started_at = ?, finished_at = NULL, error = NULL
             WHERE id = ?
             """,
-            ("queued", int(time.time()), run_id),
+            ("queued", len(target_tickers), int(time.time()), run_id),
         )
         connection.commit()
 
@@ -1107,7 +1130,8 @@ def get_run(run_id):
                    scoring_runs.starred,
                    stock_lists.name AS stock_list_name,
                    scoring_runs.status, scoring_runs.company_count, scoring_runs.completed_count,
-                   scoring_runs.failed_count, scoring_runs.created_at, scoring_runs.started_at,
+                   scoring_runs.failed_count, scoring_runs.queue_count,
+                   scoring_runs.created_at, scoring_runs.started_at,
                    scoring_runs.finished_at, scoring_runs.error
             FROM scoring_runs
             LEFT JOIN stock_lists ON stock_lists.id = scoring_runs.stock_list_id
@@ -1469,7 +1493,7 @@ def stop_scoring_run(run_id):
             return None
         if row["status"] in ("queued", "running"):
             connection.execute(
-                "UPDATE scoring_runs SET status = ?, error = ? WHERE id = ?",
+                "UPDATE scoring_runs SET status = ?, queue_count = 0, error = ? WHERE id = ?",
                 ("stop_requested", "Stop requested by user.", run_id),
             )
         elif row["status"] == "stop_requested":
@@ -1478,7 +1502,8 @@ def stop_scoring_run(run_id):
         connection.commit()
         updated = connection.execute(
             """
-            SELECT id, name, prompt, model, reasoning_mode, max_tokens, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, reasoning_mode, max_tokens, status,
+                   company_count, completed_count, failed_count, queue_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
             WHERE id = ? AND deleted_at IS NULL
@@ -1555,6 +1580,7 @@ def delete_scoring_run(run_id):
             """
             UPDATE scoring_runs
             SET deleted_at = ?,
+                queue_count = 0,
                 status = CASE
                     WHEN status IN ('queued', 'running', 'stop_requested') THEN 'stopped'
                     ELSE status
@@ -1698,6 +1724,7 @@ def mark_interrupted_runs():
                 """
                 UPDATE scoring_runs
                 SET status = ?,
+                    queue_count = 0,
                     finished_at = COALESCE(finished_at, ?),
                     error = COALESCE(error, ?),
                     worker_pid = NULL,
@@ -2162,6 +2189,10 @@ def save_scoring_result(run_id, company, score, raw_response, error):
         if run_status(run_id) == "stop_requested":
             return False
         save_result(connection, run_id, company, score, raw_response, error)
+        connection.execute(
+            "UPDATE scoring_runs SET queue_count = MAX(queue_count - 1, 0) WHERE id = ?",
+            (run_id,),
+        )
         update_run_counts(connection, run_id)
         connection.commit()
     return True
@@ -2193,13 +2224,19 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
             companies = [company for company in companies if company["ticker"].upper() in target_set]
         completed_tickers = completed_score_tickers_for_run(run_id)
         companies = [company for company in companies if company["ticker"] not in completed_tickers]
+        with db_connect() as connection:
+            connection.execute(
+                "UPDATE scoring_runs SET queue_count = ? WHERE id = ?",
+                (len(companies), run_id),
+            )
+            connection.commit()
         if not companies:
             with db_connect() as connection:
                 connection.execute(
                     """
                     UPDATE scoring_runs
                     SET status = ?, finished_at = ?, error = ?,
-                        worker_pid = NULL, worker_started_at = NULL
+                        queue_count = 0, worker_pid = NULL, worker_started_at = NULL
                     WHERE id = ?
                     """,
                     ("completed", int(time.time()), None, run_id),
@@ -2287,7 +2324,7 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
             """
             UPDATE scoring_runs
             SET status = ?, finished_at = ?, error = ?,
-                worker_pid = NULL, worker_started_at = NULL
+                queue_count = 0, worker_pid = NULL, worker_started_at = NULL
             WHERE id = ?
             """,
             (status, int(time.time()), final_error, run_id),
