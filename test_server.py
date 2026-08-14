@@ -106,6 +106,46 @@ class ServerTestCase(unittest.TestCase):
 
 
 class PromptAndParsingTests(ServerTestCase):
+    def test_luna_xhigh_model_and_reasoning_settings(self):
+        self.assertEqual(server.normalize_model("openai/gpt-5.6-luna"), "openai/gpt-5.6-luna")
+        self.assertEqual(
+            server.reasoning_config("xhigh")["reasoning"],
+            {"effort": "xhigh", "exclude": False},
+        )
+
+    def test_luna_xhigh_request_payload(self):
+        payload = {
+            "choices": [{"message": {"content": "88"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+
+        class FakeResponse:
+            status = 200
+            headers = {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        company = server.scoring_companies(1)[0]
+        with mock.patch.object(server.urllib.request, "urlopen", return_value=FakeResponse()) as urlopen:
+            server.call_openrouter(
+                "Score COMPANY",
+                company,
+                "openai/gpt-5.6-luna",
+                reasoning_mode="xhigh",
+                run_id=1,
+            )
+
+        request_payload = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+        self.assertEqual(request_payload["model"], "openai/gpt-5.6-luna")
+        self.assertEqual(request_payload["reasoning"], {"effort": "xhigh", "exclude": False})
+
     def test_http_response_deadline_interrupts_a_stalled_read(self):
         class StalledResponse:
             def __init__(self):

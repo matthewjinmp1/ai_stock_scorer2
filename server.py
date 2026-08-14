@@ -48,6 +48,13 @@ MODEL_OPTIONS = [
         },
     },
     {
+        "id": "openai/gpt-5.6-luna",
+        "label": "GPT-5.6 Luna",
+        "provider": {
+            "require_parameters": True,
+        },
+    },
+    {
         "id": "xiaomi/mimo-v2.5",
         "label": "Xiaomi MiMo V2.5",
         "provider": {
@@ -82,6 +89,11 @@ REASONING_OPTIONS = [
         "id": "medium",
         "label": "Reasoning",
         "reasoning": {"effort": "medium", "exclude": False},
+    },
+    {
+        "id": "xhigh",
+        "label": "XHigh reasoning",
+        "reasoning": {"effort": "xhigh", "exclude": False},
     },
 ]
 DEFAULT_OPENROUTER_MODEL = MODEL_OPTIONS[0]["id"]
