@@ -46,6 +46,9 @@ const rankingTable = document.querySelector(".ranking-table");
 const rankingTabCount = document.querySelector("#rankingTabCount");
 const failedTabCount = document.querySelector("#failedTabCount");
 const failedActions = document.querySelector("#failedActions");
+const columnSelector = document.querySelector("#columnSelector");
+const resetColumnsButton = document.querySelector("#resetColumnsButton");
+const errorColumnOption = document.querySelector("#errorColumnOption");
 
 const SORT_KEYS = new Set([
   "scoreRank",
@@ -61,6 +64,33 @@ const SORT_KEYS = new Set([
 ]);
 const SORT_DIRECTIONS = new Set(["asc", "desc"]);
 const RESULT_VIEWS = new Set(["ranking", "failed"]);
+const COLUMN_KEYS = [
+  "rank",
+  "score",
+  "company",
+  "input",
+  "response",
+  "reasoning",
+  "budget",
+  "time",
+  "cost",
+  "error",
+  "actions",
+];
+const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v1";
+
+function loadVisibleColumns() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(COLUMN_STORAGE_KEY));
+    if (Array.isArray(saved)) {
+      const valid = saved.filter((column) => COLUMN_KEYS.includes(column));
+      if (valid.length) return new Set(valid);
+    }
+  } catch (_error) {
+    // Use the complete default set when browser storage is unavailable or malformed.
+  }
+  return new Set(COLUMN_KEYS);
+}
 
 let currentRunId = params.get("id");
 let pollTimer = null;
@@ -80,6 +110,52 @@ let rankingSearchQuery = (params.get("q") || "").trim();
 let matchedScore = null;
 let restoredScroll = false;
 let activeResultView = RESULT_VIEWS.has(params.get("tab")) ? params.get("tab") : "ranking";
+let visibleColumns = loadVisibleColumns();
+
+function saveVisibleColumns() {
+  try {
+    window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify([...visibleColumns]));
+  } catch (_error) {
+    // The selection still works for this page when browser storage is unavailable.
+  }
+}
+
+function applyColumnVisibility() {
+  document.querySelectorAll("[data-column]").forEach((element) => {
+    element.classList.toggle("is-column-hidden", !visibleColumns.has(element.dataset.column));
+  });
+  document.querySelectorAll("[data-column-toggle]").forEach((input) => {
+    input.checked = visibleColumns.has(input.dataset.columnToggle);
+  });
+}
+
+function hasVisibleColumnForCurrentView() {
+  return [...visibleColumns].some(
+    (column) => activeResultView === "failed" || column !== "error"
+  );
+}
+
+function updateVisibleColumn(event) {
+  const input = event.target.closest("[data-column-toggle]");
+  if (!input) return;
+  const column = input.dataset.columnToggle;
+  if (input.checked) visibleColumns.add(column);
+  else visibleColumns.delete(column);
+  if (!hasVisibleColumnForCurrentView()) {
+    visibleColumns.add(column);
+    input.checked = true;
+    statusEl.textContent = "Keep at least one table column visible.";
+    return;
+  }
+  saveVisibleColumns();
+  applyColumnVisibility();
+}
+
+function resetVisibleColumns() {
+  visibleColumns = new Set(COLUMN_KEYS);
+  saveVisibleColumns();
+  applyColumnVisibility();
+}
 
 function ensureHomeLink() {
   let nav = document.querySelector(".page-nav");
@@ -481,6 +557,10 @@ function resultsForView(run, view = activeResultView) {
 }
 
 function updateResultViewTabs(run) {
+  if (!hasVisibleColumnForCurrentView()) {
+    visibleColumns.add("company");
+    saveVisibleColumns();
+  }
   rankingTabCount.textContent = String(resultsForView(run, "ranking").length);
   failedTabCount.textContent = String(resultsForView(run, "failed").length);
 
@@ -492,6 +572,7 @@ function updateResultViewTabs(run) {
   });
   scoreFilterToolbar.hidden = activeResultView !== "ranking";
   failedActions.hidden = activeResultView !== "failed";
+  errorColumnOption.hidden = activeResultView !== "failed";
   rankingTable.classList.toggle("ranking-view", activeResultView === "ranking");
   rankingTable.classList.toggle("failed-view", activeResultView === "failed");
   resultsTableWrap.setAttribute(
@@ -941,6 +1022,7 @@ function renderRun(run) {
 
   if (!run.results.length) {
     resultRows.innerHTML = '<tr><td colspan="11">Waiting for scores...</td></tr>';
+    applyColumnVisibility();
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
     return;
@@ -961,6 +1043,7 @@ function renderRun(run) {
           ? "No scores match this filter."
           : "No successful scores yet.";
     resultRows.innerHTML = `<tr><td colspan="11">${emptyMessage}</td></tr>`;
+    applyColumnVisibility();
     restoreScrollPosition();
     return;
   }
@@ -980,9 +1063,9 @@ function renderRun(run) {
         : "";
       return `
         <tr class="clickable-row" data-response-url="${responsePageUrl}">
-          <td>${result.scoreRank}</td>
-          <td><strong>${formatScore(result.score)}</strong></td>
-          <td>
+          <td data-column="rank">${result.scoreRank}</td>
+          <td data-column="score"><strong>${formatScore(result.score)}</strong></td>
+          <td data-column="company">
             <div class="company-cell">
               ${logo}
               <div>
@@ -993,14 +1076,14 @@ function renderRun(run) {
               </div>
             </div>
           </td>
-          <td>${formatNumber(result.prompt_tokens)}</td>
-          <td>${formatNumber(result.response_tokens)}</td>
-          <td>${formatNumber(result.reasoning_tokens)}</td>
-          <td>${formatPercent(result.token_budget_used_percent)}</td>
-          <td>${formatCompactSeconds(result.duration_ms)}</td>
-          <td>${formatCompactCents(result.cost)}</td>
-          <td class="error-cell">${error}</td>
-          <td class="details-cell">
+          <td data-column="input">${formatNumber(result.prompt_tokens)}</td>
+          <td data-column="response">${formatNumber(result.response_tokens)}</td>
+          <td data-column="reasoning">${formatNumber(result.reasoning_tokens)}</td>
+          <td data-column="budget">${formatPercent(result.token_budget_used_percent)}</td>
+          <td data-column="time">${formatCompactSeconds(result.duration_ms)}</td>
+          <td data-column="cost">${formatCompactCents(result.cost)}</td>
+          <td data-column="error" class="error-cell">${error}</td>
+          <td data-column="actions" class="details-cell">
             <div class="row-detail-actions">
               ${rowRedrive}
               <button class="details-link" type="button" data-details-url="${detailsUrl}">Details</button>
@@ -1010,6 +1093,7 @@ function renderRun(run) {
       `;
     })
     .join("");
+  applyColumnVisibility();
   restoreScrollPosition();
 }
 
@@ -1157,6 +1241,8 @@ document.querySelectorAll("[data-sort-key]").forEach((button) => {
 document.querySelectorAll("[data-result-view]").forEach((button) => {
   button.addEventListener("click", () => setResultView(button.dataset.resultView));
 });
+columnSelector.addEventListener("change", updateVisibleColumn);
+resetColumnsButton.addEventListener("click", resetVisibleColumns);
 resultRows.addEventListener("click", (event) => {
   const redriveButton = event.target.closest("[data-redrive-ticker]");
   if (redriveButton) {

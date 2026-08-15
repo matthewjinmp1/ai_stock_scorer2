@@ -157,41 +157,61 @@
         <p id="filterStatus" class="filter-status">Showing all scores.</p>
       </section>
 
+      <section class="table-display-tools" aria-label="Ranking table display options">
+        <details id="columnSelector" class="column-selector">
+          <summary>Columns</summary>
+          <div class="column-selector-menu">
+            <label><input type="checkbox" data-column-toggle="rank" /> Rank</label>
+            <label><input type="checkbox" data-column-toggle="score" /> Score</label>
+            <label><input type="checkbox" data-column-toggle="company" /> Company</label>
+            <label><input type="checkbox" data-column-toggle="input" /> Input</label>
+            <label><input type="checkbox" data-column-toggle="response" /> Response</label>
+            <label><input type="checkbox" data-column-toggle="reasoning" /> Reasoning</label>
+            <label><input type="checkbox" data-column-toggle="budget" /> Budget Used</label>
+            <label><input type="checkbox" data-column-toggle="time" /> Time</label>
+            <label><input type="checkbox" data-column-toggle="cost" /> Cost</label>
+            <label id="errorColumnOption"><input type="checkbox" data-column-toggle="error" /> Error</label>
+            <label><input type="checkbox" data-column-toggle="actions" /> Actions</label>
+            <button id="resetColumnsButton" class="column-reset-button" type="button">Show all</button>
+          </div>
+        </details>
+      </section>
+
       <section id="resultsTableWrap" class="table-wrap" aria-label="Successful stock score ranking">
         <table class="ranking-table ranking-view">
           <thead>
             <tr>
-              <th aria-sort="ascending">
+              <th data-column="rank" aria-sort="ascending">
                 <button class="sort-button" type="button" data-sort-key="scoreRank">Rank</button>
               </th>
-              <th>
+              <th data-column="score">
                 <button class="sort-button" type="button" data-sort-key="score">Score</button>
               </th>
-              <th>
+              <th data-column="company">
                 <button class="sort-button" type="button" data-sort-key="company">Company</button>
               </th>
-              <th>
+              <th data-column="input">
                 <button class="sort-button" type="button" data-sort-key="inputTokens">Input</button>
               </th>
-              <th>
+              <th data-column="response">
                 <button class="sort-button" type="button" data-sort-key="responseTokens">Response</button>
               </th>
-              <th>
+              <th data-column="reasoning">
                 <button class="sort-button" type="button" data-sort-key="reasoningTokens">Reasoning</button>
               </th>
-              <th>
+              <th data-column="budget">
                 <button class="sort-button" type="button" data-sort-key="tokenBudgetPercent">Budget Used</button>
               </th>
-              <th>
+              <th data-column="time">
                 <button class="sort-button" type="button" data-sort-key="durationMs">Time</button>
               </th>
-              <th>
+              <th data-column="cost">
                 <button class="sort-button" type="button" data-sort-key="cost">Cost</button>
               </th>
-              <th>
+              <th data-column="error">
                 <button class="sort-button" type="button" data-sort-key="error">Error</button>
               </th>
-              <th>Actions</th>
+              <th data-column="actions">Actions</th>
             </tr>
           </thead>
           <tbody id="resultRows"></tbody>
