@@ -105,6 +105,23 @@ class ServerTestCase(unittest.TestCase):
             return cursor.lastrowid
 
 
+class AppPreferenceTests(ServerTestCase):
+    def test_run_table_columns_persist_in_database(self):
+        saved = server.save_run_table_columns_preference(
+            ["company", "score", "total", "company"]
+        )
+
+        self.assertEqual(saved, ["company", "score", "total"])
+        self.assertEqual(
+            server.get_run_table_columns_preference(),
+            ["company", "score", "total"],
+        )
+
+    def test_run_table_columns_reject_unknown_column(self):
+        with self.assertRaisesRegex(ValueError, "Unknown run table column"):
+            server.save_run_table_columns_preference(["company", "not-a-column"])
+
+
 class PromptAndParsingTests(ServerTestCase):
     def test_luna_xhigh_model_and_reasoning_settings(self):
         self.assertEqual(server.normalize_model("openai/gpt-5.6-luna"), "openai/gpt-5.6-luna")

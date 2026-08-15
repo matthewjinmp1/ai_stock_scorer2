@@ -110,6 +110,22 @@ OPENROUTER_MAX_ATTEMPT_TIMEOUT_SECONDS = 900
 MAX_OPENROUTER_RESPONSE_TOKENS = 32768
 OPENROUTER_RESPONSE_CACHE_TTL_SECONDS = 86400
 TOKEN_LIMIT_ERROR = "Invalid response: model hit the response token limit before completing."
+RUN_TABLE_COLUMN_KEYS = (
+    "rank",
+    "score",
+    "company",
+    "marketCap",
+    "input",
+    "response",
+    "reasoning",
+    "total",
+    "budget",
+    "time",
+    "cost",
+    "error",
+    "actions",
+)
+RUN_TABLE_COLUMNS_PREFERENCE_KEY = "run_table_columns"
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
@@ -599,6 +615,12 @@ def ensure_scoring_schema():
                 FOREIGN KEY(run_id) REFERENCES scoring_runs(id)
             );
 
+            CREATE TABLE IF NOT EXISTS app_preferences (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_scoring_runs_created_at ON scoring_runs(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_scoring_results_run_score ON scoring_results(run_id, score DESC);
             CREATE INDEX IF NOT EXISTS idx_stock_list_members_position ON stock_list_members(list_id, position);
@@ -645,6 +667,52 @@ def ensure_scoring_schema():
             "UPDATE scoring_runs SET max_tokens = 200 WHERE max_tokens IS NULL OR max_tokens < 1"
         )
         connection.commit()
+
+
+def get_run_table_columns_preference():
+    with db_connect() as connection:
+        row = connection.execute(
+            "SELECT value FROM app_preferences WHERE key = ?",
+            (RUN_TABLE_COLUMNS_PREFERENCE_KEY,),
+        ).fetchone()
+    if not row:
+        return None
+    try:
+        columns = json.loads(row["value"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(columns, list):
+        return None
+    valid_columns = [column for column in columns if column in RUN_TABLE_COLUMN_KEYS]
+    return valid_columns or None
+
+
+def save_run_table_columns_preference(columns):
+    if not isinstance(columns, list):
+        raise ValueError("Columns must be a list.")
+    unknown_columns = [column for column in columns if column not in RUN_TABLE_COLUMN_KEYS]
+    if unknown_columns:
+        raise ValueError(f"Unknown run table column: {unknown_columns[0]}")
+    selected_columns = list(dict.fromkeys(columns))
+    if not selected_columns:
+        raise ValueError("Keep at least one run table column visible.")
+    with db_connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO app_preferences (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            (
+                RUN_TABLE_COLUMNS_PREFERENCE_KEY,
+                json.dumps(selected_columns),
+                int(time.time()),
+            ),
+        )
+        connection.commit()
+    return selected_columns
 
 
 def row_to_company(row):
@@ -2523,6 +2591,11 @@ class Handler(SimpleHTTPRequestHandler):
             )
             return
 
+        if parsed.path == "/api/preferences/run-table-columns":
+            ensure_scoring_schema()
+            self.send_json({"columns": get_run_table_columns_preference()})
+            return
+
         if parsed.path == "/api/stock-lists":
             ensure_scoring_schema()
             self.send_json({"lists": list_stock_lists()})
@@ -2711,6 +2784,18 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_PATCH(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/preferences/run-table-columns":
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                columns = save_run_table_columns_preference(payload.get("columns"))
+                self.send_json({"columns": columns})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
         stock_list_match = re.fullmatch(r"/api/stock-lists/(\d+)", parsed.path)
         if stock_list_match:
             ensure_scoring_schema()

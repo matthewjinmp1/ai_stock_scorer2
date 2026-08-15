@@ -114,12 +114,55 @@ let matchedScore = null;
 let restoredScroll = false;
 let activeResultView = RESULT_VIEWS.has(params.get("tab")) ? params.get("tab") : "ranking";
 let visibleColumns = loadVisibleColumns();
+let columnSaveTimer = null;
 
-function saveVisibleColumns() {
+function saveVisibleColumnsLocally() {
   try {
     window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify([...visibleColumns]));
   } catch (_error) {
     // The selection still works for this page when browser storage is unavailable.
+  }
+}
+
+async function persistVisibleColumns() {
+  const response = await fetch("/api/preferences/run-table-columns", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ columns: [...visibleColumns] }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || "Unable to save table columns.");
+  }
+}
+
+function saveVisibleColumns() {
+  saveVisibleColumnsLocally();
+  if (columnSaveTimer) window.clearTimeout(columnSaveTimer);
+  columnSaveTimer = window.setTimeout(() => {
+    persistVisibleColumns().catch(() => {
+      // Browser storage remains a usable fallback if the server is unavailable.
+    });
+  }, 200);
+}
+
+async function loadPersistedVisibleColumns() {
+  try {
+    const response = await fetch("/api/preferences/run-table-columns");
+    if (!response.ok) throw new Error("Unable to load table columns.");
+    const payload = await response.json();
+    if (Array.isArray(payload.columns)) {
+      const valid = payload.columns.filter((column) => COLUMN_KEYS.includes(column));
+      if (valid.length) {
+        visibleColumns = new Set(valid);
+        saveVisibleColumnsLocally();
+        applyColumnVisibility();
+        return;
+      }
+    }
+    await persistVisibleColumns();
+  } catch (_error) {
+    // Keep the local selection when persistent preferences cannot be reached.
   }
 }
 
@@ -1316,6 +1359,7 @@ if ("EventSource" in window) {
 
 try {
   ensureHomeLink();
+  await loadPersistedVisibleColumns();
   syncScoreFilterInputs();
   rankingSearchInput.value = rankingSearchQuery;
   startEtaTimer();
