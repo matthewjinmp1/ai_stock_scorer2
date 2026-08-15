@@ -950,186 +950,53 @@ table {
   min-width: 0;
 }
 
-.ranking-table th:nth-child(1),
-.ranking-table td:nth-child(1) {
+.ranking-table .position-column,
+.ranking-table .position-cell {
+  width: 3%;
+}
+
+.ranking-table [data-column="rank"],
+.ranking-table [data-column="score"] {
   width: 4%;
 }
 
-.ranking-table th:nth-child(2),
-.ranking-table td:nth-child(2) {
-  width: 5%;
-}
-
-.ranking-table th:nth-child(3),
-.ranking-table td:nth-child(3) {
-  width: 6%;
-}
-
-.ranking-table th:nth-child(4),
-.ranking-table td:nth-child(4) {
-  width: 18%;
-}
-
-.ranking-table th:nth-child(5),
-.ranking-table td:nth-child(5) {
-  width: 8.5%;
-}
-
-.ranking-table th:nth-child(6),
-.ranking-table td:nth-child(6),
-.ranking-table th:nth-child(7),
-.ranking-table td:nth-child(7),
-.ranking-table th:nth-child(8),
-.ranking-table td:nth-child(8),
-.ranking-table th:nth-child(9),
-.ranking-table td:nth-child(9) {
-  width: 7%;
-}
-
-.ranking-table th:nth-child(10),
-.ranking-table td:nth-child(10) {
-  width: 9%;
-}
-
-.ranking-table th:nth-child(11),
-.ranking-table td:nth-child(11) {
-  width: 7%;
-}
-
-.ranking-table th:nth-child(12),
-.ranking-table td:nth-child(12) {
-  width: 8%;
-}
-
-.ranking-table.ranking-view th:nth-child(1),
-.ranking-table.ranking-view td:nth-child(1) {
-  width: 4%;
-}
-
-.ranking-table.ranking-view th:nth-child(2),
-.ranking-table.ranking-view td:nth-child(2),
-.ranking-table.ranking-view th:nth-child(3),
-.ranking-table.ranking-view td:nth-child(3) {
-  width: 5%;
-}
-
-.ranking-table.ranking-view th:nth-child(4),
-.ranking-table.ranking-view td:nth-child(4) {
+.ranking-table [data-column="company"] {
   width: 15%;
 }
 
-.ranking-table.ranking-view th:nth-child(4),
-.ranking-table.ranking-view td:nth-child(4) {
-  width: 7.5%;
+.ranking-table [data-column="marketCap"] {
+  width: 7%;
 }
 
-.ranking-table.ranking-view th:nth-child(5),
-.ranking-table.ranking-view td:nth-child(5),
-.ranking-table.ranking-view th:nth-child(6),
-.ranking-table.ranking-view td:nth-child(6),
-.ranking-table.ranking-view th:nth-child(7),
-.ranking-table.ranking-view td:nth-child(7),
-.ranking-table.ranking-view th:nth-child(8),
-.ranking-table.ranking-view td:nth-child(8) {
+.ranking-table [data-column="input"],
+.ranking-table [data-column="response"],
+.ranking-table [data-column="reasoning"],
+.ranking-table [data-column="total"],
+.ranking-table [data-column="time"],
+.ranking-table [data-column="search"] {
+  width: 5%;
+}
+
+.ranking-table [data-column="budget"] {
   width: 6%;
 }
 
-.ranking-table.ranking-view th:nth-child(9),
-.ranking-table.ranking-view td:nth-child(9) {
-  width: 7%;
-}
-
-.ranking-table.ranking-view th:nth-child(10),
-.ranking-table.ranking-view td:nth-child(10) {
+.ranking-table [data-column="cost"],
+.ranking-table [data-column="chart"],
+.ranking-table [data-column="actions"] {
   width: 5.5%;
 }
 
-.ranking-table.ranking-view th:nth-child(11),
-.ranking-table.ranking-view td:nth-child(11) {
+.ranking-table [data-column="error"] {
+  width: 8%;
+}
+
+.ranking-table [data-column="dashboard"] {
   width: 6.5%;
 }
 
-.ranking-table.ranking-view th:nth-child(12),
-.ranking-table.ranking-view td:nth-child(12) {
+.ranking-table.ranking-view [data-column="error"] {
   display: none;
-}
-
-.ranking-table.ranking-view th:nth-child(13),
-.ranking-table.ranking-view td:nth-child(13) {
-  width: 7%;
-}
-
-.ranking-table.ranking-view th:nth-child(14),
-.ranking-table.ranking-view td:nth-child(14) {
-  width: 7%;
-}
-
-.ranking-table.ranking-view th:nth-child(15),
-.ranking-table.ranking-view td:nth-child(15) {
-  width: 7%;
-}
-
-.ranking-table.failed-view th:nth-child(1),
-.ranking-table.failed-view td:nth-child(1),
-.ranking-table.failed-view th:nth-child(2),
-.ranking-table.failed-view td:nth-child(2) {
-  width: 4%;
-}
-
-.ranking-table.failed-view th:nth-child(3),
-.ranking-table.failed-view td:nth-child(3) {
-  width: 11%;
-}
-
-.ranking-table.failed-view th:nth-child(4),
-.ranking-table.failed-view td:nth-child(4) {
-  width: 7%;
-}
-
-.ranking-table.failed-view th:nth-child(5),
-.ranking-table.failed-view td:nth-child(5),
-.ranking-table.failed-view th:nth-child(6),
-.ranking-table.failed-view td:nth-child(6),
-.ranking-table.failed-view th:nth-child(7),
-.ranking-table.failed-view td:nth-child(7),
-.ranking-table.failed-view th:nth-child(8),
-.ranking-table.failed-view td:nth-child(8) {
-  width: 5.5%;
-}
-
-.ranking-table.failed-view th:nth-child(9),
-.ranking-table.failed-view td:nth-child(9) {
-  width: 6.5%;
-}
-
-.ranking-table.failed-view th:nth-child(10),
-.ranking-table.failed-view td:nth-child(10) {
-  width: 5.5%;
-}
-
-.ranking-table.failed-view th:nth-child(11),
-.ranking-table.failed-view td:nth-child(11) {
-  width: 6.5%;
-}
-
-.ranking-table.failed-view th:nth-child(12),
-.ranking-table.failed-view td:nth-child(12) {
-  width: 11.5%;
-}
-
-.ranking-table.failed-view th:nth-child(13),
-.ranking-table.failed-view td:nth-child(13) {
-  width: 6.5%;
-}
-
-.ranking-table.failed-view th:nth-child(14),
-.ranking-table.failed-view td:nth-child(14) {
-  width: 6.5%;
-}
-
-.ranking-table.failed-view th:nth-child(15),
-.ranking-table.failed-view td:nth-child(15) {
-  width: 7%;
 }
 
 th,
@@ -1193,7 +1060,7 @@ tbody tr:hover {
 .search-cell,
 .details-cell {
   overflow: visible;
-  text-align: right;
+  text-align: left;
 }
 
 .error-actions {

@@ -1189,7 +1189,9 @@ function renderRun(run) {
             <button class="details-link" type="button" data-search-url="${escapeHtml(chartUrl)}">Chart</button>
           </td>
           <td data-column="dashboard" class="search-cell">
-            <button class="details-link" type="button" data-search-url="${escapeHtml(dashboardUrl)}">Dashboard</button>
+            <button class="details-link" type="button" data-search-url="${escapeHtml(
+              dashboardUrl
+            )}" title="Open stock dashboard">Open</button>
           </td>
           <td data-column="actions" class="details-cell">
             <button class="details-link" type="button" data-details-url="${detailsUrl}">Details</button>
