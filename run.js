@@ -33,6 +33,7 @@ const statTokenLimitRiskNote = document.querySelector("#statTokenLimitRiskNote")
 const statLatency = document.querySelector("#statLatency");
 const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
+const statMedianScore = document.querySelector("#statMedianScore");
 const statRequests = document.querySelector("#statRequests");
 const scoreTargetInput = document.querySelector("#scoreTargetInput");
 const scoreDownButton = document.querySelector("#scoreDownButton");
@@ -455,6 +456,13 @@ function renderRunStats(run) {
   const averageScore = scores.length
     ? scores.reduce((sum, score) => sum + score, 0) / scores.length
     : null;
+  const sortedScores = [...scores].sort((left, right) => left - right);
+  const middleScoreIndex = Math.floor(sortedScores.length / 2);
+  const medianScore = sortedScores.length
+    ? sortedScores.length % 2
+      ? sortedScores[middleScoreIndex]
+      : (sortedScores[middleScoreIndex - 1] + sortedScores[middleScoreIndex]) / 2
+    : null;
 
   statModel.innerHTML = `
     <span class="model-label">${escapeHtml(model.label || run.model)}</span>
@@ -495,6 +503,7 @@ function renderRunStats(run) {
   statScoreRange.textContent =
     minScore === null ? "--" : `${formatScore(minScore)}-${formatScore(maxScore)}`;
   statAverageScore.textContent = averageScore === null ? "--" : formatScore(averageScore);
+  statMedianScore.textContent = medianScore === null ? "--" : formatScore(medianScore);
   statRequests.textContent = `${formatNumber(stats.successful_request_count || 0)} ok / ${formatNumber(
     stats.failed_request_count || 0
   )} failed`;
