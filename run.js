@@ -82,9 +82,10 @@ const COLUMN_KEYS = [
   "error",
   "search",
   "chart",
+  "dashboard",
   "actions",
 ];
-const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v5";
+const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v6";
 
 function loadVisibleColumns() {
   try {
@@ -1123,7 +1124,7 @@ function renderRun(run) {
         : viewResults.length
           ? "No scores match this filter."
           : "No successful scores yet.";
-    resultRows.innerHTML = `<tr><td colspan="15">${emptyMessage}</td></tr>`;
+    resultRows.innerHTML = `<tr><td colspan="16">${emptyMessage}</td></tr>`;
     applyColumnVisibility();
     restoreScrollPosition();
     return;
@@ -1139,6 +1140,7 @@ function renderRun(run) {
       const chartUrl = `https://www.google.com/search?q=${encodeURIComponent(
         `${result.company_name} (ticker: ${result.ticker}) stock price chart`
       )}`;
+      const dashboardUrl = `http://localhost:3000/?ticker=${encodeURIComponent(result.ticker)}`;
       const rowRedrive =
         activeResultView === "failed"
           ? `<button class="details-link row-redrive-button" type="button" data-redrive-ticker="${escapeHtml(
@@ -1184,6 +1186,9 @@ function renderRun(run) {
           </td>
           <td data-column="chart" class="search-cell">
             <button class="details-link" type="button" data-search-url="${escapeHtml(chartUrl)}">Chart</button>
+          </td>
+          <td data-column="dashboard" class="search-cell">
+            <button class="details-link" type="button" data-search-url="${escapeHtml(dashboardUrl)}">Dashboard</button>
           </td>
           <td data-column="actions" class="details-cell">
             <button class="details-link" type="button" data-details-url="${detailsUrl}">Details</button>
