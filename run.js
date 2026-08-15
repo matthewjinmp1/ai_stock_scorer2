@@ -59,6 +59,7 @@ const SORT_KEYS = new Set([
   "inputTokens",
   "responseTokens",
   "reasoningTokens",
+  "totalTokens",
   "tokenBudgetPercent",
   "durationMs",
   "cost",
@@ -74,13 +75,14 @@ const COLUMN_KEYS = [
   "input",
   "response",
   "reasoning",
+  "total",
   "budget",
   "time",
   "cost",
   "error",
   "actions",
 ];
-const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v2";
+const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v3";
 
 function loadVisibleColumns() {
   try {
@@ -100,9 +102,7 @@ let pollTimer = null;
 let etaTimer = null;
 let currentRun = null;
 let etaState = null;
-const requestedSortKey = ["totalTokens", "outputTokens"].includes(params.get("sort"))
-  ? "responseTokens"
-  : params.get("sort");
+const requestedSortKey = params.get("sort") === "outputTokens" ? "responseTokens" : params.get("sort");
 let sortState = {
   key: SORT_KEYS.has(requestedSortKey) ? requestedSortKey : "scoreRank",
   direction: SORT_DIRECTIONS.has(params.get("dir")) ? params.get("dir") : "asc",
@@ -517,6 +517,7 @@ function sortValue(result, key) {
   if (key === "inputTokens") return numericValue(result.prompt_tokens);
   if (key === "responseTokens") return numericValue(result.response_tokens);
   if (key === "reasoningTokens") return numericValue(result.reasoning_tokens);
+  if (key === "totalTokens") return numericValue(result.total_tokens);
   if (key === "tokenBudgetPercent") return numericValue(result.token_budget_used_percent);
   if (key === "durationMs") return numericValue(result.duration_ms);
   if (key === "cost") return numericValue(result.cost);
@@ -1056,7 +1057,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="12">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="13">Waiting for scores...</td></tr>';
     applyColumnVisibility();
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
@@ -1077,7 +1078,7 @@ function renderRun(run) {
         : viewResults.length
           ? "No scores match this filter."
           : "No successful scores yet.";
-    resultRows.innerHTML = `<tr><td colspan="12">${emptyMessage}</td></tr>`;
+    resultRows.innerHTML = `<tr><td colspan="13">${emptyMessage}</td></tr>`;
     applyColumnVisibility();
     restoreScrollPosition();
     return;
@@ -1117,6 +1118,7 @@ function renderRun(run) {
           <td data-column="input">${formatNumber(result.prompt_tokens)}</td>
           <td data-column="response">${formatNumber(result.response_tokens)}</td>
           <td data-column="reasoning">${formatNumber(result.reasoning_tokens)}</td>
+          <td data-column="total">${formatNumber(result.total_tokens)}</td>
           <td data-column="budget">${formatPercent(result.token_budget_used_percent)}</td>
           <td data-column="time">${formatCompactSeconds(result.duration_ms)}</td>
           <td data-column="cost">${formatCompactCents(result.cost)}</td>
@@ -1147,7 +1149,7 @@ async function loadCurrentRun() {
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="12">Create a scoring run first.</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="13">Create a scoring run first.</td></tr>';
     return;
   }
 
