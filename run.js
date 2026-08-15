@@ -1103,7 +1103,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="15">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="17">Waiting for scores...</td></tr>';
     applyColumnVisibility();
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
@@ -1124,13 +1124,13 @@ function renderRun(run) {
         : viewResults.length
           ? "No scores match this filter."
           : "No successful scores yet.";
-    resultRows.innerHTML = `<tr><td colspan="16">${emptyMessage}</td></tr>`;
+    resultRows.innerHTML = `<tr><td colspan="17">${emptyMessage}</td></tr>`;
     applyColumnVisibility();
     restoreScrollPosition();
     return;
   }
   resultRows.innerHTML = visibleResults
-    .map((result) => {
+    .map((result, displayIndex) => {
       const error = result.error ? escapeHtml(result.error) : "";
       const responsePageUrl = responseUrl(result);
       const detailsUrl = resultUrl(result);
@@ -1152,6 +1152,7 @@ function renderRun(run) {
         : "";
       return `
         <tr class="clickable-row" data-response-url="${responsePageUrl}">
+          <td class="position-cell">${displayIndex + 1}</td>
           <td data-column="rank">${result.scoreRank}</td>
           <td data-column="score"><strong>${formatScore(result.score)}</strong></td>
           <td data-column="company">
@@ -1213,7 +1214,7 @@ async function loadCurrentRun() {
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="15">Create a scoring run first.</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="17">Create a scoring run first.</td></tr>';
     return;
   }
 
