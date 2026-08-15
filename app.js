@@ -249,11 +249,11 @@ function statusClass(status) {
 
 function formatCost(value) {
   const cents = Number(value || 0) * 100;
-  if (!cents) return "0.0000 cents";
+  if (!cents) return "0.0000¢";
   return `${cents.toLocaleString(undefined, {
     minimumFractionDigits: 4,
     maximumFractionDigits: 4,
-  })} cents`;
+  })}¢`;
 }
 
 async function confirmCostEstimate({ model, reasoningMode, companyCount, actionLabel }) {

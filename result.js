@@ -51,7 +51,7 @@ function formatCost(value) {
   return `${cents.toLocaleString(undefined, {
     minimumFractionDigits: 4,
     maximumFractionDigits: 4,
-  })} cents`;
+  })}¢`;
 }
 
 function formatMs(value) {
