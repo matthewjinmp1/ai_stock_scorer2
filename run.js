@@ -54,6 +54,7 @@ const SORT_KEYS = new Set([
   "scoreRank",
   "score",
   "company",
+  "marketCap",
   "inputTokens",
   "responseTokens",
   "reasoningTokens",
@@ -68,6 +69,7 @@ const COLUMN_KEYS = [
   "rank",
   "score",
   "company",
+  "marketCap",
   "input",
   "response",
   "reasoning",
@@ -77,7 +79,7 @@ const COLUMN_KEYS = [
   "error",
   "actions",
 ];
-const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v1";
+const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v2";
 
 function loadVisibleColumns() {
   try {
@@ -230,6 +232,20 @@ function formatPercent(value) {
   const number = Number(value);
   if (value === null || value === undefined || !Number.isFinite(number)) return "--";
   return `${number.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
+}
+
+function formatMarketCap(value, fallback = "") {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return fallback || "--";
+  const units = [
+    [1e12, "T"],
+    [1e9, "B"],
+    [1e6, "M"],
+  ];
+  const [divisor, suffix] = units.find(([threshold]) => number >= threshold) || [1, ""];
+  return `$ ${(number / divisor).toLocaleString(undefined, { maximumFractionDigits: 2 })}${
+    suffix ? ` ${suffix}` : ""
+  }`;
 }
 
 async function fetchJson(url) {
@@ -488,6 +504,7 @@ function sortValue(result, key) {
   if (key === "scoreRank") return result.scoreRank;
   if (key === "score") return numericValue(result.score);
   if (key === "company") return `${result.company_name || ""} ${result.ticker || ""}`.toLowerCase();
+  if (key === "marketCap") return numericValue(result.market_cap_value);
   if (key === "inputTokens") return numericValue(result.prompt_tokens);
   if (key === "responseTokens") return numericValue(result.response_tokens);
   if (key === "reasoningTokens") return numericValue(result.reasoning_tokens);
@@ -713,7 +730,16 @@ function setSort(key) {
   if (sortState.key === key) {
     sortState = { key, direction: sortState.direction === "asc" ? "desc" : "asc" };
   } else {
-    const direction = ["score", "inputTokens", "responseTokens", "reasoningTokens", "durationMs", "cost"].includes(key)
+    const descendingKeys = [
+      "score",
+      "marketCap",
+      "inputTokens",
+      "responseTokens",
+      "reasoningTokens",
+      "durationMs",
+      "cost",
+    ];
+    const direction = descendingKeys.includes(key)
       ? "desc"
       : "asc";
     sortState = { key, direction };
@@ -1021,7 +1047,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="11">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="12">Waiting for scores...</td></tr>';
     applyColumnVisibility();
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
@@ -1042,7 +1068,7 @@ function renderRun(run) {
         : viewResults.length
           ? "No scores match this filter."
           : "No successful scores yet.";
-    resultRows.innerHTML = `<tr><td colspan="11">${emptyMessage}</td></tr>`;
+    resultRows.innerHTML = `<tr><td colspan="12">${emptyMessage}</td></tr>`;
     applyColumnVisibility();
     restoreScrollPosition();
     return;
@@ -1076,6 +1102,9 @@ function renderRun(run) {
               </div>
             </div>
           </td>
+          <td data-column="marketCap">${escapeHtml(
+            formatMarketCap(result.market_cap_value, result.market_cap)
+          )}</td>
           <td data-column="input">${formatNumber(result.prompt_tokens)}</td>
           <td data-column="response">${formatNumber(result.response_tokens)}</td>
           <td data-column="reasoning">${formatNumber(result.reasoning_tokens)}</td>
@@ -1109,7 +1138,7 @@ async function loadCurrentRun() {
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="11">Create a scoring run first.</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="12">Create a scoring run first.</td></tr>';
     return;
   }
 
