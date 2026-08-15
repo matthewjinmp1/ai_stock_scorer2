@@ -900,12 +900,12 @@ table {
 .ranking-table.ranking-view td:nth-child(1),
 .ranking-table.ranking-view th:nth-child(2),
 .ranking-table.ranking-view td:nth-child(2) {
-  width: 5%;
+  width: 6%;
 }
 
 .ranking-table.ranking-view th:nth-child(3),
 .ranking-table.ranking-view td:nth-child(3) {
-  width: 23%;
+  width: 22%;
 }
 
 .ranking-table.ranking-view th:nth-child(4),
@@ -939,19 +939,19 @@ table {
 
 .ranking-table.ranking-view th:nth-child(11),
 .ranking-table.ranking-view td:nth-child(11) {
-  width: 9%;
+  width: 8%;
 }
 
 .ranking-table.failed-view th:nth-child(1),
 .ranking-table.failed-view td:nth-child(1),
 .ranking-table.failed-view th:nth-child(2),
 .ranking-table.failed-view td:nth-child(2) {
-  width: 4%;
+  width: 6%;
 }
 
 .ranking-table.failed-view th:nth-child(3),
 .ranking-table.failed-view td:nth-child(3) {
-  width: 16%;
+  width: 14%;
 }
 
 .ranking-table.failed-view th:nth-child(4),
@@ -960,7 +960,7 @@ table {
 .ranking-table.failed-view td:nth-child(5),
 .ranking-table.failed-view th:nth-child(6),
 .ranking-table.failed-view td:nth-child(6) {
-  width: 7%;
+  width: 8%;
 }
 
 .ranking-table.failed-view th:nth-child(7),
@@ -980,12 +980,12 @@ table {
 
 .ranking-table.failed-view th:nth-child(10),
 .ranking-table.failed-view td:nth-child(10) {
-  width: 17%;
+  width: 14%;
 }
 
 .ranking-table.failed-view th:nth-child(11),
 .ranking-table.failed-view td:nth-child(11) {
-  width: 15%;
+  width: 13%;
 }
 
 th,
@@ -1008,23 +1008,36 @@ th {
   text-transform: uppercase;
 }
 
+.ranking-table th {
+  padding-right: 8px;
+  padding-left: 8px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 .sort-button {
+  position: relative;
   display: inline-flex;
+  width: 100%;
   align-items: center;
-  gap: 6px;
   max-width: 100%;
-  padding: 0;
+  padding: 0 10px 0 0;
   border: 0;
   background: transparent;
   color: inherit;
   font: inherit;
+  line-height: 1.2;
+  text-align: left;
   text-transform: inherit;
   cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
 }
 
 .sort-button::after {
+  position: absolute;
+  right: 0;
   content: "";
   width: 0;
   height: 0;
