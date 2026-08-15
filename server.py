@@ -3,6 +3,7 @@ import concurrent.futures
 import copy
 import html
 import json
+import math
 import os
 import re
 import socket
@@ -1193,7 +1194,7 @@ def get_run(run_id):
         result["logo"] = logos.get(result["ticker"], "")
         payload["results"].append(result)
     payload["model_details"] = model_details(run["model"], run["reasoning_mode"])
-    payload["stats"] = ai_request_stats_for_run(run_id)
+    payload["stats"] = ai_request_stats_for_run(run_id, run["max_tokens"])
     payload["stats"]["recent_average_latency_ms"] = recent_average_latency_ms(run["model"])
     payload["scoring_concurrency"] = scoring_concurrency()
     payload["incomplete_count"] = incomplete_company_count(run_id)
@@ -1358,7 +1359,58 @@ def recent_average_latency_ms(model, limit=200):
     return round(sum(recent_latencies) / sample_size)
 
 
-def ai_request_stats_for_run(run_id):
+def estimate_token_limit_failure_risk(completion_tokens, token_limit, minimum_samples=10):
+    """Estimate the completion-token tail as a one-in-N failure rate."""
+    try:
+        token_limit = float(token_limit)
+    except (TypeError, ValueError):
+        token_limit = 0
+
+    samples = []
+    for value in completion_tokens:
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value) and value > 0:
+            samples.append(value)
+
+    result = {
+        "one_in": None,
+        "probability": None,
+        "sample_size": len(samples),
+        "method": "lognormal_tail",
+        "capped": False,
+    }
+    if token_limit <= 0 or len(samples) < minimum_samples:
+        return result
+
+    log_samples = [math.log(value) for value in samples]
+    log_mean = sum(log_samples) / len(log_samples)
+    log_variance = sum((value - log_mean) ** 2 for value in log_samples) / (
+        len(log_samples) - 1
+    )
+    log_stddev = math.sqrt(log_variance)
+    if log_stddev <= 1e-9:
+        tail_probability = 1.0 if samples[0] >= token_limit else 0.0
+    else:
+        z_score = (math.log(token_limit) - log_mean) / log_stddev
+        tail_probability = 0.5 * math.erfc(z_score / math.sqrt(2))
+
+    result["probability"] = tail_probability
+    if tail_probability <= 0:
+        result["one_in"] = 1_000_000
+        result["capped"] = True
+    else:
+        one_in = max(1, round(1 / tail_probability))
+        if one_in > 1_000_000:
+            one_in = 1_000_000
+            result["capped"] = True
+        result["one_in"] = one_in
+    return result
+
+
+def ai_request_stats_for_run(run_id, token_limit=None):
     stats = {
         "cost": 0,
         "total_tokens": 0,
@@ -1373,8 +1425,14 @@ def ai_request_stats_for_run(run_id):
         "average_response_tokens": None,
         "average_reasoning_tokens": None,
         "average_latency_ms": None,
+        "token_limit_risk_one_in": None,
+        "token_limit_risk_probability": None,
+        "token_limit_risk_sample_size": 0,
+        "token_limit_risk_method": "lognormal_tail",
+        "token_limit_risk_capped": False,
     }
-    for entry in effective_ai_request_entries():
+    successful_completion_tokens = {}
+    for entry_index, entry in enumerate(effective_ai_request_entries()):
         if entry.get("run_id") != run_id:
             continue
 
@@ -1395,6 +1453,12 @@ def ai_request_stats_for_run(run_id):
             completion_tokens = float(token_stats.get("completion_tokens") or 0)
             reasoning_tokens = float(completion_details.get("reasoning_tokens") or 0)
             stats["response_tokens"] += max(0, completion_tokens - reasoning_tokens)
+            ticker = (entry.get("company", {}).get("ticker") or "").upper()
+            sample_key = ticker or f"entry-{entry_index}"
+            if entry.get("response", {}).get("success") and completion_tokens > 0:
+                successful_completion_tokens[sample_key] = completion_tokens
+            elif ticker:
+                successful_completion_tokens.pop(sample_key, None)
         except (TypeError, ValueError):
             pass
         try:
@@ -1414,6 +1478,14 @@ def ai_request_stats_for_run(run_id):
             stats["reasoning_tokens"] / stats["request_count"], 1
         )
         stats["average_latency_ms"] = round(stats["total_latency_ms"] / stats["request_count"])
+    risk = estimate_token_limit_failure_risk(
+        successful_completion_tokens.values(), token_limit
+    )
+    stats["token_limit_risk_one_in"] = risk["one_in"]
+    stats["token_limit_risk_probability"] = risk["probability"]
+    stats["token_limit_risk_sample_size"] = risk["sample_size"]
+    stats["token_limit_risk_method"] = risk["method"]
+    stats["token_limit_risk_capped"] = risk["capped"]
     return stats
 
 

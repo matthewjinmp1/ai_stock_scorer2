@@ -28,6 +28,8 @@ const statTokens = document.querySelector("#statTokens");
 const statTokenLimit = document.querySelector("#statTokenLimit");
 const statAverageResponseTokens = document.querySelector("#statAverageResponseTokens");
 const statAverageReasoningTokens = document.querySelector("#statAverageReasoningTokens");
+const statTokenLimitRisk = document.querySelector("#statTokenLimitRisk");
+const statTokenLimitRiskNote = document.querySelector("#statTokenLimitRiskNote");
 const statLatency = document.querySelector("#statLatency");
 const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
@@ -382,6 +384,21 @@ function renderRunStats(run) {
   statTokenLimit.textContent = formatNumber(run.max_tokens);
   statAverageResponseTokens.textContent = formatNumber(stats.average_response_tokens);
   statAverageReasoningTokens.textContent = formatNumber(stats.average_reasoning_tokens);
+  const riskSampleSize = Number(stats.token_limit_risk_sample_size || 0);
+  const riskOneIn = Number(stats.token_limit_risk_one_in);
+  if (Number.isFinite(riskOneIn) && riskOneIn > 0) {
+    statTokenLimitRisk.textContent = `${stats.token_limit_risk_capped ? ">" : ""}${formatNumber(
+      riskOneIn
+    )}`;
+    statTokenLimitRiskNote.textContent = `1 expected token-limit failure per ${
+      stats.token_limit_risk_capped ? "more than " : ""
+    }${formatNumber(riskOneIn)} stocks · ${formatNumber(riskSampleSize)} successful samples`;
+  } else {
+    statTokenLimitRisk.textContent = "--";
+    statTokenLimitRiskNote.textContent = `Needs 10 successful stocks · ${formatNumber(
+      riskSampleSize
+    )} available`;
+  }
   statLatency.textContent = formatMs(stats.average_latency_ms);
   statScoreRange.textContent =
     minScore === null ? "--" : `${formatScore(minScore)}-${formatScore(maxScore)}`;
