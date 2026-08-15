@@ -1133,7 +1133,7 @@ function renderRun(run) {
       const responsePageUrl = responseUrl(result);
       const detailsUrl = resultUrl(result);
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
-        `what does ${result.company_name} (${result.ticker}) do`
+        `what does ${result.company_name} (ticker: ${result.ticker}) do`
       )}`;
       const rowRedrive =
         activeResultView === "failed"
