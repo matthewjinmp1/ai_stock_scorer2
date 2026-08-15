@@ -121,6 +121,22 @@ class AppPreferenceTests(ServerTestCase):
         with self.assertRaisesRegex(ValueError, "Unknown run table column"):
             server.save_run_table_columns_preference(["company", "not-a-column"])
 
+    def test_legacy_run_table_columns_add_search_before_details(self):
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO app_preferences (key, value, updated_at) VALUES (?, ?, ?)",
+                (
+                    server.RUN_TABLE_COLUMNS_PREFERENCE_KEY,
+                    json.dumps(["company", "actions"]),
+                    int(time.time()),
+                ),
+            )
+
+        self.assertEqual(
+            server.get_run_table_columns_preference(),
+            ["company", "search", "actions"],
+        )
+
 
 class PromptAndParsingTests(ServerTestCase):
     def test_luna_xhigh_model_and_reasoning_settings(self):

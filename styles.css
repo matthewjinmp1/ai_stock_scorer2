@@ -1000,17 +1000,17 @@ table {
 .ranking-table.ranking-view td:nth-child(1),
 .ranking-table.ranking-view th:nth-child(2),
 .ranking-table.ranking-view td:nth-child(2) {
-  width: 5%;
+  width: 4.5%;
 }
 
 .ranking-table.ranking-view th:nth-child(3),
 .ranking-table.ranking-view td:nth-child(3) {
-  width: 18%;
+  width: 16.5%;
 }
 
 .ranking-table.ranking-view th:nth-child(4),
 .ranking-table.ranking-view td:nth-child(4) {
-  width: 8.5%;
+  width: 8%;
 }
 
 .ranking-table.ranking-view th:nth-child(5),
@@ -1021,22 +1021,22 @@ table {
 .ranking-table.ranking-view td:nth-child(7),
 .ranking-table.ranking-view th:nth-child(8),
 .ranking-table.ranking-view td:nth-child(8) {
-  width: 7%;
+  width: 6.5%;
 }
 
 .ranking-table.ranking-view th:nth-child(9),
 .ranking-table.ranking-view td:nth-child(9) {
-  width: 8%;
+  width: 7.5%;
 }
 
 .ranking-table.ranking-view th:nth-child(10),
 .ranking-table.ranking-view td:nth-child(10) {
-  width: 6.5%;
+  width: 6%;
 }
 
 .ranking-table.ranking-view th:nth-child(11),
 .ranking-table.ranking-view td:nth-child(11) {
-  width: 8%;
+  width: 7%;
 }
 
 .ranking-table.ranking-view th:nth-child(12),
@@ -1046,19 +1046,24 @@ table {
 
 .ranking-table.ranking-view th:nth-child(13),
 .ranking-table.ranking-view td:nth-child(13) {
-  width: 10%;
+  width: 8%;
+}
+
+.ranking-table.ranking-view th:nth-child(14),
+.ranking-table.ranking-view td:nth-child(14) {
+  width: 8%;
 }
 
 .ranking-table.failed-view th:nth-child(1),
 .ranking-table.failed-view td:nth-child(1),
 .ranking-table.failed-view th:nth-child(2),
 .ranking-table.failed-view td:nth-child(2) {
-  width: 4.5%;
+  width: 4%;
 }
 
 .ranking-table.failed-view th:nth-child(3),
 .ranking-table.failed-view td:nth-child(3) {
-  width: 13%;
+  width: 12%;
 }
 
 .ranking-table.failed-view th:nth-child(4),
@@ -1074,7 +1079,7 @@ table {
 .ranking-table.failed-view td:nth-child(7),
 .ranking-table.failed-view th:nth-child(8),
 .ranking-table.failed-view td:nth-child(8) {
-  width: 6%;
+  width: 5.5%;
 }
 
 .ranking-table.failed-view th:nth-child(9),
@@ -1094,12 +1099,17 @@ table {
 
 .ranking-table.failed-view th:nth-child(12),
 .ranking-table.failed-view td:nth-child(12) {
-  width: 13.5%;
+  width: 12.5%;
 }
 
 .ranking-table.failed-view th:nth-child(13),
 .ranking-table.failed-view td:nth-child(13) {
-  width: 10%;
+  width: 7%;
+}
+
+.ranking-table.failed-view th:nth-child(14),
+.ranking-table.failed-view td:nth-child(14) {
+  width: 8%;
 }
 
 th,
@@ -1160,14 +1170,16 @@ tbody tr:hover {
   cursor: pointer;
 }
 
+.search-cell,
 .details-cell {
   overflow: visible;
   text-align: right;
 }
 
-.row-detail-actions {
+.error-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: flex-start;
+  flex-direction: column;
   gap: 6px;
 }
 

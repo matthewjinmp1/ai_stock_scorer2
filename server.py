@@ -123,6 +123,7 @@ RUN_TABLE_COLUMN_KEYS = (
     "time",
     "cost",
     "error",
+    "search",
     "actions",
 )
 RUN_TABLE_COLUMNS_PREFERENCE_KEY = "run_table_columns"
@@ -678,12 +679,28 @@ def get_run_table_columns_preference():
     if not row:
         return None
     try:
-        columns = json.loads(row["value"])
+        stored_value = json.loads(row["value"])
     except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    legacy_columns = isinstance(stored_value, list)
+    stored_version = 1
+    if legacy_columns:
+        columns = stored_value
+    elif isinstance(stored_value, dict):
+        columns = stored_value.get("columns")
+        try:
+            stored_version = int(stored_value.get("version") or 1)
+        except (TypeError, ValueError):
+            stored_version = 1
+    else:
         return None
     if not isinstance(columns, list):
         return None
     valid_columns = [column for column in columns if column in RUN_TABLE_COLUMN_KEYS]
+    if stored_version < 3 and "search" not in valid_columns:
+        insert_at = valid_columns.index("actions") if "actions" in valid_columns else len(valid_columns)
+        valid_columns.insert(insert_at, "search")
+        save_run_table_columns_preference(valid_columns)
     return valid_columns or None
 
 
@@ -707,7 +724,7 @@ def save_run_table_columns_preference(columns):
             """,
             (
                 RUN_TABLE_COLUMNS_PREFERENCE_KEY,
-                json.dumps(selected_columns),
+                json.dumps({"version": 3, "columns": selected_columns}),
                 int(time.time()),
             ),
         )

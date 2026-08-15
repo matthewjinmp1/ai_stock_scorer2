@@ -80,9 +80,10 @@ const COLUMN_KEYS = [
   "time",
   "cost",
   "error",
+  "search",
   "actions",
 ];
-const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v3";
+const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v4";
 
 function loadVisibleColumns() {
   try {
@@ -1100,7 +1101,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="13">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="14">Waiting for scores...</td></tr>';
     applyColumnVisibility();
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
@@ -1121,7 +1122,7 @@ function renderRun(run) {
         : viewResults.length
           ? "No scores match this filter."
           : "No successful scores yet.";
-    resultRows.innerHTML = `<tr><td colspan="13">${emptyMessage}</td></tr>`;
+    resultRows.innerHTML = `<tr><td colspan="14">${emptyMessage}</td></tr>`;
     applyColumnVisibility();
     restoreScrollPosition();
     return;
@@ -1131,6 +1132,9 @@ function renderRun(run) {
       const error = result.error ? escapeHtml(result.error) : "";
       const responsePageUrl = responseUrl(result);
       const detailsUrl = resultUrl(result);
+      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
+        `what does ${result.company_name} (${result.ticker}) do`
+      )}`;
       const rowRedrive =
         activeResultView === "failed"
           ? `<button class="details-link row-redrive-button" type="button" data-redrive-ticker="${escapeHtml(
@@ -1165,12 +1169,17 @@ function renderRun(run) {
           <td data-column="budget">${formatPercent(result.token_budget_used_percent)}</td>
           <td data-column="time">${formatCompactSeconds(result.duration_ms)}</td>
           <td data-column="cost">${formatCompactCents(result.cost)}</td>
-          <td data-column="error" class="error-cell">${error}</td>
-          <td data-column="actions" class="details-cell">
-            <div class="row-detail-actions">
+          <td data-column="error" class="error-cell">
+            <div class="error-actions">
+              <span>${error}</span>
               ${rowRedrive}
-              <button class="details-link" type="button" data-details-url="${detailsUrl}">Details</button>
             </div>
+          </td>
+          <td data-column="search" class="search-cell">
+            <button class="details-link" type="button" data-search-url="${escapeHtml(searchUrl)}">Search</button>
+          </td>
+          <td data-column="actions" class="details-cell">
+            <button class="details-link" type="button" data-details-url="${detailsUrl}">Details</button>
           </td>
         </tr>
       `;
@@ -1192,7 +1201,7 @@ async function loadCurrentRun() {
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="13">Create a scoring run first.</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="14">Create a scoring run first.</td></tr>';
     return;
   }
 
@@ -1327,6 +1336,13 @@ document.querySelectorAll("[data-result-view]").forEach((button) => {
 columnSelector.addEventListener("change", updateVisibleColumn);
 resetColumnsButton.addEventListener("click", resetVisibleColumns);
 resultRows.addEventListener("click", (event) => {
+  const searchButton = event.target.closest("[data-search-url]");
+  if (searchButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    window.open(searchButton.dataset.searchUrl, "_blank", "noopener,noreferrer");
+    return;
+  }
   const redriveButton = event.target.closest("[data-redrive-ticker]");
   if (redriveButton) {
     event.preventDefault();
