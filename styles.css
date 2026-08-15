@@ -442,7 +442,7 @@ button:hover {
   padding: 0;
 }
 
-.detail-toolbar .secondary-link {
+.detail-toolbar .secondary-button {
   display: flex;
   align-items: center;
   min-height: 64px;
@@ -1086,6 +1086,7 @@ tbody tr:hover {
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .details-link:hover {

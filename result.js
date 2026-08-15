@@ -106,7 +106,7 @@ async function loadDetail() {
     const value = params.get(key);
     if (value) backUrl.searchParams.set(key, value);
   });
-  els.backLink.href = `${backUrl.pathname}${backUrl.search}`;
+  els.backLink.dataset.navUrl = `${backUrl.pathname}${backUrl.search}`;
 
   const response = await fetch(
     `/api/runs/${encodeURIComponent(runId)}/results/${encodeURIComponent(ticker)}`
@@ -195,6 +195,13 @@ async function loadDetail() {
     aiRequest?.chain_of_thought_note ||
     "Reasoning text was not exposed by the model/API for this request.";
 }
+
+document.querySelector("[data-home-button]")?.addEventListener("click", () => {
+  window.location.href = "/";
+});
+els.backLink.addEventListener("click", () => {
+  window.location.href = els.backLink.dataset.navUrl || "/run.html";
+});
 
 if ("EventSource" in window) {
   const events = new EventSource("/events");

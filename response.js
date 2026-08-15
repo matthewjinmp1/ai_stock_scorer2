@@ -75,8 +75,15 @@ function setBackLink() {
     const value = params.get(key);
     if (value) url.searchParams.set(key, value);
   });
-  els.backLink.href = `${url.pathname}${url.search}`;
+  els.backLink.dataset.navUrl = `${url.pathname}${url.search}`;
 }
+
+document.querySelector("[data-home-button]")?.addEventListener("click", () => {
+  window.location.href = "/";
+});
+els.backLink.addEventListener("click", () => {
+  window.location.href = els.backLink.dataset.navUrl || "/run.html";
+});
 
 async function loadResponse() {
   if (!runId || !ticker) throw new Error("Missing run or ticker.");

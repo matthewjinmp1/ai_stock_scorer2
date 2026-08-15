@@ -90,20 +90,31 @@ function ensureHomeLink() {
   }
   if (!nav) return;
 
-  const existingHome = document.querySelector('a[href="/"]');
+  const existingHome = document.querySelector("[data-home-button]");
   if (existingHome) {
     existingHome.textContent = "Home";
-    existingHome.classList.add("secondary-link");
+    existingHome.classList.add("secondary-button");
     existingHome.classList.add("nav-link");
     if (existingHome.parentElement !== nav) nav.append(existingHome);
+    if (!existingHome.dataset.navigationBound) {
+      existingHome.addEventListener("click", () => {
+        window.location.href = "/";
+      });
+      existingHome.dataset.navigationBound = "true";
+    }
     return;
   }
 
-  const homeLink = document.createElement("a");
-  homeLink.href = "/";
-  homeLink.className = "secondary-link nav-link";
-  homeLink.textContent = "Home";
-  nav.append(homeLink);
+  const homeButton = document.createElement("button");
+  homeButton.type = "button";
+  homeButton.className = "secondary-button nav-link";
+  homeButton.dataset.homeButton = "";
+  homeButton.textContent = "Home";
+  homeButton.addEventListener("click", () => {
+    window.location.href = "/";
+  });
+  homeButton.dataset.navigationBound = "true";
+  nav.append(homeButton);
 }
 
 function escapeHtml(value) {
@@ -975,7 +986,7 @@ function renderRun(run) {
           <td class="details-cell">
             <div class="row-detail-actions">
               ${rowRedrive}
-              <a class="details-link" href="${detailsUrl}">Details</a>
+              <button class="details-link" type="button" data-details-url="${detailsUrl}">Details</button>
             </div>
           </td>
         </tr>
@@ -1142,7 +1153,7 @@ resultRows.addEventListener("click", (event) => {
   const detailsLink = event.target.closest(".details-link");
   const responseLink = row.querySelector(".company-link");
   const destination = new URL(
-    detailsLink?.getAttribute("href") ||
+    detailsLink?.dataset.detailsUrl ||
       responseLink?.getAttribute("href") ||
       row.dataset.responseUrl,
     window.location.origin
