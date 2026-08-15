@@ -145,6 +145,7 @@ class PromptAndParsingTests(ServerTestCase):
         request_payload = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
         self.assertEqual(request_payload["model"], "openai/gpt-5.6-luna")
         self.assertEqual(request_payload["reasoning"], {"effort": "xhigh", "exclude": False})
+        self.assertNotIn("temperature", request_payload)
 
     def test_http_response_deadline_interrupts_a_stalled_read(self):
         class StalledResponse:

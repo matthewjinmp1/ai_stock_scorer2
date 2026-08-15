@@ -50,6 +50,7 @@ MODEL_OPTIONS = [
     {
         "id": "openai/gpt-5.6-luna",
         "label": "GPT-5.6 Luna",
+        "supports_temperature": False,
         "provider": {
             "require_parameters": True,
         },
@@ -2018,11 +2019,12 @@ def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, ma
         "messages": [
             {"role": "user", "content": prompt_for_company(prompt, company)},
         ],
-        "temperature": 0,
         "max_tokens": normalize_max_tokens(max_tokens),
         "reasoning": reasoning,
         "provider": provider_preferences(config),
     }
+    if config.get("supports_temperature", True):
+        request_payload["temperature"] = 0
     body = json.dumps(request_payload).encode("utf-8")
     request = urllib.request.Request(
         OPENROUTER_API_URL,
