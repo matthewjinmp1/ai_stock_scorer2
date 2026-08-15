@@ -124,6 +124,7 @@ RUN_TABLE_COLUMN_KEYS = (
     "cost",
     "error",
     "search",
+    "chart",
     "actions",
 )
 RUN_TABLE_COLUMNS_PREFERENCE_KEY = "run_table_columns"
@@ -697,9 +698,16 @@ def get_run_table_columns_preference():
     if not isinstance(columns, list):
         return None
     valid_columns = [column for column in columns if column in RUN_TABLE_COLUMN_KEYS]
+    migrated = False
     if stored_version < 3 and "search" not in valid_columns:
         insert_at = valid_columns.index("actions") if "actions" in valid_columns else len(valid_columns)
         valid_columns.insert(insert_at, "search")
+        migrated = True
+    if stored_version < 4 and "chart" not in valid_columns:
+        insert_at = valid_columns.index("actions") if "actions" in valid_columns else len(valid_columns)
+        valid_columns.insert(insert_at, "chart")
+        migrated = True
+    if migrated:
         save_run_table_columns_preference(valid_columns)
     return valid_columns or None
 
@@ -724,7 +732,7 @@ def save_run_table_columns_preference(columns):
             """,
             (
                 RUN_TABLE_COLUMNS_PREFERENCE_KEY,
-                json.dumps({"version": 3, "columns": selected_columns}),
+                json.dumps({"version": 4, "columns": selected_columns}),
                 int(time.time()),
             ),
         )

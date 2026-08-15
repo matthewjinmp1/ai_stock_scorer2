@@ -134,7 +134,25 @@ class AppPreferenceTests(ServerTestCase):
 
         self.assertEqual(
             server.get_run_table_columns_preference(),
-            ["company", "search", "actions"],
+            ["company", "search", "chart", "actions"],
+        )
+
+    def test_previous_column_preferences_add_price_chart_before_details(self):
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO app_preferences (key, value, updated_at) VALUES (?, ?, ?)",
+                (
+                    server.RUN_TABLE_COLUMNS_PREFERENCE_KEY,
+                    json.dumps(
+                        {"version": 3, "columns": ["company", "search", "actions"]}
+                    ),
+                    int(time.time()),
+                ),
+            )
+
+        self.assertEqual(
+            server.get_run_table_columns_preference(),
+            ["company", "search", "chart", "actions"],
         )
 
 

@@ -81,9 +81,10 @@ const COLUMN_KEYS = [
   "cost",
   "error",
   "search",
+  "chart",
   "actions",
 ];
-const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v4";
+const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v5";
 
 function loadVisibleColumns() {
   try {
@@ -1101,7 +1102,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="14">Waiting for scores...</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="15">Waiting for scores...</td></tr>';
     applyColumnVisibility();
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
@@ -1122,7 +1123,7 @@ function renderRun(run) {
         : viewResults.length
           ? "No scores match this filter."
           : "No successful scores yet.";
-    resultRows.innerHTML = `<tr><td colspan="14">${emptyMessage}</td></tr>`;
+    resultRows.innerHTML = `<tr><td colspan="15">${emptyMessage}</td></tr>`;
     applyColumnVisibility();
     restoreScrollPosition();
     return;
@@ -1134,6 +1135,9 @@ function renderRun(run) {
       const detailsUrl = resultUrl(result);
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
         `what does ${result.company_name} (ticker: ${result.ticker}) do`
+      )}`;
+      const chartUrl = `https://www.google.com/search?q=${encodeURIComponent(
+        `${result.company_name} (ticker: ${result.ticker}) stock price chart`
       )}`;
       const rowRedrive =
         activeResultView === "failed"
@@ -1178,6 +1182,9 @@ function renderRun(run) {
           <td data-column="search" class="search-cell">
             <button class="details-link" type="button" data-search-url="${escapeHtml(searchUrl)}">Search</button>
           </td>
+          <td data-column="chart" class="search-cell">
+            <button class="details-link" type="button" data-search-url="${escapeHtml(chartUrl)}">Chart</button>
+          </td>
           <td data-column="actions" class="details-cell">
             <button class="details-link" type="button" data-details-url="${detailsUrl}">Details</button>
           </td>
@@ -1201,7 +1208,7 @@ async function loadCurrentRun() {
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="14">Create a scoring run first.</td></tr>';
+    resultRows.innerHTML = '<tr><td colspan="15">Create a scoring run first.</td></tr>';
     return;
   }
 
