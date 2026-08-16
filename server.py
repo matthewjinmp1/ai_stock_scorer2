@@ -21,7 +21,7 @@ from urllib.parse import parse_qsl, unquote, urlparse
 
 ROOT = Path(__file__).resolve().parent
 SOURCE_URL = "https://companiesmarketcap.com/"
-COMPANY_UNIVERSE_LIMIT = 1000
+COMPANY_UNIVERSE_LIMIT = 2000
 COMPANIESMARKETCAP_PAGE_SIZE = 100
 CACHE_SECONDS = 60 * 15
 DB_PATH = ROOT / "companies.db"
