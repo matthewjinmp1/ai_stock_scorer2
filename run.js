@@ -1138,7 +1138,7 @@ function renderRun(run) {
         `what does ${result.company_name} (ticker: ${result.ticker}) do`
       )}`;
       const chartUrl = `https://www.google.com/search?q=${encodeURIComponent(
-        `${result.company_name} (ticker: ${result.ticker}) stock price chart`
+        `${result.ticker} stock`
       )}`;
       const dashboardUrl = `http://localhost:3000/?ticker=${encodeURIComponent(result.ticker)}`;
       const rowRedrive =
