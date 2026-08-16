@@ -129,6 +129,10 @@ RUN_TABLE_COLUMN_KEYS = (
     "actions",
 )
 RUN_TABLE_COLUMNS_PREFERENCE_KEY = "run_table_columns"
+RUN_TABLE_COLUMNS_PREFERENCE_KEYS = {
+    "ranking": "run_table_columns_ranking",
+    "failed": "run_table_columns_failed",
+}
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
@@ -672,12 +676,25 @@ def ensure_scoring_schema():
         connection.commit()
 
 
-def get_run_table_columns_preference():
+def run_table_columns_preference_key(view):
+    normalized_view = str(view or "ranking").strip().lower()
+    if normalized_view not in RUN_TABLE_COLUMNS_PREFERENCE_KEYS:
+        raise ValueError("Unknown run table view.")
+    return RUN_TABLE_COLUMNS_PREFERENCE_KEYS[normalized_view]
+
+
+def get_run_table_columns_preference(view="ranking"):
+    preference_key = run_table_columns_preference_key(view)
     with db_connect() as connection:
         row = connection.execute(
             "SELECT value FROM app_preferences WHERE key = ?",
-            (RUN_TABLE_COLUMNS_PREFERENCE_KEY,),
+            (preference_key,),
         ).fetchone()
+        if not row:
+            row = connection.execute(
+                "SELECT value FROM app_preferences WHERE key = ?",
+                (RUN_TABLE_COLUMNS_PREFERENCE_KEY,),
+            ).fetchone()
     if not row:
         return None
     try:
@@ -713,11 +730,20 @@ def get_run_table_columns_preference():
         valid_columns.insert(insert_at, "dashboard")
         migrated = True
     if migrated:
-        save_run_table_columns_preference(valid_columns)
+        save_run_table_columns_preference(valid_columns, view)
+    elif valid_columns:
+        with db_connect() as connection:
+            has_view_preference = connection.execute(
+                "SELECT 1 FROM app_preferences WHERE key = ?",
+                (preference_key,),
+            ).fetchone()
+        if not has_view_preference:
+            save_run_table_columns_preference(valid_columns, view)
     return valid_columns or None
 
 
-def save_run_table_columns_preference(columns):
+def save_run_table_columns_preference(columns, view="ranking"):
+    preference_key = run_table_columns_preference_key(view)
     if not isinstance(columns, list):
         raise ValueError("Columns must be a list.")
     unknown_columns = [column for column in columns if column not in RUN_TABLE_COLUMN_KEYS]
@@ -736,7 +762,7 @@ def save_run_table_columns_preference(columns):
                 updated_at = excluded.updated_at
             """,
             (
-                RUN_TABLE_COLUMNS_PREFERENCE_KEY,
+                preference_key,
                 json.dumps({"version": 5, "columns": selected_columns}),
                 int(time.time()),
             ),
@@ -2623,7 +2649,11 @@ class Handler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/preferences/run-table-columns":
             ensure_scoring_schema()
-            self.send_json({"columns": get_run_table_columns_preference()})
+            try:
+                view = dict(parse_qsl(parsed.query)).get("view", "ranking")
+                self.send_json({"columns": get_run_table_columns_preference(view)})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
             return
 
         if parsed.path == "/api/stock-lists":
@@ -2818,7 +2848,8 @@ class Handler(SimpleHTTPRequestHandler):
             ensure_scoring_schema()
             try:
                 payload = self.read_json()
-                columns = save_run_table_columns_preference(payload.get("columns"))
+                view = dict(parse_qsl(parsed.query)).get("view", "ranking")
+                columns = save_run_table_columns_preference(payload.get("columns"), view)
                 self.send_json({"columns": columns})
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)

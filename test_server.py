@@ -121,6 +121,23 @@ class AppPreferenceTests(ServerTestCase):
         with self.assertRaisesRegex(ValueError, "Unknown run table column"):
             server.save_run_table_columns_preference(["company", "not-a-column"])
 
+    def test_run_table_column_views_persist_separately(self):
+        server.save_run_table_columns_preference(["company", "score"], "ranking")
+        server.save_run_table_columns_preference(["company", "error"], "failed")
+
+        self.assertEqual(
+            server.get_run_table_columns_preference("ranking"),
+            ["company", "score"],
+        )
+        self.assertEqual(
+            server.get_run_table_columns_preference("failed"),
+            ["company", "error"],
+        )
+
+    def test_run_table_columns_reject_unknown_view(self):
+        with self.assertRaisesRegex(ValueError, "Unknown run table view"):
+            server.get_run_table_columns_preference("other")
+
     def test_legacy_run_table_columns_add_search_before_details(self):
         with self.connect() as connection:
             connection.execute(

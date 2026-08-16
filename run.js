@@ -85,11 +85,18 @@ const COLUMN_KEYS = [
   "dashboard",
   "actions",
 ];
-const COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v6";
+const LEGACY_COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v6";
+const COLUMN_STORAGE_KEYS = {
+  ranking: "ai-stock-scorer-visible-ranking-columns-v1",
+  failed: "ai-stock-scorer-visible-failed-columns-v1",
+};
 
-function loadVisibleColumns() {
+function loadVisibleColumns(view) {
   try {
-    const saved = JSON.parse(window.localStorage.getItem(COLUMN_STORAGE_KEY));
+    const stored =
+      window.localStorage.getItem(COLUMN_STORAGE_KEYS[view]) ||
+      window.localStorage.getItem(LEGACY_COLUMN_STORAGE_KEY);
+    const saved = JSON.parse(stored);
     if (Array.isArray(saved)) {
       const valid = saved.filter((column) => COLUMN_KEYS.includes(column));
       if (valid.length) return new Set(valid);
@@ -116,22 +123,26 @@ let rankingSearchQuery = (params.get("q") || "").trim();
 let matchedScore = null;
 let restoredScroll = false;
 let activeResultView = RESULT_VIEWS.has(params.get("tab")) ? params.get("tab") : "ranking";
-let visibleColumns = loadVisibleColumns();
-let columnSaveTimer = null;
+const visibleColumnsByView = {
+  ranking: loadVisibleColumns("ranking"),
+  failed: loadVisibleColumns("failed"),
+};
+let visibleColumns = visibleColumnsByView[activeResultView];
+const columnSaveTimers = { ranking: null, failed: null };
 
-function saveVisibleColumnsLocally() {
+function saveVisibleColumnsLocally(view, columns) {
   try {
-    window.localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify([...visibleColumns]));
+    window.localStorage.setItem(COLUMN_STORAGE_KEYS[view], JSON.stringify([...columns]));
   } catch (_error) {
     // The selection still works for this page when browser storage is unavailable.
   }
 }
 
-async function persistVisibleColumns() {
-  const response = await fetch("/api/preferences/run-table-columns", {
+async function persistVisibleColumns(view, columns) {
+  const response = await fetch(`/api/preferences/run-table-columns?view=${encodeURIComponent(view)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ columns: [...visibleColumns] }),
+    body: JSON.stringify({ columns: [...columns] }),
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
@@ -140,33 +151,44 @@ async function persistVisibleColumns() {
 }
 
 function saveVisibleColumns() {
-  saveVisibleColumnsLocally();
-  if (columnSaveTimer) window.clearTimeout(columnSaveTimer);
-  columnSaveTimer = window.setTimeout(() => {
-    persistVisibleColumns().catch(() => {
+  const view = activeResultView;
+  const columns = new Set(visibleColumns);
+  visibleColumnsByView[view] = columns;
+  visibleColumns = columns;
+  saveVisibleColumnsLocally(view, columns);
+  if (columnSaveTimers[view]) window.clearTimeout(columnSaveTimers[view]);
+  columnSaveTimers[view] = window.setTimeout(() => {
+    persistVisibleColumns(view, columns).catch(() => {
       // Browser storage remains a usable fallback if the server is unavailable.
     });
   }, 200);
 }
 
 async function loadPersistedVisibleColumns() {
-  try {
-    const response = await fetch("/api/preferences/run-table-columns");
-    if (!response.ok) throw new Error("Unable to load table columns.");
-    const payload = await response.json();
-    if (Array.isArray(payload.columns)) {
-      const valid = payload.columns.filter((column) => COLUMN_KEYS.includes(column));
-      if (valid.length) {
-        visibleColumns = new Set(valid);
-        saveVisibleColumnsLocally();
-        applyColumnVisibility();
-        return;
+  await Promise.all(
+    [...RESULT_VIEWS].map(async (view) => {
+      try {
+        const response = await fetch(
+          `/api/preferences/run-table-columns?view=${encodeURIComponent(view)}`
+        );
+        if (!response.ok) throw new Error("Unable to load table columns.");
+        const payload = await response.json();
+        if (Array.isArray(payload.columns)) {
+          const valid = payload.columns.filter((column) => COLUMN_KEYS.includes(column));
+          if (valid.length) {
+            visibleColumnsByView[view] = new Set(valid);
+            saveVisibleColumnsLocally(view, visibleColumnsByView[view]);
+            return;
+          }
+        }
+        await persistVisibleColumns(view, visibleColumnsByView[view]);
+      } catch (_error) {
+        // Keep the local selection when persistent preferences cannot be reached.
       }
-    }
-    await persistVisibleColumns();
-  } catch (_error) {
-    // Keep the local selection when persistent preferences cannot be reached.
-  }
+    })
+  );
+  visibleColumns = visibleColumnsByView[activeResultView];
+  applyColumnVisibility();
 }
 
 function applyColumnVisibility() {
@@ -202,6 +224,7 @@ function updateVisibleColumn(event) {
 
 function resetVisibleColumns() {
   visibleColumns = new Set(COLUMN_KEYS);
+  visibleColumnsByView[activeResultView] = visibleColumns;
   saveVisibleColumns();
   applyColumnVisibility();
 }
@@ -657,6 +680,7 @@ function updateResultViewTabs(run) {
 function setResultView(view) {
   if (!RESULT_VIEWS.has(view) || view === activeResultView) return;
   activeResultView = view;
+  visibleColumns = visibleColumnsByView[view];
   saveRunViewState();
   if (currentRun) renderRun(currentRun);
 }
