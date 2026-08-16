@@ -48,6 +48,13 @@
           <span>Response token limit</span>
           <input id="runEditorMaxTokens" type="number" min="1" max="32768" step="1" />
         </label>
+        <label>
+          <span>Stock universe</span>
+          <select id="runEditorUniverse"></select>
+          <small id="runEditorUniverseHelp">
+            Only universes containing every stock already in this run can be selected.
+          </small>
+        </label>
         <div class="actions">
           <button id="saveRunButton" type="button">Save changes</button>
           <button id="cancelRunEditButton" class="secondary-button" type="button">Cancel</button>

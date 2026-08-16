@@ -717,6 +717,85 @@ class RunWorkerTests(ServerTestCase):
         self.assertEqual(extended["company_count"], 3)
         self.assertEqual(extended["company_tickers"], ["CCC", "AAA", "BBB"])
 
+    def test_run_universe_can_change_to_a_superset(self):
+        original = server.save_stock_list("Original", ["CCC", "AAA"])
+        superset = server.save_stock_list("Expanded", ["BBB", "CCC", "AAA"])
+        server.start_scoring_worker_process = lambda run_id, start_index=0: 12345
+        run_id = server.create_scoring_run(
+            "Expandable Run",
+            "Score COMPANY",
+            MODEL,
+            reasoning_mode="none",
+            stock_list_id=original["id"],
+        )
+
+        updated = server.update_scoring_run(run_id, stock_list_id=superset["id"])
+
+        self.assertEqual(updated["stock_list_id"], superset["id"])
+        self.assertEqual(updated["stock_list_name"], "Expanded")
+        self.assertEqual(updated["company_tickers"], ["CCC", "AAA"])
+        self.assertEqual(updated["company_count"], 2)
+        self.assertEqual(updated["extension_limit"], 3)
+
+    def test_run_universe_rejects_a_non_superset(self):
+        original = server.save_stock_list("Original", ["CCC", "AAA"])
+        missing_current_stock = server.save_stock_list("Missing One", ["CCC", "BBB"])
+        server.start_scoring_worker_process = lambda run_id, start_index=0: 12345
+        run_id = server.create_scoring_run(
+            "Protected Run",
+            "Score COMPANY",
+            MODEL,
+            reasoning_mode="none",
+            stock_list_id=original["id"],
+        )
+
+        with self.assertRaisesRegex(ValueError, "must include every stock already in this run"):
+            server.update_scoring_run(run_id, stock_list_id=missing_current_stock["id"])
+
+        unchanged = server.get_run(run_id)
+        self.assertEqual(unchanged["stock_list_id"], original["id"])
+        self.assertEqual(unchanged["company_tickers"], ["CCC", "AAA"])
+
+    def test_run_universe_can_change_back_to_top_companies(self):
+        original = server.save_stock_list("Original", ["CCC", "AAA"])
+        server.start_scoring_worker_process = lambda run_id, start_index=0: 12345
+        run_id = server.create_scoring_run(
+            "Top Universe Run",
+            "Score COMPANY",
+            MODEL,
+            reasoning_mode="none",
+            stock_list_id=original["id"],
+        )
+
+        updated = server.update_scoring_run(run_id, stock_list_id=None)
+
+        self.assertIsNone(updated["stock_list_id"])
+        self.assertIsNone(updated["stock_list_name"])
+        self.assertEqual(updated["company_tickers"], ["CCC", "AAA"])
+        self.assertEqual(updated["extension_limit"], 3)
+
+    def test_run_universe_options_mark_only_supersets_eligible(self):
+        original = server.save_stock_list("Original", ["CCC", "AAA"])
+        superset = server.save_stock_list("Expanded", ["BBB", "CCC", "AAA"])
+        subset = server.save_stock_list("Too Small", ["CCC"])
+        server.start_scoring_worker_process = lambda run_id, start_index=0: 12345
+        run_id = server.create_scoring_run(
+            "Options Run",
+            "Score COMPANY",
+            MODEL,
+            reasoning_mode="none",
+            stock_list_id=original["id"],
+        )
+
+        options = server.run_universe_options(run_id)
+        by_id = {item["stock_list_id"]: item for item in options}
+
+        self.assertTrue(by_id[None]["eligible"])
+        self.assertTrue(by_id[original["id"]]["current"])
+        self.assertTrue(by_id[superset["id"]]["eligible"])
+        self.assertFalse(by_id[subset["id"]]["eligible"])
+        self.assertEqual(by_id[subset["id"]]["missing_count"], 1)
+
     def test_score_worker_fills_only_incomplete_companies(self):
         run_id = self.create_run(company_count=3)
         with self.connect() as connection:

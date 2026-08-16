@@ -11,6 +11,8 @@ const runEditor = document.querySelector("#runEditor");
 const runEditorName = document.querySelector("#runEditorName");
 const runEditorPrompt = document.querySelector("#runEditorPrompt");
 const runEditorMaxTokens = document.querySelector("#runEditorMaxTokens");
+const runEditorUniverse = document.querySelector("#runEditorUniverse");
+const runEditorUniverseHelp = document.querySelector("#runEditorUniverseHelp");
 const saveRunButton = document.querySelector("#saveRunButton");
 const cancelRunEditButton = document.querySelector("#cancelRunEditButton");
 const runTitle = document.querySelector("#runTitle");
@@ -111,6 +113,7 @@ let currentRunId = params.get("id");
 let pollTimer = null;
 let etaTimer = null;
 let currentRun = null;
+let initialRunEditorUniverse = "top";
 let etaState = null;
 const requestedSortKey = params.get("sort") === "outputTokens" ? "responseTokens" : params.get("sort");
 let sortState = {
@@ -829,7 +832,7 @@ function setSort(key) {
   if (currentRun) renderRun(currentRun);
 }
 
-function showRunEditor() {
+async function showRunEditor() {
   if (!currentRun) {
     statusEl.textContent = "Pick a saved run before editing it.";
     return;
@@ -838,6 +841,31 @@ function showRunEditor() {
   runEditorName.value = currentRun.name || `Run #${currentRun.id}`;
   runEditorPrompt.value = currentRun.prompt || "";
   runEditorMaxTokens.value = String(currentRun.max_tokens || 200);
+  runEditorUniverse.disabled = true;
+  runEditorUniverse.innerHTML = '<option value="">Loading universes...</option>';
+  runEditorUniverseHelp.textContent =
+    "Only universes containing every stock already in this run can be selected.";
+  try {
+    const response = await fetch(`/api/runs/${currentRun.id}/universe-options`, { cache: "no-store" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not load stock universes");
+    runEditorUniverse.innerHTML = "";
+    for (const optionData of payload.options || []) {
+      const option = document.createElement("option");
+      option.value = optionData.stock_list_id === null ? "top" : `list:${optionData.stock_list_id}`;
+      option.textContent = `${optionData.name} (${optionData.company_count})${
+        optionData.archived ? " — archived" : ""
+      }${!optionData.eligible ? ` — missing ${optionData.missing_count} current stocks` : ""}`;
+      option.disabled = !optionData.eligible && !optionData.current;
+      option.selected = Boolean(optionData.current);
+      runEditorUniverse.append(option);
+    }
+    initialRunEditorUniverse = runEditorUniverse.value;
+    runEditorUniverse.disabled = false;
+  } catch (error) {
+    runEditorUniverse.innerHTML = '<option value="">Unavailable</option>';
+    runEditorUniverseHelp.textContent = error.message;
+  }
   runEditorName.focus();
 }
 
@@ -854,6 +882,7 @@ async function saveCurrentRun() {
   const name = runEditorName.value.trim();
   const prompt = runEditorPrompt.value.trim();
   const maxTokens = Number(runEditorMaxTokens.value);
+  const universeValue = runEditorUniverse.value;
   if (!name) {
     statusEl.textContent = "Run name is required.";
     runEditorName.focus();
@@ -874,6 +903,11 @@ async function saveCurrentRun() {
     runEditorMaxTokens.focus();
     return;
   }
+  if (!universeValue) {
+    statusEl.textContent = "Choose an available stock universe.";
+    runEditorUniverse.focus();
+    return;
+  }
 
   saveRunButton.disabled = true;
   statusEl.textContent = "Saving run...";
@@ -881,13 +915,24 @@ async function saveCurrentRun() {
     const response = await fetch(`/api/runs/${currentRun.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, prompt, maxTokens }),
+      body: JSON.stringify({
+        name,
+        prompt,
+        maxTokens,
+        ...(universeValue !== initialRunEditorUniverse
+          ? {
+              stockListId:
+                universeValue === "top" ? null : Number(universeValue.replace(/^list:/, "")),
+            }
+          : {}),
+      }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not save run");
     renderRun(payload.run);
     hideRunEditor();
-    statusEl.textContent = "Run changes saved. Future reruns, fills, and extensions will use this prompt.";
+    statusEl.textContent =
+      "Run changes saved. Existing results were preserved; future extensions use the selected universe.";
   } catch (error) {
     statusEl.textContent = error.message;
   } finally {

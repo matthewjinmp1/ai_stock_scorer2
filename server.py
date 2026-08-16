@@ -31,6 +31,7 @@ SCORING_WORKER_PATH = ROOT / "scoring_worker.py"
 SCORING_WORKER_LOG_PATH = ROOT / "scoring_worker.log"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_PROVIDER_BLOCKLIST = ["siliconflow", "gmicloud"]
+RUN_FIELD_UNSET = object()
 PROVIDER_SLUGS = {
     "AkashML": "akashml",
     "Alibaba": "alibaba",
@@ -971,6 +972,81 @@ def extension_companies_for_run(run_id, stock_list_id=None):
     return companies
 
 
+def companies_for_run_universe(stock_list_id):
+    if stock_list_id is None:
+        return None, db_companies()
+    try:
+        normalized_id = int(stock_list_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Selected stock universe was not found.") from exc
+    stock_list = get_stock_list(normalized_id)
+    if not stock_list:
+        raise ValueError("Selected stock universe was not found.")
+    return stock_list["id"], stock_list["companies"]
+
+
+def run_universe_options(run_id):
+    with db_connect() as connection:
+        run = connection.execute(
+            """
+            SELECT scoring_runs.id, scoring_runs.stock_list_id, stock_lists.name AS stock_list_name
+            FROM scoring_runs
+            LEFT JOIN stock_lists ON stock_lists.id = scoring_runs.stock_list_id
+            WHERE scoring_runs.id = ? AND scoring_runs.deleted_at IS NULL
+            """,
+            (run_id,),
+        ).fetchone()
+    if not run:
+        return None
+
+    current_tickers = {company["ticker"] for company in scoring_companies_for_run(run_id)}
+
+    def option(stock_list_id, name, companies, current=False, archived=False):
+        candidate_tickers = {company["ticker"] for company in companies}
+        missing_count = len(current_tickers - candidate_tickers)
+        return {
+            "stock_list_id": stock_list_id,
+            "name": name,
+            "company_count": len(companies),
+            "eligible": missing_count == 0,
+            "missing_count": missing_count,
+            "current": current,
+            "archived": archived,
+        }
+
+    options = [
+        option(
+            None,
+            "Top companies by market cap",
+            db_companies(),
+            current=run["stock_list_id"] is None,
+        )
+    ]
+    for stock_list in list_stock_lists():
+        options.append(
+            option(
+                stock_list["id"],
+                stock_list["name"],
+                stock_list["companies"],
+                current=stock_list["id"] == run["stock_list_id"],
+            )
+        )
+
+    if run["stock_list_id"] is not None and not any(item["current"] for item in options):
+        options.append(
+            {
+                "stock_list_id": run["stock_list_id"],
+                "name": run["stock_list_name"] or "Current archived universe",
+                "company_count": len(current_tickers),
+                "eligible": True,
+                "missing_count": 0,
+                "current": True,
+                "archived": True,
+            }
+        )
+    return options
+
+
 def normalize_company_count(value):
     companies_available = len(db_companies())
     if companies_available <= 0:
@@ -1760,7 +1836,14 @@ def rename_scoring_run(run_id, name):
     return update_scoring_run(run_id, name=name)
 
 
-def update_scoring_run(run_id, name=None, prompt=None, starred=None, max_tokens=None):
+def update_scoring_run(
+    run_id,
+    name=None,
+    prompt=None,
+    starred=None,
+    max_tokens=None,
+    stock_list_id=RUN_FIELD_UNSET,
+):
     updates = []
     values = []
     if name is not None:
@@ -1777,13 +1860,28 @@ def update_scoring_run(run_id, name=None, prompt=None, starred=None, max_tokens=
             raise ValueError("Starred must be true or false.")
         updates.append("starred = ?")
         values.append(1 if starred else 0)
-    if not updates:
-        return get_run(run_id)
 
     with db_connect() as connection:
         row = connection.execute("SELECT id FROM scoring_runs WHERE id = ? AND deleted_at IS NULL", (run_id,)).fetchone()
         if not row:
             return None
+        if stock_list_id is not RUN_FIELD_UNSET:
+            normalized_id, universe_companies = companies_for_run_universe(stock_list_id)
+            universe_tickers = {company["ticker"] for company in universe_companies}
+            current_tickers = [company["ticker"] for company in scoring_companies_for_run(run_id)]
+            missing = [ticker for ticker in current_tickers if ticker not in universe_tickers]
+            if missing:
+                preview = ", ".join(missing[:8])
+                remainder = len(missing) - 8
+                suffix = f" and {remainder} more" if remainder > 0 else ""
+                raise ValueError(
+                    "New stock universe must include every stock already in this run. "
+                    f"Missing {len(missing)}: {preview}{suffix}."
+                )
+            updates.append("stock_list_id = ?")
+            values.append(normalized_id)
+        if not updates:
+            return get_run(run_id)
         values.append(run_id)
         connection.execute(
             f"UPDATE scoring_runs SET {', '.join(updates)} WHERE id = ?",
@@ -2681,6 +2779,16 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"runs": list_runs()})
             return
 
+        universe_options_match = re.fullmatch(r"/api/runs/(\d+)/universe-options", parsed.path)
+        if universe_options_match:
+            ensure_scoring_schema()
+            options = run_universe_options(int(universe_options_match.group(1)))
+            if options is None:
+                self.send_json({"error": "Run not found"}, 404)
+                return
+            self.send_json({"options": options})
+            return
+
         result_match = re.fullmatch(r"/api/runs/(\d+)/results/(.+)", parsed.path)
         if result_match:
             ensure_scoring_schema()
@@ -2888,6 +2996,11 @@ class Handler(SimpleHTTPRequestHandler):
                     prompt=payload.get("prompt") if "prompt" in payload else None,
                     starred=payload.get("starred") if "starred" in payload else None,
                     max_tokens=payload.get("maxTokens") if "maxTokens" in payload else None,
+                    stock_list_id=(
+                        payload.get("stockListId")
+                        if "stockListId" in payload
+                        else RUN_FIELD_UNSET
+                    ),
                 )
                 if not run:
                     self.send_json({"error": "Run not found"}, 404)
