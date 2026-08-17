@@ -201,6 +201,19 @@ function applyColumnVisibility() {
   document.querySelectorAll("[data-column-toggle]").forEach((input) => {
     input.checked = visibleColumns.has(input.dataset.columnToggle);
   });
+  const emptyCell = resultRows.querySelector("[data-empty-results]");
+  if (emptyCell) emptyCell.colSpan = visibleTableColumnCount();
+}
+
+function visibleTableColumnCount() {
+  const visibleDataColumns = [...visibleColumns].filter(
+    (column) => activeResultView === "failed" || column !== "error"
+  ).length;
+  return 1 + visibleDataColumns;
+}
+
+function renderEmptyResults(message) {
+  resultRows.innerHTML = `<tr><td data-empty-results colspan="${visibleTableColumnCount()}">${escapeHtml(message)}</td></tr>`;
 }
 
 function hasVisibleColumnForCurrentView() {
@@ -1172,7 +1185,7 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (!run.results.length) {
-    resultRows.innerHTML = '<tr><td colspan="17">Waiting for scores...</td></tr>';
+    renderEmptyResults("Waiting for scores...");
     applyColumnVisibility();
     filterStatus.textContent = scoreFilterLabel();
     updateScoreStepperButtons();
@@ -1193,7 +1206,7 @@ function renderRun(run) {
         : viewResults.length
           ? "No scores match this filter."
           : "No successful scores yet.";
-    resultRows.innerHTML = `<tr><td colspan="17">${emptyMessage}</td></tr>`;
+    renderEmptyResults(emptyMessage);
     applyColumnVisibility();
     restoreScrollPosition();
     return;
@@ -1285,7 +1298,7 @@ async function loadCurrentRun() {
     deleteButton.disabled = true;
     stopButton.disabled = true;
     statusEl.textContent = "No saved runs yet.";
-    resultRows.innerHTML = '<tr><td colspan="17">Create a scoring run first.</td></tr>';
+    renderEmptyResults("Create a scoring run first.");
     return;
   }
 
