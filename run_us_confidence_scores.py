@@ -14,7 +14,6 @@ REASONING_MODE = "none"
 DEFAULT_MAX_TOKENS = 250
 DEFAULT_WORKERS = 20
 PROMPT = """rate from 0 to 100 on how well you know, understand, and are confident in your ability to evaluate this company: (COMPANY, ticker: TICKER)
-the score is a percentile score, so 50 is 50th percentile among a basket of US stocks
 write about a 100 word explanation and then end only with the number score"""
 FINAL_STATUSES = {"completed", "failed", "stopped"}
 
@@ -154,6 +153,9 @@ def confirm_start(company_count, workers, max_tokens):
     print(f"Reasoning: {REASONING_MODE}")
     print(f"Workers: {workers}")
     print(f"Response limit: {max_tokens} tokens per company")
+    print("\nPrompt:\n")
+    print(PROMPT)
+    print()
     print(
         f"Estimated cost: {estimated_cents:.4f} cents "
         f"({estimate['sample_size']} recent request samples)"
