@@ -414,6 +414,13 @@ class PromptAndParsingTests(ServerTestCase):
         )
         self.assertEqual(prompt, "Rate NVIDIA (ticker: NVDA) from 0 to 100")
 
+    def test_prompt_for_company_replaces_explicit_ticker_keyword(self):
+        prompt = server.prompt_for_company(
+            "Rate (COMPANY, ticker: TICKER) from 0 to 100",
+            {"name": "NVIDIA", "ticker": "NVDA"},
+        )
+        self.assertEqual(prompt, "Rate (NVIDIA, ticker: NVDA) from 0 to 100")
+
     def test_parse_companies_extracts_absolute_logo_url(self):
         html = """
         <table>
