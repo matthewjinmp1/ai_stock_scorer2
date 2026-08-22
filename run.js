@@ -219,7 +219,7 @@ function visibleTableColumnCount() {
   const visibleDataColumns = [...visibleColumns].filter(
     (column) => activeResultView === "failed" || column !== "error"
   ).length;
-  return 1 + visibleDataColumns;
+  return 1 + visibleDataColumns + (activeResultView === "failed" ? 1 : 0);
 }
 
 function renderEmptyResults(message) {
@@ -1295,10 +1295,8 @@ function renderRun(run) {
             <div class="company-cell">
               ${logo}
               <div>
-              <a class="company-link" href="${responsePageUrl}">
-                <strong>${escapeHtml(result.company_name)}</strong>
-              </a>
-              <span class="ticker">${escapeHtml(result.ticker)}</span>
+                <strong class="company-name">${escapeHtml(result.company_name)}</strong>
+                <span class="ticker">${escapeHtml(result.ticker)}</span>
               </div>
             </div>
           </td>
@@ -1313,10 +1311,10 @@ function renderRun(run) {
           <td data-column="time">${formatCompactSeconds(result.duration_ms)}</td>
           <td data-column="cost">${formatCompactCents(result.cost)}</td>
           <td data-column="error" class="error-cell">
-            <div class="error-actions">
-              <span>${error}</span>
-              ${rowRedrive}
-            </div>
+            <span>${error}</span>
+          </td>
+          <td class="failed-redrive-column table-action-cell">
+            ${rowRedrive}
           </td>
           <td data-column="search" class="search-cell">
             <button class="details-link" type="button" data-navigation-url="${escapeHtml(searchUrl)}">Search</button>
@@ -1529,11 +1527,8 @@ resultRows.addEventListener("click", (event) => {
   const row = event.target.closest("[data-response-url]");
   if (!row) return;
   const detailsLink = event.target.closest(".details-link");
-  const responseLink = row.querySelector(".company-link");
   const destination = new URL(
-    detailsLink?.dataset.detailsUrl ||
-      responseLink?.getAttribute("href") ||
-      row.dataset.responseUrl,
+    detailsLink?.dataset.detailsUrl || row.dataset.responseUrl,
     window.location.origin
   );
   destination.searchParams.set("sort", sortState.key);

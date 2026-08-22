@@ -493,19 +493,9 @@ button:hover {
   grid-column: 5 / span 2;
 }
 
-.secondary-link,
-.row-link,
-.company-link {
+.company-name {
   color: var(--accent);
   font-weight: 700;
-  text-decoration: none;
-}
-
-.secondary-link:hover,
-.row-link:hover,
-.company-link:hover {
-  color: var(--accent-strong);
-  text-decoration: underline;
 }
 
 .detail-toolbar {
@@ -752,37 +742,41 @@ button:disabled {
   line-height: 1.35;
 }
 
-.row-actions {
+.table-action-column,
+.table-action-cell {
+  width: 104px;
+  text-align: center;
+}
+
+.table-action-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid #bfd3ed;
+  border-radius: 6px;
+  color: var(--accent);
+  background: #edf5ff;
+  font-weight: 700;
   white-space: nowrap;
 }
 
-.row-actions-inner {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+.table-action-button:hover {
+  border-color: var(--accent);
+  background: #e2efff;
 }
 
-.link-button {
-  min-height: auto;
-  padding: 0;
-  border: 0;
-  color: var(--accent);
-  background: transparent;
-  font-weight: 700;
-}
-
-.link-button:hover {
-  color: var(--accent-strong);
-  background: transparent;
-  text-decoration: underline;
-}
-
-.danger-link {
+.table-action-button-danger {
+  border-color: #f0b9b9;
   color: var(--loss);
+  background: #fff1f1;
 }
 
-.danger-link:hover {
+.table-action-button-danger:hover {
+  border-color: var(--loss);
   color: #a61e1e;
+  background: #ffe3e3;
 }
 
 .pill {
@@ -1098,7 +1092,12 @@ table {
   width: 6.5%;
 }
 
-.ranking-table.ranking-view [data-column="error"] {
+.ranking-table .failed-redrive-column {
+  width: 5.5%;
+}
+
+.ranking-table.ranking-view [data-column="error"],
+.ranking-table.ranking-view .failed-redrive-column {
   display: none;
 }
 

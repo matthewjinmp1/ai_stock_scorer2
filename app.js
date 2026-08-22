@@ -82,7 +82,7 @@ function selectHomeTab(tabName, updateHash = true) {
 }
 
 function setRunRows(message, target = runRows) {
-  target.innerHTML = `<tr><td colspan="7">${escapeHtml(message)}</td></tr>`;
+  target.innerHTML = `<tr><td colspan="9">${escapeHtml(message)}</td></tr>`;
 }
 
 function setRunsStatus(message) {
@@ -180,7 +180,7 @@ function renderConfidenceRuns() {
       <td>${formatCost(run.cost)}</td>
       <td>${formatDate(run.created_at)}</td>
       <td>
-        <button class="secondary-button confidence-pin-button" type="button" data-pin-confidence-run="${run.id}" ${run.pinned ? "disabled" : ""}>
+        <button class="table-action-button confidence-pin-button" type="button" data-pin-confidence-run="${run.id}" ${run.pinned ? "disabled" : ""}>
           ${run.pinned ? "Pinned" : "Pin"}
         </button>
       </td>
@@ -631,28 +631,30 @@ function renderRunTable(target, runs, emptyMessage) {
           <td>${progress(run)}</td>
           <td>${formatCost(run.cost)}</td>
           <td>${formatDate(run.created_at)}</td>
-          <td class="row-actions">
-            <div class="row-actions-inner">
-              <button
-                class="link-button"
-                type="button"
-                data-star-run="${run.id}"
-                data-starred="${run.starred ? "false" : "true"}"
-                data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
-              >${run.starred ? "Unstar" : "Star"}</button>
-              <button
-                class="link-button"
-                type="button"
-                data-rename-run="${run.id}"
-                data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
-              >Rename</button>
-              <button
-                class="link-button danger-link"
-                type="button"
-                data-delete-run="${run.id}"
-                data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
-              >Archive</button>
-            </div>
+          <td class="table-action-cell">
+            <button
+              class="table-action-button"
+              type="button"
+              data-star-run="${run.id}"
+              data-starred="${run.starred ? "false" : "true"}"
+              data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
+            >${run.starred ? "Unstar" : "Star"}</button>
+          </td>
+          <td class="table-action-cell">
+            <button
+              class="table-action-button"
+              type="button"
+              data-rename-run="${run.id}"
+              data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
+            >Rename</button>
+          </td>
+          <td class="table-action-cell">
+            <button
+              class="table-action-button table-action-button-danger"
+              type="button"
+              data-delete-run="${run.id}"
+              data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
+            >Archive</button>
           </td>
         </tr>
       `
