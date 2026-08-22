@@ -29,6 +29,16 @@
           tabindex="-1"
         >Stock Lists</button>
         <button
+          id="companiesTab"
+          class="home-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="companiesPanel"
+          data-home-tab="companies"
+          tabindex="-1"
+        >Companies</button>
+        <button
           id="confidenceScoresTab"
           class="home-tab"
           type="button"
@@ -154,6 +164,46 @@
           <button id="saveListButton" type="button">Save list</button>
           <button id="archiveListButton" class="danger-button" type="button" disabled>Archive list</button>
           <p id="listStatus" class="status" role="status"></p>
+        </div>
+      </section>
+
+      <section
+        id="companiesPanel"
+        class="home-tab-panel companies-panel"
+        role="tabpanel"
+        aria-labelledby="companiesTab companiesTitle"
+        data-home-panel="companies"
+        hidden
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Scraped universe</p>
+            <h2 id="companiesTitle">Companies</h2>
+          </div>
+        </div>
+        <div class="companies-toolbar">
+          <label>
+            <span>Search companies</span>
+            <input id="companiesSearchInput" type="search" placeholder="Company or ticker" autocomplete="off" />
+          </label>
+          <p id="companiesStatus" class="status" role="status"></p>
+        </div>
+        <div class="table-wrap" aria-label="Scraped companies">
+          <table class="companies-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th><button class="sort-button" type="button" data-company-sort="rank">Market cap rank</button></th>
+                <th><button class="sort-button" type="button" data-company-sort="name">Company</button></th>
+                <th><button class="sort-button" type="button" data-company-sort="marketCapValue">Market cap</button></th>
+                <th>Price</th>
+                <th><button class="sort-button" type="button" data-company-sort="country">Country</button></th>
+              </tr>
+            </thead>
+            <tbody id="companyRows">
+              <tr><td colspan="6">Loading companies...</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 

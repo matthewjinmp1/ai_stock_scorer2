@@ -26,6 +26,9 @@ const confidenceSearchInput = document.querySelector("#confidenceSearchInput");
 const confidenceScoresStatus = document.querySelector("#confidenceScoresStatus");
 const confidenceScoreRows = document.querySelector("#confidenceScoreRows");
 const confidenceRunLink = document.querySelector("#confidenceRunLink");
+const companiesSearchInput = document.querySelector("#companiesSearchInput");
+const companiesStatus = document.querySelector("#companiesStatus");
+const companyRows = document.querySelector("#companyRows");
 const homeTabs = [...document.querySelectorAll("[data-home-tab]")];
 const homePanels = [...document.querySelectorAll("[data-home-panel]")];
 const pageParams = new URLSearchParams(window.location.search);
@@ -40,6 +43,7 @@ let runSnapshotUniverse = null;
 let confidenceRun = null;
 let confidenceScores = [];
 let confidenceSort = { key: "score", direction: "desc" };
+let companySort = { key: "rank", direction: "asc" };
 
 function resizePromptInput() {
   promptInput.style.height = "auto";
@@ -101,6 +105,61 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function companySortValue(company, key) {
+  if (["name", "country"].includes(key)) return String(company[key] || "").toLowerCase();
+  const value = Number(company[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function renderCompanies() {
+  const query = companiesSearchInput.value.trim().toLowerCase();
+  const rows = allCompanies
+    .filter(
+      (company) =>
+        !query ||
+        company.name.toLowerCase().includes(query) ||
+        company.ticker.toLowerCase().includes(query)
+    )
+    .sort((left, right) => {
+      const leftValue = companySortValue(left, companySort.key);
+      const rightValue = companySortValue(right, companySort.key);
+      if (leftValue === null && rightValue !== null) return 1;
+      if (rightValue === null && leftValue !== null) return -1;
+      if (leftValue === rightValue) return Number(left.rank) - Number(right.rank);
+      const comparison = typeof leftValue === "string"
+        ? leftValue.localeCompare(rightValue)
+        : leftValue - rightValue;
+      return companySort.direction === "asc" ? comparison : -comparison;
+    });
+
+  companiesStatus.textContent = `${rows.length.toLocaleString()} of ${allCompanies.length.toLocaleString()} companies shown.`;
+  if (!rows.length) {
+    companyRows.innerHTML = '<tr><td colspan="6">No companies match this search.</td></tr>';
+    return;
+  }
+
+  companyRows.innerHTML = rows.map((company, index) => {
+    const logo = company.logo
+      ? `<img class="logo" src="${escapeHtml(company.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
+      : "";
+    return `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(company.rank)}</td>
+        <td>
+          <div class="company-cell">
+            ${logo}
+            <div><strong>${escapeHtml(company.name)}</strong><span class="ticker">${escapeHtml(company.ticker)}</span></div>
+          </div>
+        </td>
+        <td>${escapeHtml(company.marketCap || "--")}</td>
+        <td>${escapeHtml(company.price || "--")}</td>
+        <td>${escapeHtml(company.country || "--")}</td>
+      </tr>
+    `;
+  }).join("");
 }
 
 function confidenceValue(score, key) {
@@ -433,6 +492,7 @@ async function loadCompanies() {
   companyCountInput.max = String(companiesAvailable);
   companyCountHelp.textContent = `Choose 1-${companiesAvailable}. Scoring starts from the largest companies by market cap.`;
   renderStockPicker();
+  renderCompanies();
 }
 
 async function loadModels() {
@@ -740,6 +800,16 @@ newListButton.addEventListener("click", resetListEditor);
 saveListButton.addEventListener("click", saveCurrentStockList);
 archiveListButton.addEventListener("click", archiveCurrentStockList);
 stockSearchInput.addEventListener("input", renderStockPicker);
+companiesSearchInput.addEventListener("input", renderCompanies);
+document.querySelectorAll("[data-company-sort]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.companySort;
+    companySort = companySort.key === key
+      ? { key, direction: companySort.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: ["name", "country"].includes(key) ? "asc" : "desc" };
+    renderCompanies();
+  });
+});
 confidenceSearchInput.addEventListener("input", renderConfidenceScores);
 document.querySelectorAll("[data-confidence-sort]").forEach((button) => {
   button.addEventListener("click", () => {
