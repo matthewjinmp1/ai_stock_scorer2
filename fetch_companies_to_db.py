@@ -108,6 +108,60 @@ def upsert_companies(connection, companies, fetched_at, prune=False):
     return pruned_count
 
 
+def sync_us_stock_list(connection, fetched_at, list_name="All US Stocks"):
+    required_tables = {"stock_lists", "stock_list_members"}
+    existing_tables = {
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)",
+            tuple(required_tables),
+        )
+    }
+    if existing_tables != required_tables:
+        return None
+
+    now = int(time.time())
+    stock_list = connection.execute(
+        "SELECT id FROM stock_lists WHERE name = ? COLLATE NOCASE AND deleted_at IS NULL",
+        (list_name,),
+    ).fetchone()
+    with connection:
+        if stock_list:
+            list_id = stock_list["id"]
+            connection.execute(
+                "UPDATE stock_lists SET updated_at = ? WHERE id = ?",
+                (now, list_id),
+            )
+            connection.execute(
+                "DELETE FROM stock_list_members WHERE list_id = ?",
+                (list_id,),
+            )
+        else:
+            cursor = connection.execute(
+                "INSERT INTO stock_lists (name, created_at, updated_at) VALUES (?, ?, ?)",
+                (list_name, now, now),
+            )
+            list_id = cursor.lastrowid
+
+        tickers = [
+            row["ticker"]
+            for row in connection.execute(
+                """
+                SELECT ticker
+                FROM companies
+                WHERE fetched_at = ? AND country = 'USA'
+                ORDER BY rank
+                """,
+                (fetched_at,),
+            )
+        ]
+        connection.executemany(
+            "INSERT INTO stock_list_members (list_id, ticker, position) VALUES (?, ?, ?)",
+            [(list_id, ticker, position) for position, ticker in enumerate(tickers)],
+        )
+    return {"list_id": list_id, "company_count": len(tickers)}
+
+
 def fetch_top_companies(limit):
     def show_progress(page, company_count, last_rank):
         print(
@@ -148,10 +202,13 @@ def main():
     with connect(db_path) as connection:
         create_schema(connection)
         pruned_count = upsert_companies(connection, companies, fetched_at, prune=args.all)
+        us_list = sync_us_stock_list(connection, fetched_at)
 
     print(f"Stored {len(companies)} companies in {db_path}")
     if args.all:
         print(f"Removed {pruned_count} companies no longer present in the complete listing")
+    if us_list:
+        print(f"Updated All US Stocks with {us_list['company_count']:,} companies")
     print(f"Source: {SOURCE_URL}")
 
 

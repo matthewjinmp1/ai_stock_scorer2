@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import server
+from fetch_companies_to_db import sync_us_stock_list
 
 
 MODEL = "deepseek/deepseek-v4-flash"
@@ -501,6 +502,15 @@ class PromptAndParsingTests(ServerTestCase):
 
         self.assertEqual([company["ticker"] for company in server.db_companies()], ["AAA", "BBB", "CCC"])
         self.assertEqual(server.companies_for_tickers(["OLD"])[0]["name"], "Old Company")
+
+    def test_us_stock_list_sync_uses_latest_us_companies_in_rank_order(self):
+        with self.connect() as connection:
+            fetched_at = connection.execute("SELECT MAX(fetched_at) FROM companies").fetchone()[0]
+            result = sync_us_stock_list(connection, fetched_at)
+
+        stock_list = server.get_stock_list(result["list_id"])
+        self.assertEqual(stock_list["name"], "All US Stocks")
+        self.assertEqual([company["ticker"] for company in stock_list["companies"]], ["AAA", "BBB"])
 
     def test_prompt_for_company_includes_name_and_ticker(self):
         prompt = server.prompt_for_company(
