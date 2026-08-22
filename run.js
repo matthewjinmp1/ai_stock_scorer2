@@ -134,6 +134,38 @@ const visibleColumnsByView = {
 };
 let visibleColumns = visibleColumnsByView[activeResultView];
 const columnSaveTimers = { ranking: null, failed: null };
+const transientSearchWindows = new Set();
+let lastTransientSearchOpenedAt = 0;
+
+function openTransientSearch(url) {
+  const searchWindow = window.open("", "_blank");
+  if (!searchWindow) return false;
+  searchWindow.opener = null;
+  searchWindow.location.replace(url);
+  transientSearchWindows.add(searchWindow);
+  lastTransientSearchOpenedAt = Date.now();
+  return true;
+}
+
+function closeTransientSearchWindows() {
+  for (const searchWindow of transientSearchWindows) {
+    try {
+      if (!searchWindow.closed) searchWindow.close();
+    } catch (_error) {
+      // A browser may sever access after a cross-origin navigation.
+    }
+  }
+  transientSearchWindows.clear();
+}
+
+function closeTransientSearchWindowsWhenActive() {
+  const wait = Math.max(0, 500 - (Date.now() - lastTransientSearchOpenedAt));
+  window.setTimeout(() => {
+    if (document.visibilityState === "visible" && document.hasFocus()) {
+      closeTransientSearchWindows();
+    }
+  }, wait);
+}
 
 function saveVisibleColumnsLocally(view, columns) {
   try {
@@ -1269,13 +1301,13 @@ function renderRun(run) {
             </div>
           </td>
           <td data-column="search" class="search-cell">
-            <button class="details-link" type="button" data-search-url="${escapeHtml(searchUrl)}">Search</button>
+            <button class="details-link" type="button" data-transient-search-url="${escapeHtml(searchUrl)}">Search</button>
           </td>
           <td data-column="chart" class="search-cell">
-            <button class="details-link" type="button" data-search-url="${escapeHtml(chartUrl)}">Chart</button>
+            <button class="details-link" type="button" data-transient-search-url="${escapeHtml(chartUrl)}">Chart</button>
           </td>
           <td data-column="dashboard" class="search-cell">
-            <button class="details-link" type="button" data-search-url="${escapeHtml(
+            <button class="details-link" type="button" data-external-url="${escapeHtml(
               dashboardUrl
             )}" title="Open stock dashboard">Dashboard</button>
           </td>
@@ -1437,11 +1469,18 @@ document.querySelectorAll("[data-result-view]").forEach((button) => {
 columnSelector.addEventListener("change", updateVisibleColumn);
 resetColumnsButton.addEventListener("click", resetVisibleColumns);
 resultRows.addEventListener("click", (event) => {
-  const searchButton = event.target.closest("[data-search-url]");
+  const searchButton = event.target.closest("[data-transient-search-url]");
   if (searchButton) {
     event.preventDefault();
     event.stopPropagation();
-    window.open(searchButton.dataset.searchUrl, "_blank", "noopener,noreferrer");
+    openTransientSearch(searchButton.dataset.transientSearchUrl);
+    return;
+  }
+  const externalButton = event.target.closest("[data-external-url]");
+  if (externalButton) {
+    event.preventDefault();
+    event.stopPropagation();
+    window.open(externalButton.dataset.externalUrl, "_blank", "noopener,noreferrer");
     return;
   }
   const redriveButton = event.target.closest("[data-redrive-ticker]");
@@ -1467,6 +1506,11 @@ resultRows.addEventListener("click", (event) => {
   event.preventDefault();
   saveRunViewState();
   window.location.href = `${destination.pathname}${destination.search}`;
+});
+
+window.addEventListener("focus", closeTransientSearchWindowsWhenActive);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") closeTransientSearchWindowsWhenActive();
 });
 
 if ("EventSource" in window) {
