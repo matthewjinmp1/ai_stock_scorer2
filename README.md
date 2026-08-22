@@ -22,3 +22,13 @@ Reconnect to an existing run:
 
 Use `--workers`, `--max-tokens`, `--name`, `--yes`, or `--no-wait` to override
 the defaults. Run `./run_us_confidence_scores.py --help` for all options.
+
+## Count lines of code
+
+Count source lines by module and language:
+
+```bash
+./count_lines.py
+```
+
+Use `./count_lines.py --json` for machine-readable output.
