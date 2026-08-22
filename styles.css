@@ -1035,6 +1035,10 @@ table {
   width: 4%;
 }
 
+.ranking-table [data-column="scorePercentile"] {
+  width: 7%;
+}
+
 .ranking-table [data-column="confidence"] {
   width: 6%;
 }

@@ -56,6 +56,7 @@ const errorColumnOption = document.querySelector("#errorColumnOption");
 const SORT_KEYS = new Set([
   "scoreRank",
   "score",
+  "scorePercentile",
   "confidence",
   "company",
   "marketCap",
@@ -73,6 +74,7 @@ const RESULT_VIEWS = new Set(["ranking", "failed"]);
 const COLUMN_KEYS = [
   "rank",
   "score",
+  "scorePercentile",
   "confidence",
   "company",
   "marketCap",
@@ -631,6 +633,7 @@ function renderRunStats(run) {
 function sortValue(result, key) {
   if (key === "scoreRank") return result.scoreRank;
   if (key === "score") return numericValue(result.score);
+  if (key === "scorePercentile") return numericValue(result.score_percentile);
   if (key === "confidence") return numericValue(result.confidence_score);
   if (key === "company") return `${result.company_name || ""} ${result.ticker || ""}`.toLowerCase();
   if (key === "marketCap") return numericValue(result.market_cap_value);
@@ -1272,6 +1275,7 @@ function renderRun(run) {
           <td class="position-cell">${displayIndex + 1}</td>
           <td data-column="rank">${result.scoreRank}</td>
           <td data-column="score"><strong>${formatScore(result.score)}</strong></td>
+          <td data-column="scorePercentile">${formatPercent(result.score_percentile)}</td>
           <td data-column="confidence">${formatScore(result.confidence_score)}</td>
           <td data-column="company">
             <div class="company-cell">

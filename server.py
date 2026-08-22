@@ -116,6 +116,7 @@ write about a 100 word explanation and then end only with the number score"""
 RUN_TABLE_COLUMN_KEYS = (
     "rank",
     "score",
+    "scorePercentile",
     "confidence",
     "company",
     "marketCap",
@@ -794,6 +795,11 @@ def get_run_table_columns_preference(view="ranking"):
         insert_at = valid_columns.index("company") if "company" in valid_columns else len(valid_columns)
         valid_columns.insert(insert_at, "confidence")
         migrated = True
+    if stored_version < 7:
+        if preference_key == RUN_TABLE_COLUMNS_PREFERENCE_KEYS["ranking"] and "scorePercentile" not in valid_columns:
+            insert_at = valid_columns.index("score") + 1 if "score" in valid_columns else 0
+            valid_columns.insert(insert_at, "scorePercentile")
+        migrated = True
     if migrated:
         save_run_table_columns_preference(valid_columns, view)
     elif valid_columns:
@@ -828,7 +834,7 @@ def save_run_table_columns_preference(columns, view="ranking"):
             """,
             (
                 preference_key,
-                json.dumps({"version": 6, "columns": selected_columns}),
+                json.dumps({"version": 7, "columns": selected_columns}),
                 int(time.time()),
             ),
         )
@@ -848,6 +854,32 @@ def row_to_company(row):
         "country": row["country"],
         "logo": row["logo"],
     }
+
+
+def add_score_percentiles(results):
+    scored = sorted(
+        (float(result["score"]), index)
+        for index, result in enumerate(results)
+        if result.get("score") is not None and not result.get("error")
+    )
+    for result in results:
+        result["score_percentile"] = None
+    sample_size = len(scored)
+    start = 0
+    while start < sample_size:
+        end = start + 1
+        while end < sample_size and scored[end][0] == scored[start][0]:
+            end += 1
+        average_zero_based_rank = (start + end - 1) / 2
+        percentile = (
+            100.0
+            if sample_size == 1
+            else average_zero_based_rank / (sample_size - 1) * 100
+        )
+        for _, result_index in scored[start:end]:
+            results[result_index]["score_percentile"] = percentile
+        start = end
+    return results
 
 
 def db_companies(active_only=True):
@@ -1607,6 +1639,7 @@ def get_run(run_id):
         result["logo"] = logos.get(result["ticker"], "")
         result["confidence_score"] = current_confidence_scores.get((result["ticker"] or "").upper())
         payload["results"].append(result)
+    add_score_percentiles(payload["results"])
     payload["model_details"] = model_details(run["model"], run["reasoning_mode"])
     payload["stats"] = ai_request_stats_for_run(run_id, run["max_tokens"])
     payload["stats"]["recent_average_latency_ms"] = recent_average_latency_ms(run["model"])

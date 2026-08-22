@@ -151,7 +151,7 @@ class AppPreferenceTests(ServerTestCase):
 
         self.assertEqual(
             server.get_run_table_columns_preference(),
-            ["confidence", "company", "search", "chart", "dashboard", "actions"],
+            ["scorePercentile", "confidence", "company", "search", "chart", "dashboard", "actions"],
         )
 
     def test_previous_column_preferences_add_price_chart_before_details(self):
@@ -169,7 +169,7 @@ class AppPreferenceTests(ServerTestCase):
 
         self.assertEqual(
             server.get_run_table_columns_preference(),
-            ["confidence", "company", "search", "chart", "dashboard", "actions"],
+            ["scorePercentile", "confidence", "company", "search", "chart", "dashboard", "actions"],
         )
 
     def test_previous_column_preferences_add_dashboard_before_details(self):
@@ -190,8 +190,32 @@ class AppPreferenceTests(ServerTestCase):
 
         self.assertEqual(
             server.get_run_table_columns_preference(),
-            ["confidence", "company", "search", "chart", "dashboard", "actions"],
+            ["scorePercentile", "confidence", "company", "search", "chart", "dashboard", "actions"],
         )
+
+    def test_score_percentiles_use_average_rank_for_ties(self):
+        results = [
+            {"ticker": "LOW", "score": 50, "error": None},
+            {"ticker": "MID1", "score": 75, "error": None},
+            {"ticker": "MID2", "score": 75, "error": None},
+            {"ticker": "HIGH", "score": 100, "error": None},
+            {"ticker": "FAIL", "score": None, "error": "failed"},
+        ]
+
+        server.add_score_percentiles(results)
+
+        self.assertEqual(results[0]["score_percentile"], 0)
+        self.assertEqual(results[1]["score_percentile"], 50)
+        self.assertEqual(results[2]["score_percentile"], 50)
+        self.assertEqual(results[3]["score_percentile"], 100)
+        self.assertIsNone(results[4]["score_percentile"])
+
+    def test_single_score_is_100th_percentile(self):
+        results = [{"ticker": "ONLY", "score": 80, "error": None}]
+
+        server.add_score_percentiles(results)
+
+        self.assertEqual(results[0]["score_percentile"], 100)
 
 
 class ConfidenceScoreTests(ServerTestCase):
