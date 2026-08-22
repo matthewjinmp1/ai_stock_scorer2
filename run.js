@@ -140,10 +140,8 @@ const transientSearchWindows = new Set();
 let lastTransientSearchOpenedAt = 0;
 
 function openTransientSearch(url) {
-  const searchWindow = window.open("", "_blank");
+  const searchWindow = window.open(url, "_blank");
   if (!searchWindow) return false;
-  searchWindow.opener = null;
-  searchWindow.location.replace(url);
   transientSearchWindows.add(searchWindow);
   lastTransientSearchOpenedAt = Date.now();
   return true;
@@ -163,9 +161,7 @@ function closeTransientSearchWindows() {
 function closeTransientSearchWindowsWhenActive() {
   const wait = Math.max(0, 500 - (Date.now() - lastTransientSearchOpenedAt));
   window.setTimeout(() => {
-    if (document.visibilityState === "visible" && document.hasFocus()) {
-      closeTransientSearchWindows();
-    }
+    if (document.visibilityState === "visible") closeTransientSearchWindows();
   }, wait);
 }
 
@@ -1519,9 +1515,19 @@ resultRows.addEventListener("click", (event) => {
 });
 
 window.addEventListener("focus", closeTransientSearchWindowsWhenActive);
+window.addEventListener("pageshow", closeTransientSearchWindowsWhenActive);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") closeTransientSearchWindowsWhenActive();
 });
+document.addEventListener(
+  "pointerdown",
+  (event) => {
+    if (!event.target.closest("[data-transient-search-url]")) {
+      closeTransientSearchWindowsWhenActive();
+    }
+  },
+  true
+);
 
 if ("EventSource" in window) {
   const events = new EventSource("/events");
