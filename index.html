@@ -108,7 +108,12 @@
             <span>Response token limit</span>
             <input id="maxTokensInput" type="number" min="1" max="32768" value="200" />
           </label>
+          <label>
+            <span>Minimum confidence</span>
+            <input id="minimumConfidenceInput" type="number" min="0" max="100" step="1" placeholder="No minimum" />
+          </label>
           <p id="companyCountHelp">Starting from the largest companies by market cap.</p>
+          <p id="confidenceFilterHelp">Pin a confidence run to enable this filter.</p>
         </div>
         <div class="actions">
           <button id="runButton" type="button">Run score</button>
@@ -220,29 +225,23 @@
             <p class="eyebrow">Model familiarity</p>
             <h2 id="confidenceScoresTitle">Confidence Scores</h2>
           </div>
-          <a id="confidenceRunLink" class="secondary-button confidence-run-link" href="#" hidden>Open run</a>
         </div>
-        <div class="confidence-toolbar">
-          <label>
-            <span>Search scores</span>
-            <input id="confidenceSearchInput" type="search" placeholder="Company or ticker" autocomplete="off" />
-          </label>
-          <p id="confidenceScoresStatus" class="status" role="status"></p>
-        </div>
-        <div class="table-wrap" aria-label="Company confidence scores">
+        <p id="confidenceRunsStatus" class="status" role="status"></p>
+        <div class="table-wrap" aria-label="Confidence score runs">
           <table class="confidence-table">
             <thead>
               <tr>
-                <th>#</th>
-                <th><button class="sort-button" type="button" data-confidence-sort="score">Score</button></th>
-                <th><button class="sort-button" type="button" data-confidence-sort="company_name">Company</button></th>
-                <th><button class="sort-button" type="button" data-confidence-sort="market_cap_value">Market cap</button></th>
+                <th>Run</th>
+                <th>Name</th>
                 <th>Status</th>
-                <th>Details</th>
+                <th>Progress</th>
+                <th>Cost</th>
+                <th>Created</th>
+                <th>Active dataset</th>
               </tr>
             </thead>
-            <tbody id="confidenceScoreRows">
-              <tr><td colspan="6">Loading confidence scores...</td></tr>
+            <tbody id="confidenceRunRows">
+              <tr><td colspan="7">Loading confidence runs...</td></tr>
             </tbody>
           </table>
         </div>

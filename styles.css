@@ -295,12 +295,13 @@ button:hover {
   table-layout: fixed;
 }
 
-.confidence-table th:nth-child(1) { width: 6%; }
-.confidence-table th:nth-child(2) { width: 10%; }
-.confidence-table th:nth-child(3) { width: 34%; }
-.confidence-table th:nth-child(4) { width: 20%; }
-.confidence-table th:nth-child(5) { width: 14%; }
-.confidence-table th:nth-child(6) { width: 16%; }
+.confidence-table th:nth-child(1) { width: 8%; }
+.confidence-table th:nth-child(2) { width: 27%; }
+.confidence-table th:nth-child(3) { width: 13%; }
+.confidence-table th:nth-child(4) { width: 12%; }
+.confidence-table th:nth-child(5) { width: 12%; }
+.confidence-table th:nth-child(6) { width: 15%; }
+.confidence-table th:nth-child(7) { width: 13%; }
 
 .confidence-score {
   font-weight: 800;
@@ -482,6 +483,14 @@ button:hover {
   margin: 0 0 10px;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+#companyCountHelp {
+  grid-column: 3 / span 2;
+}
+
+#confidenceFilterHelp {
+  grid-column: 5 / span 2;
 }
 
 .secondary-link,
@@ -1026,6 +1035,10 @@ table {
   width: 4%;
 }
 
+.ranking-table [data-column="confidence"] {
+  width: 6%;
+}
+
 .ranking-table [data-column="company"] {
   width: 15%;
 }
@@ -1225,6 +1238,11 @@ tbody tr:hover {
   .list-editor-grid,
   .run-options {
     grid-template-columns: 1fr;
+  }
+
+  #companyCountHelp,
+  #confidenceFilterHelp {
+    grid-column: auto;
   }
 
   h1 {

@@ -116,6 +116,7 @@ write about a 100 word explanation and then end only with the number score"""
 RUN_TABLE_COLUMN_KEYS = (
     "rank",
     "score",
+    "confidence",
     "company",
     "marketCap",
     "input",
@@ -131,6 +132,7 @@ RUN_TABLE_COLUMN_KEYS = (
     "dashboard",
     "actions",
 )
+PINNED_CONFIDENCE_RUN_KEY = "pinned_confidence_run_id"
 RUN_TABLE_COLUMNS_PREFERENCE_KEY = "run_table_columns"
 RUN_TABLE_COLUMNS_PREFERENCE_KEYS = {
     "ranking": "run_table_columns_ranking",
@@ -568,6 +570,9 @@ def ensure_scoring_schema():
                 reasoning_mode TEXT NOT NULL DEFAULT 'none',
                 max_tokens INTEGER NOT NULL DEFAULT 200,
                 stock_list_id INTEGER,
+                run_type TEXT NOT NULL DEFAULT 'scoring',
+                minimum_confidence_score REAL,
+                confidence_run_id INTEGER,
                 status TEXT NOT NULL,
                 company_count INTEGER NOT NULL DEFAULT 0,
                 completed_count INTEGER NOT NULL DEFAULT 0,
@@ -659,6 +664,12 @@ def ensure_scoring_schema():
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN starred INTEGER NOT NULL DEFAULT 0")
         if "queue_count" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN queue_count INTEGER NOT NULL DEFAULT 0")
+        if "run_type" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN run_type TEXT NOT NULL DEFAULT 'scoring'")
+        if "minimum_confidence_score" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN minimum_confidence_score REAL")
+        if "confidence_run_id" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN confidence_run_id INTEGER")
         connection.execute(
             """
             UPDATE scoring_runs
@@ -675,6 +686,15 @@ def ensure_scoring_schema():
         )
         connection.execute(
             "UPDATE scoring_runs SET max_tokens = 200 WHERE max_tokens IS NULL OR max_tokens < 1"
+        )
+        connection.execute(
+            """
+            UPDATE scoring_runs
+            SET run_type = 'confidence'
+            WHERE run_type = 'scoring'
+              AND (prompt = ? OR lower(name) LIKE 'us company confidence%')
+            """,
+            (CONFIDENCE_SCORE_PROMPT,),
         )
         connection.commit()
 
@@ -732,6 +752,10 @@ def get_run_table_columns_preference(view="ranking"):
         insert_at = valid_columns.index("actions") if "actions" in valid_columns else len(valid_columns)
         valid_columns.insert(insert_at, "dashboard")
         migrated = True
+    if stored_version < 6 and "confidence" not in valid_columns:
+        insert_at = valid_columns.index("company") if "company" in valid_columns else len(valid_columns)
+        valid_columns.insert(insert_at, "confidence")
+        migrated = True
     if migrated:
         save_run_table_columns_preference(valid_columns, view)
     elif valid_columns:
@@ -766,7 +790,7 @@ def save_run_table_columns_preference(columns, view="ranking"):
             """,
             (
                 preference_key,
-                json.dumps({"version": 5, "columns": selected_columns}),
+                json.dumps({"version": 6, "columns": selected_columns}),
                 int(time.time()),
             ),
         )
@@ -974,6 +998,99 @@ def extension_companies_for_run(run_id, stock_list_id=None):
     return companies
 
 
+def normalize_minimum_confidence_score(value):
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Minimum confidence score must be between 0 and 100.") from exc
+    if not 0 <= score <= 100:
+        raise ValueError("Minimum confidence score must be between 0 and 100.")
+    return score
+
+
+def pinned_confidence_run_id():
+    with db_connect() as connection:
+        row = connection.execute(
+            "SELECT value FROM app_preferences WHERE key = ?",
+            (PINNED_CONFIDENCE_RUN_KEY,),
+        ).fetchone()
+        if not row:
+            return None
+        try:
+            run_id = int(row["value"])
+        except (TypeError, ValueError):
+            return None
+        run = connection.execute(
+            "SELECT id FROM scoring_runs WHERE id = ? AND run_type = 'confidence' AND deleted_at IS NULL",
+            (run_id,),
+        ).fetchone()
+    return run_id if run else None
+
+
+def confidence_scores_for_run(run_id):
+    if not run_id:
+        return {}
+    with db_connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT ticker, score
+            FROM scoring_results
+            WHERE run_id = ? AND score IS NOT NULL AND error IS NULL
+            """,
+            (run_id,),
+        ).fetchall()
+    return {(row["ticker"] or "").upper(): row["score"] for row in rows}
+
+
+def set_pinned_confidence_run(run_id):
+    try:
+        run_id = int(run_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Confidence run was not found.") from exc
+    with db_connect() as connection:
+        run = connection.execute(
+            """
+            SELECT id, name, status, company_count, completed_count, failed_count, created_at
+            FROM scoring_runs
+            WHERE id = ? AND run_type = 'confidence' AND deleted_at IS NULL
+            """,
+            (run_id,),
+        ).fetchone()
+        if not run:
+            raise ValueError("Confidence run was not found.")
+        connection.execute(
+            """
+            INSERT INTO app_preferences (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+            """,
+            (PINNED_CONFIDENCE_RUN_KEY, str(run_id), int(time.time())),
+        )
+        connection.commit()
+    payload = dict(run)
+    payload["pinned"] = True
+    return payload
+
+
+def filter_companies_by_confidence(companies, minimum_score, confidence_run_id=None):
+    minimum_score = normalize_minimum_confidence_score(minimum_score)
+    if minimum_score is None:
+        return list(companies), None, 0
+    confidence_run_id = confidence_run_id or pinned_confidence_run_id()
+    if not confidence_run_id:
+        raise ValueError("Pin a confidence score run before setting a minimum confidence score.")
+    scores = confidence_scores_for_run(confidence_run_id)
+    eligible = [
+        company
+        for company in companies
+        if scores.get((company["ticker"] or "").upper()) is not None
+        and float(scores[(company["ticker"] or "").upper()]) >= minimum_score
+    ]
+    return eligible, confidence_run_id, len(companies) - len(eligible)
+
+
 def companies_for_run_universe(stock_list_id):
     if stock_list_id is None:
         return None, db_companies()
@@ -1132,6 +1249,8 @@ def create_scoring_run(
     stock_list_id=None,
     tickers=None,
     max_tokens=None,
+    run_type="scoring",
+    minimum_confidence_score=None,
 ):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
@@ -1141,6 +1260,10 @@ def create_scoring_run(
     model = normalize_model(model)
     reasoning_mode = normalize_reasoning_mode(reasoning_mode)
     max_tokens = normalize_max_tokens(max_tokens)
+    run_type = str(run_type or "scoring").strip().lower()
+    if run_type not in ("scoring", "confidence"):
+        raise ValueError("Unknown scoring run type.")
+    minimum_confidence_score = normalize_minimum_confidence_score(minimum_confidence_score)
     selected_list = None
     if stock_list_id is not None:
         if tickers is not None:
@@ -1168,16 +1291,24 @@ def create_scoring_run(
         companies = companies[:company_count]
     if not companies:
         raise RuntimeError("No companies found. Run ./fetch_companies_to_db.py first.")
+    confidence_run_id = None
+    if run_type == "scoring":
+        companies, confidence_run_id, _ = filter_companies_by_confidence(
+            companies, minimum_confidence_score
+        )
+        if not companies:
+            raise ValueError("No stocks in this selection meet the minimum confidence score.")
 
     now = int(time.time())
     with db_connect() as connection:
         cursor = connection.execute(
             """
             INSERT INTO scoring_runs (
-                name, prompt, model, reasoning_mode, max_tokens, stock_list_id, status,
+                name, prompt, model, reasoning_mode, max_tokens, stock_list_id, run_type,
+                minimum_confidence_score, confidence_run_id, status,
                 company_count, queue_count, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name,
@@ -1186,6 +1317,9 @@ def create_scoring_run(
                 reasoning_mode,
                 max_tokens,
                 stock_list_id,
+                run_type,
+                minimum_confidence_score,
+                confidence_run_id,
                 "queued",
                 len(companies),
                 len(companies),
@@ -1200,12 +1334,42 @@ def create_scoring_run(
     return run_id
 
 
+def preview_scoring_selection(company_count=None, stock_list_id=None, tickers=None, minimum_confidence_score=None):
+    selected_list = None
+    if stock_list_id is not None and tickers is None:
+        selected_list = get_stock_list(stock_list_id)
+        if not selected_list:
+            raise ValueError("Selected stock list was not found.")
+    if tickers is not None:
+        companies = companies_for_tickers(tickers)
+    elif selected_list:
+        companies = selected_list["companies"]
+    else:
+        companies = scoring_companies(normalize_company_count(company_count))
+    if (tickers is not None or selected_list) and company_count is not None:
+        requested_count = normalize_company_count(company_count)
+        if requested_count > len(companies):
+            raise ValueError(f"Company count cannot exceed {len(companies)} for the selected stock list.")
+        companies = companies[:requested_count]
+    selected_count = len(companies)
+    eligible, confidence_run_id, excluded_count = filter_companies_by_confidence(
+        companies, minimum_confidence_score
+    )
+    return {
+        "selected_count": selected_count,
+        "eligible_count": len(eligible),
+        "excluded_count": excluded_count,
+        "confidence_run_id": confidence_run_id,
+    }
+
+
 def extend_scoring_run(run_id, company_count):
     target_count = normalize_company_count(company_count)
     with db_connect() as connection:
         run = connection.execute(
             """
-            SELECT id, status, company_count, stock_list_id
+            SELECT id, status, company_count, stock_list_id,
+                   minimum_confidence_score, confidence_run_id
             FROM scoring_runs
             WHERE id = ? AND deleted_at IS NULL
             """,
@@ -1218,6 +1382,12 @@ def extend_scoring_run(run_id, company_count):
         if target_count <= run["company_count"]:
             raise ValueError(f"Choose a stock count above {run['company_count']}.")
         extension_companies = extension_companies_for_run(run_id, run["stock_list_id"])
+        if run["minimum_confidence_score"] is not None:
+            extension_companies, _, _ = filter_companies_by_confidence(
+                extension_companies,
+                run["minimum_confidence_score"],
+                run["confidence_run_id"],
+            )
         if target_count > len(extension_companies):
             raise ValueError(
                 f"Company count cannot exceed {len(extension_companies)} for this run's stock universe."
@@ -1343,7 +1513,8 @@ def get_run(run_id):
             """
             SELECT scoring_runs.id, scoring_runs.name, scoring_runs.prompt, scoring_runs.model,
                    scoring_runs.reasoning_mode, scoring_runs.max_tokens, scoring_runs.stock_list_id,
-                   scoring_runs.starred,
+                   scoring_runs.starred, scoring_runs.run_type,
+                   scoring_runs.minimum_confidence_score, scoring_runs.confidence_run_id,
                    stock_lists.name AS stock_list_name,
                    scoring_runs.status, scoring_runs.company_count, scoring_runs.completed_count,
                    scoring_runs.failed_count, scoring_runs.queue_count,
@@ -1379,6 +1550,8 @@ def get_run(run_id):
         ).fetchall()
         logos = {row["ticker"]: row["logo"] for row in logo_rows}
     result_stats = ai_request_stats_by_ticker(run_id)
+    current_confidence_run_id = pinned_confidence_run_id()
+    current_confidence_scores = confidence_scores_for_run(current_confidence_run_id)
     payload = dict(run)
     payload["results"] = []
     for row in results:
@@ -1394,6 +1567,7 @@ def get_run(run_id):
         result["duration_ms"] = stats.get("duration_ms")
         result["cost"] = stats.get("cost", 0)
         result["logo"] = logos.get(result["ticker"], "")
+        result["confidence_score"] = current_confidence_scores.get((result["ticker"] or "").upper())
         payload["results"].append(result)
     payload["model_details"] = model_details(run["model"], run["reasoning_mode"])
     payload["stats"] = ai_request_stats_for_run(run_id, run["max_tokens"])
@@ -1402,6 +1576,7 @@ def get_run(run_id):
     payload["incomplete_count"] = incomplete_company_count(run_id)
     payload["company_tickers"] = [company["ticker"] for company in scoring_companies_for_run(run_id)]
     payload["extension_limit"] = len(extension_companies_for_run(run_id, run["stock_list_id"]))
+    payload["pinned_confidence_run_id"] = current_confidence_run_id
     return payload
 
 
@@ -1814,16 +1989,19 @@ def stop_scoring_run(run_id):
     return dict(updated)
 
 
-def list_runs():
+def list_runs(run_type="scoring"):
     with db_connect() as connection:
         rows = connection.execute(
             """
-            SELECT id, name, prompt, model, reasoning_mode, max_tokens, starred, status, company_count, completed_count, failed_count,
+            SELECT id, name, prompt, model, reasoning_mode, max_tokens, starred, run_type,
+                   status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
-            WHERE deleted_at IS NULL
+            WHERE deleted_at IS NULL AND run_type = ?
             ORDER BY created_at DESC, id DESC
             """
+            ,
+            (run_type,),
         ).fetchall()
     costs = ai_request_costs_by_run()
     runs = []
@@ -1834,6 +2012,14 @@ def list_runs():
     return runs
 
 
+def list_confidence_runs():
+    pinned_id = pinned_confidence_run_id()
+    runs = list_runs("confidence")
+    for run in runs:
+        run["pinned"] = run["id"] == pinned_id
+    return runs
+
+
 def latest_confidence_scores():
     with db_connect() as connection:
         run = connection.execute(
@@ -1841,7 +2027,7 @@ def latest_confidence_scores():
             SELECT id, name, status, company_count, completed_count, failed_count,
                    created_at, finished_at
             FROM scoring_runs
-            WHERE deleted_at IS NULL AND prompt = ?
+            WHERE deleted_at IS NULL AND (run_type = 'confidence' OR prompt = ?)
             ORDER BY id DESC
             LIMIT 1
             """,
@@ -2812,6 +2998,11 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(latest_confidence_scores())
             return
 
+        if parsed.path == "/api/confidence-runs":
+            ensure_scoring_schema()
+            self.send_json({"runs": list_confidence_runs(), "pinnedRunId": pinned_confidence_run_id()})
+            return
+
         if parsed.path == "/api/cost-estimate":
             query = dict(parse_qsl(parsed.query))
             try:
@@ -2888,6 +3079,33 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        confidence_pin_match = re.fullmatch(r"/api/confidence-runs/(\d+)/pin", parsed.path)
+        if confidence_pin_match:
+            ensure_scoring_schema()
+            try:
+                run = set_pinned_confidence_run(int(confidence_pin_match.group(1)))
+                self.send_json({"run": run})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            return
+
+        if parsed.path == "/api/run-preview":
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                preview = preview_scoring_selection(
+                    payload.get("companyCount"),
+                    stock_list_id=payload.get("stockListId"),
+                    tickers=payload.get("tickers") if "tickers" in payload else None,
+                    minimum_confidence_score=payload.get("minimumConfidenceScore"),
+                )
+                self.send_json({"preview": preview})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
         if parsed.path == "/api/stock-lists":
             ensure_scoring_schema()
             try:
@@ -2930,6 +3148,7 @@ class Handler(SimpleHTTPRequestHandler):
                     stock_list_id=payload.get("stockListId"),
                     tickers=payload.get("tickers") if "tickers" in payload else None,
                     max_tokens=payload.get("maxTokens"),
+                    minimum_confidence_score=payload.get("minimumConfidenceScore"),
                 )
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
             except ValueError as exc:

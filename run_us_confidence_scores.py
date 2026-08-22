@@ -190,6 +190,7 @@ def main():
         reasoning_mode=REASONING_MODE,
         tickers=tickers,
         max_tokens=max_tokens,
+        run_type="confidence",
     )
     print(f"Started detached scoring worker for run #{run_id}.")
     print(f"Reconnect later with: ./run_us_confidence_scores.py --resume {run_id}")

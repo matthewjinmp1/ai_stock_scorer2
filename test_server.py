@@ -151,7 +151,7 @@ class AppPreferenceTests(ServerTestCase):
 
         self.assertEqual(
             server.get_run_table_columns_preference(),
-            ["company", "search", "chart", "dashboard", "actions"],
+            ["confidence", "company", "search", "chart", "dashboard", "actions"],
         )
 
     def test_previous_column_preferences_add_price_chart_before_details(self):
@@ -169,7 +169,7 @@ class AppPreferenceTests(ServerTestCase):
 
         self.assertEqual(
             server.get_run_table_columns_preference(),
-            ["company", "search", "chart", "dashboard", "actions"],
+            ["confidence", "company", "search", "chart", "dashboard", "actions"],
         )
 
     def test_previous_column_preferences_add_dashboard_before_details(self):
@@ -190,11 +190,47 @@ class AppPreferenceTests(ServerTestCase):
 
         self.assertEqual(
             server.get_run_table_columns_preference(),
-            ["company", "search", "chart", "dashboard", "actions"],
+            ["confidence", "company", "search", "chart", "dashboard", "actions"],
         )
 
 
 class ConfidenceScoreTests(ServerTestCase):
+    def test_confidence_runs_are_separate_and_can_be_pinned(self):
+        standard_run_id = self.create_run()
+        confidence_run_id = self.create_run()
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE scoring_runs SET run_type = 'confidence', name = ? WHERE id = ?",
+                ("Confidence Dataset", confidence_run_id),
+            )
+
+        pinned = server.set_pinned_confidence_run(confidence_run_id)
+
+        self.assertTrue(pinned["pinned"])
+        self.assertEqual(server.pinned_confidence_run_id(), confidence_run_id)
+        self.assertEqual([run["id"] for run in server.list_runs()], [standard_run_id])
+        self.assertEqual([run["id"] for run in server.list_confidence_runs()], [confidence_run_id])
+        self.assertTrue(server.list_confidence_runs()[0]["pinned"])
+
+    def test_minimum_confidence_filters_before_queueing(self):
+        confidence_run_id = self.create_run()
+        companies = server.scoring_companies(3)
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE scoring_runs SET run_type = 'confidence' WHERE id = ?",
+                (confidence_run_id,),
+            )
+            server.save_result(connection, confidence_run_id, companies[0], 90, "90", None)
+            server.save_result(connection, confidence_run_id, companies[1], 60, "60", None)
+            connection.commit()
+        server.set_pinned_confidence_run(confidence_run_id)
+
+        eligible, used_run_id, excluded = server.filter_companies_by_confidence(companies, 75)
+
+        self.assertEqual([company["ticker"] for company in eligible], ["AAA"])
+        self.assertEqual(used_run_id, confidence_run_id)
+        self.assertEqual(excluded, 2)
+
     def test_latest_confidence_scores_returns_full_latest_run_universe(self):
         older_run_id = self.create_run(company_count=1)
         latest_run_id = self.create_run(company_count=3)

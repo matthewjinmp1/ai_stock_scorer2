@@ -5,6 +5,8 @@ const reasoningSelect = document.querySelector("#reasoningSelect");
 const universeSelect = document.querySelector("#universeSelect");
 const companyCountInput = document.querySelector("#companyCountInput");
 const maxTokensInput = document.querySelector("#maxTokensInput");
+const minimumConfidenceInput = document.querySelector("#minimumConfidenceInput");
+const confidenceFilterHelp = document.querySelector("#confidenceFilterHelp");
 const companyCountHelp = document.querySelector("#companyCountHelp");
 const listEditorSelect = document.querySelector("#listEditorSelect");
 const listNameInput = document.querySelector("#listNameInput");
@@ -22,10 +24,8 @@ const runsStatusEl = document.querySelector("#runsStatus");
 const starredRunsStatusEl = document.querySelector("#starredRunsStatus");
 const runRows = document.querySelector("#runRows");
 const starredRunRows = document.querySelector("#starredRunRows");
-const confidenceSearchInput = document.querySelector("#confidenceSearchInput");
-const confidenceScoresStatus = document.querySelector("#confidenceScoresStatus");
-const confidenceScoreRows = document.querySelector("#confidenceScoreRows");
-const confidenceRunLink = document.querySelector("#confidenceRunLink");
+const confidenceRunsStatus = document.querySelector("#confidenceRunsStatus");
+const confidenceRunRows = document.querySelector("#confidenceRunRows");
 const companiesSearchInput = document.querySelector("#companiesSearchInput");
 const companiesStatus = document.querySelector("#companiesStatus");
 const companyRows = document.querySelector("#companyRows");
@@ -40,9 +40,8 @@ let editingListId = null;
 let selectedTickers = [];
 let topCompanyCount = Number(companyCountInput.value) || 10;
 let runSnapshotUniverse = null;
-let confidenceRun = null;
-let confidenceScores = [];
-let confidenceSort = { key: "score", direction: "desc" };
+let confidenceRuns = [];
+let pinnedConfidenceRunId = null;
 let companySort = { key: "rank", direction: "asc" };
 
 function resizePromptInput() {
@@ -162,82 +161,58 @@ function renderCompanies() {
   }).join("");
 }
 
-function confidenceValue(score, key) {
-  if (key === "company_name") return String(score.company_name || "").toLowerCase();
-  if (score[key] === null || score[key] === undefined || score[key] === "") return null;
-  const value = Number(score[key]);
-  return Number.isFinite(value) ? value : null;
+function updateConfidenceFilterState() {
+  const pinned = confidenceRuns.find((run) => run.id === pinnedConfidenceRunId);
+  minimumConfidenceInput.disabled = !pinned;
+  confidenceFilterHelp.textContent = pinned
+    ? `Using ${pinned.name || `confidence run #${pinned.id}`}. Stocks below the minimum are excluded before requests are queued.`
+    : "Pin a confidence run to enable this filter.";
+  if (!pinned) minimumConfidenceInput.value = "";
 }
 
-function renderConfidenceScores() {
-  if (!confidenceRun) {
-    confidenceScoreRows.innerHTML = '<tr><td colspan="6">No saved confidence score run was found.</td></tr>';
+function renderConfidenceRuns() {
+  if (!confidenceRuns.length) {
+    confidenceRunRows.innerHTML = '<tr><td colspan="7">No confidence score runs yet.</td></tr>';
+    confidenceRunsStatus.textContent = "Run the confidence scoring program to create a dataset.";
+    updateConfidenceFilterState();
     return;
   }
-
-  const query = confidenceSearchInput.value.trim().toLowerCase();
-  const rows = confidenceScores
-    .filter(
-      (score) =>
-        !query ||
-        String(score.company_name || "").toLowerCase().includes(query) ||
-        String(score.ticker || "").toLowerCase().includes(query)
-    )
-    .sort((left, right) => {
-      const leftValue = confidenceValue(left, confidenceSort.key);
-      const rightValue = confidenceValue(right, confidenceSort.key);
-      if (leftValue === null && rightValue !== null) return 1;
-      if (rightValue === null && leftValue !== null) return -1;
-      if (leftValue === rightValue) return Number(left.position) - Number(right.position);
-      const comparison = typeof leftValue === "string"
-        ? leftValue.localeCompare(rightValue)
-        : leftValue - rightValue;
-      return confidenceSort.direction === "asc" ? comparison : -comparison;
-    });
-
-  confidenceScoresStatus.textContent = `${rows.length.toLocaleString()} of ${confidenceScores.length.toLocaleString()} stocks shown from ${confidenceRun.name || `run #${confidenceRun.id}`}.`;
-  if (!rows.length) {
-    confidenceScoreRows.innerHTML = '<tr><td colspan="6">No companies match this search.</td></tr>';
-    return;
-  }
-
-  confidenceScoreRows.innerHTML = rows.map((score, index) => {
-    const resultUrl = `/result.html?run=${encodeURIComponent(confidenceRun.id)}&ticker=${encodeURIComponent(score.ticker)}`;
-    const logo = score.logo
-      ? `<img class="logo" src="${escapeHtml(score.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
-      : "";
-    const hasScore = score.score !== null && score.score !== undefined && score.score !== "" && Number.isFinite(Number(score.score));
-    const status = score.error
-      ? `<span class="confidence-error" title="${escapeHtml(score.error)}">Failed</span>`
-      : hasScore
-        ? '<span class="pill good">Scored</span>'
-        : '<span class="pill live">Pending</span>';
-    return `
-      <tr class="clickable-row" data-confidence-result="${escapeHtml(resultUrl)}">
-        <td>${index + 1}</td>
-        <td class="confidence-score">${hasScore ? escapeHtml(score.score) : "--"}</td>
-        <td>
-          <div class="company-cell">
-            ${logo}
-            <div><strong>${escapeHtml(score.company_name)}</strong><span class="ticker">${escapeHtml(score.ticker)}</span></div>
-          </div>
-        </td>
-        <td>${escapeHtml(score.market_cap || "--")}</td>
-        <td>${status}</td>
-        <td><a class="secondary-button confidence-details-link" href="${escapeHtml(resultUrl)}">Details</a></td>
-      </tr>
-    `;
-  }).join("");
+  const pinned = confidenceRuns.find((run) => run.id === pinnedConfidenceRunId);
+  confidenceRunsStatus.textContent = pinned
+    ? `${pinned.name || `Run #${pinned.id}`} is pinned for scoring filters and run-table confidence scores.`
+    : "Pin one confidence run to use its scores in standard scoring runs.";
+  confidenceRunRows.innerHTML = confidenceRuns.map((run) => `
+    <tr class="clickable-row" data-confidence-run-id="${run.id}">
+      <td>#${run.id}</td>
+      <td><strong>${escapeHtml(run.name || `Run #${run.id}`)}</strong></td>
+      <td><span class="${statusClass(run.status)}">${escapeHtml(run.status)}</span></td>
+      <td>${progress(run)}</td>
+      <td>${formatCost(run.cost)}</td>
+      <td>${formatDate(run.created_at)}</td>
+      <td>
+        <button class="secondary-button confidence-pin-button" type="button" data-pin-confidence-run="${run.id}" ${run.pinned ? "disabled" : ""}>
+          ${run.pinned ? "Pinned" : "Pin"}
+        </button>
+      </td>
+    </tr>
+  `).join("");
+  updateConfidenceFilterState();
 }
 
-async function loadConfidenceScores() {
-  confidenceScoresStatus.textContent = "Loading confidence scores...";
-  const payload = await fetchJson("/api/confidence-scores");
-  confidenceRun = payload.run;
-  confidenceScores = payload.scores || [];
-  confidenceRunLink.hidden = !confidenceRun;
-  if (confidenceRun) confidenceRunLink.href = `/run.html?id=${encodeURIComponent(confidenceRun.id)}`;
-  renderConfidenceScores();
+async function loadConfidenceRuns() {
+  confidenceRunsStatus.textContent = "Loading confidence runs...";
+  const payload = await fetchJson("/api/confidence-runs");
+  confidenceRuns = payload.runs || [];
+  pinnedConfidenceRunId = payload.pinnedRunId;
+  renderConfidenceRuns();
+}
+
+async function pinConfidenceRun(runId) {
+  confidenceRunsStatus.textContent = "Pinning confidence dataset...";
+  const response = await fetch(`/api/confidence-runs/${encodeURIComponent(runId)}/pin`, { method: "POST" });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "Could not pin confidence run");
+  await loadConfidenceRuns();
 }
 
 function companyByTicker(ticker) {
@@ -533,6 +508,7 @@ async function prefillFromRun(runId) {
   topCompanyCount = Number(run.company_count) || topCompanyCount;
   companyCountInput.value = String(topCompanyCount);
   maxTokensInput.value = String(run.max_tokens || 200);
+  minimumConfidenceInput.value = run.minimum_confidence_score ?? "";
 
   if (![...modelSelect.options].some((option) => option.value === run.model)) {
     const option = document.createElement("option");
@@ -702,6 +678,9 @@ async function createRun() {
   const model = modelSelect.value;
   const reasoningMode = reasoningSelect.value;
   const maxTokens = Number(maxTokensInput.value);
+  const minimumConfidenceScore = minimumConfidenceInput.value.trim() === ""
+    ? null
+    : Number(minimumConfidenceInput.value);
   if (!model) {
     statusEl.textContent = "Choose a model first.";
     modelSelect.focus();
@@ -717,6 +696,14 @@ async function createRun() {
     maxTokensInput.focus();
     return;
   }
+  if (
+    minimumConfidenceScore !== null &&
+    (!Number.isFinite(minimumConfidenceScore) || minimumConfidenceScore < 0 || minimumConfidenceScore > 100)
+  ) {
+    statusEl.textContent = "Choose a minimum confidence score from 0 to 100.";
+    minimumConfidenceInput.focus();
+    return;
+  }
   if (!Number.isInteger(companyCount) || companyCount < 1 || companyCount > maximumCompanyCount) {
     statusEl.textContent = `Choose a stock count from 1 to ${maximumCompanyCount}.`;
     companyCountInput.focus();
@@ -726,19 +713,41 @@ async function createRun() {
   runButton.disabled = true;
 
   try {
+    const selectionPayload = {
+      companyCount,
+      minimumConfidenceScore,
+      stockListId: stockList
+        ? stockList.kind === "snapshot"
+          ? stockList.stock_list_id
+          : stockList.id
+        : null,
+      ...(stockList?.kind === "snapshot" ? { tickers: stockList.tickers } : {}),
+    };
+    statusEl.textContent = "Applying confidence filter...";
+    const previewResponse = await fetch("/api/run-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(selectionPayload),
+    });
+    const previewPayload = await previewResponse.json();
+    if (!previewResponse.ok) throw new Error(previewPayload.error || "Could not preview run");
+    const preview = previewPayload.preview;
+    if (!preview.eligible_count) throw new Error("No selected stocks meet the minimum confidence score.");
     statusEl.textContent = "Estimating run cost...";
     const confirmed = await confirmCostEstimate({
       model,
       reasoningMode,
-      companyCount,
-      actionLabel: "Start this scoring run?",
+      companyCount: preview.eligible_count,
+      actionLabel: preview.excluded_count
+        ? `Start this scoring run? ${preview.excluded_count} stocks will be excluded by the confidence filter.`
+        : "Start this scoring run?",
     });
     if (!confirmed) {
       statusEl.textContent = "Run canceled before any AI requests were sent.";
       return;
     }
 
-    statusEl.textContent = `Creating scoring run for ${companyCount} stocks...`;
+    statusEl.textContent = `Creating scoring run for ${preview.eligible_count} eligible stocks...`;
     const response = await fetch("/api/runs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -749,6 +758,7 @@ async function createRun() {
         model,
         reasoningMode,
         maxTokens,
+        minimumConfidenceScore,
         stockListId: stockList
           ? stockList.kind === "snapshot"
             ? stockList.stock_list_id
@@ -810,20 +820,17 @@ document.querySelectorAll("[data-company-sort]").forEach((button) => {
     renderCompanies();
   });
 });
-confidenceSearchInput.addEventListener("input", renderConfidenceScores);
-document.querySelectorAll("[data-confidence-sort]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const key = button.dataset.confidenceSort;
-    confidenceSort = confidenceSort.key === key
-      ? { key, direction: confidenceSort.direction === "asc" ? "desc" : "asc" }
-      : { key, direction: key === "company_name" ? "asc" : "desc" };
-    renderConfidenceScores();
-  });
-});
-confidenceScoreRows.addEventListener("click", (event) => {
-  if (event.target.closest("a, button")) return;
-  const row = event.target.closest("[data-confidence-result]");
-  if (row) window.location.href = row.dataset.confidenceResult;
+confidenceRunRows.addEventListener("click", (event) => {
+  const pinButton = event.target.closest("[data-pin-confidence-run]");
+  if (pinButton) {
+    event.preventDefault();
+    pinConfidenceRun(pinButton.dataset.pinConfidenceRun).catch((error) => {
+      confidenceRunsStatus.textContent = error.message;
+    });
+    return;
+  }
+  const row = event.target.closest("[data-confidence-run-id]");
+  if (row) window.location.href = `/run.html?id=${encodeURIComponent(row.dataset.confidenceRunId)}`;
 });
 stockSearchResults.addEventListener("click", (event) => {
   const button = event.target.closest("[data-add-ticker]");
@@ -879,9 +886,9 @@ window.addEventListener("pageshow", (event) => {
       setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
       setRunRows("Starred runs could not be loaded. Refresh the page to try again.", starredRunRows);
     });
-    loadConfidenceScores().catch((error) => {
-      confidenceScoresStatus.textContent = error.message;
-      confidenceScoreRows.innerHTML = '<tr><td colspan="6">Confidence scores could not be loaded.</td></tr>';
+    loadConfidenceRuns().catch((error) => {
+      confidenceRunsStatus.textContent = error.message;
+      confidenceRunRows.innerHTML = '<tr><td colspan="7">Confidence runs could not be loaded.</td></tr>';
     });
   }
 });
@@ -899,13 +906,13 @@ try {
   await loadModels();
   await loadStockLists();
   if (editRunId) await prefillFromRun(editRunId);
-  await loadConfidenceScores();
+  await loadConfidenceRuns();
   await loadRuns();
 } catch (error) {
   statusEl.textContent = error.message;
   setRunsStatus(error.message);
   setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
   setRunRows("Starred runs could not be loaded. Refresh the page to try again.", starredRunRows);
-  confidenceScoresStatus.textContent = error.message;
-  confidenceScoreRows.innerHTML = '<tr><td colspan="6">Confidence scores could not be loaded.</td></tr>';
+  confidenceRunsStatus.textContent = error.message;
+  confidenceRunRows.innerHTML = '<tr><td colspan="7">Confidence runs could not be loaded.</td></tr>';
 }
