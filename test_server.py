@@ -194,6 +194,41 @@ class AppPreferenceTests(ServerTestCase):
         )
 
 
+class ConfidenceScoreTests(ServerTestCase):
+    def test_latest_confidence_scores_returns_full_latest_run_universe(self):
+        older_run_id = self.create_run(company_count=1)
+        latest_run_id = self.create_run(company_count=3)
+        companies = server.scoring_companies(3)
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE scoring_runs SET prompt = ?, created_at = ? WHERE id = ?",
+                (server.CONFIDENCE_SCORE_PROMPT, 100, older_run_id),
+            )
+            connection.execute(
+                "UPDATE scoring_runs SET prompt = ?, created_at = ?, status = ? WHERE id = ?",
+                (server.CONFIDENCE_SCORE_PROMPT, 200, "completed", latest_run_id),
+            )
+            server.snapshot_run_companies(connection, latest_run_id, companies)
+            server.save_result(connection, latest_run_id, companies[0], 91, "Explanation 91", None)
+            server.save_result(connection, latest_run_id, companies[1], None, None, "Provider timeout")
+            server.update_run_counts(connection, latest_run_id)
+            connection.commit()
+
+        payload = server.latest_confidence_scores()
+
+        self.assertEqual(payload["run"]["id"], latest_run_id)
+        self.assertEqual(len(payload["scores"]), 3)
+        self.assertEqual(payload["scores"][0]["ticker"], "AAA")
+        self.assertEqual(payload["scores"][0]["score"], 91)
+        self.assertEqual(payload["scores"][1]["ticker"], "BBB")
+        self.assertEqual(payload["scores"][1]["error"], "Provider timeout")
+        self.assertEqual(payload["scores"][2]["ticker"], "CCC")
+        self.assertIsNone(payload["scores"][2]["score"])
+
+    def test_latest_confidence_scores_handles_missing_run(self):
+        self.assertEqual(server.latest_confidence_scores(), {"run": None, "scores": []})
+
+
 class PromptAndParsingTests(ServerTestCase):
     def test_luna_xhigh_model_and_reasoning_settings(self):
         self.assertEqual(server.normalize_model("openai/gpt-5.6-luna"), "openai/gpt-5.6-luna")

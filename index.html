@@ -29,6 +29,16 @@
           tabindex="-1"
         >Stock Lists</button>
         <button
+          id="confidenceScoresTab"
+          class="home-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="confidenceScoresPanel"
+          data-home-tab="confidence-scores"
+          tabindex="-1"
+        >Confidence Scores</button>
+        <button
           id="runsTab"
           class="home-tab"
           type="button"
@@ -144,6 +154,47 @@
           <button id="saveListButton" type="button">Save list</button>
           <button id="archiveListButton" class="danger-button" type="button" disabled>Archive list</button>
           <p id="listStatus" class="status" role="status"></p>
+        </div>
+      </section>
+
+      <section
+        id="confidenceScoresPanel"
+        class="home-tab-panel confidence-scores-panel"
+        role="tabpanel"
+        aria-labelledby="confidenceScoresTab confidenceScoresTitle"
+        data-home-panel="confidence-scores"
+        hidden
+      >
+        <div class="section-heading confidence-heading">
+          <div>
+            <p class="eyebrow">Model familiarity</p>
+            <h2 id="confidenceScoresTitle">Confidence Scores</h2>
+          </div>
+          <a id="confidenceRunLink" class="secondary-button confidence-run-link" href="#" hidden>Open run</a>
+        </div>
+        <div class="confidence-toolbar">
+          <label>
+            <span>Search scores</span>
+            <input id="confidenceSearchInput" type="search" placeholder="Company or ticker" autocomplete="off" />
+          </label>
+          <p id="confidenceScoresStatus" class="status" role="status"></p>
+        </div>
+        <div class="table-wrap" aria-label="Company confidence scores">
+          <table class="confidence-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th><button class="sort-button" type="button" data-confidence-sort="score">Score</button></th>
+                <th><button class="sort-button" type="button" data-confidence-sort="company_name">Company</button></th>
+                <th><button class="sort-button" type="button" data-confidence-sort="market_cap_value">Market cap</button></th>
+                <th>Status</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+            <tbody id="confidenceScoreRows">
+              <tr><td colspan="6">Loading confidence scores...</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 

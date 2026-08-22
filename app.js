@@ -22,6 +22,10 @@ const runsStatusEl = document.querySelector("#runsStatus");
 const starredRunsStatusEl = document.querySelector("#starredRunsStatus");
 const runRows = document.querySelector("#runRows");
 const starredRunRows = document.querySelector("#starredRunRows");
+const confidenceSearchInput = document.querySelector("#confidenceSearchInput");
+const confidenceScoresStatus = document.querySelector("#confidenceScoresStatus");
+const confidenceScoreRows = document.querySelector("#confidenceScoreRows");
+const confidenceRunLink = document.querySelector("#confidenceRunLink");
 const homeTabs = [...document.querySelectorAll("[data-home-tab]")];
 const homePanels = [...document.querySelectorAll("[data-home-panel]")];
 const pageParams = new URLSearchParams(window.location.search);
@@ -33,6 +37,9 @@ let editingListId = null;
 let selectedTickers = [];
 let topCompanyCount = Number(companyCountInput.value) || 10;
 let runSnapshotUniverse = null;
+let confidenceRun = null;
+let confidenceScores = [];
+let confidenceSort = { key: "score", direction: "desc" };
 
 function resizePromptInput() {
   promptInput.style.height = "auto";
@@ -94,6 +101,84 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function confidenceValue(score, key) {
+  if (key === "company_name") return String(score.company_name || "").toLowerCase();
+  if (score[key] === null || score[key] === undefined || score[key] === "") return null;
+  const value = Number(score[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function renderConfidenceScores() {
+  if (!confidenceRun) {
+    confidenceScoreRows.innerHTML = '<tr><td colspan="6">No saved confidence score run was found.</td></tr>';
+    return;
+  }
+
+  const query = confidenceSearchInput.value.trim().toLowerCase();
+  const rows = confidenceScores
+    .filter(
+      (score) =>
+        !query ||
+        String(score.company_name || "").toLowerCase().includes(query) ||
+        String(score.ticker || "").toLowerCase().includes(query)
+    )
+    .sort((left, right) => {
+      const leftValue = confidenceValue(left, confidenceSort.key);
+      const rightValue = confidenceValue(right, confidenceSort.key);
+      if (leftValue === null && rightValue !== null) return 1;
+      if (rightValue === null && leftValue !== null) return -1;
+      if (leftValue === rightValue) return Number(left.position) - Number(right.position);
+      const comparison = typeof leftValue === "string"
+        ? leftValue.localeCompare(rightValue)
+        : leftValue - rightValue;
+      return confidenceSort.direction === "asc" ? comparison : -comparison;
+    });
+
+  confidenceScoresStatus.textContent = `${rows.length.toLocaleString()} of ${confidenceScores.length.toLocaleString()} stocks shown from ${confidenceRun.name || `run #${confidenceRun.id}`}.`;
+  if (!rows.length) {
+    confidenceScoreRows.innerHTML = '<tr><td colspan="6">No companies match this search.</td></tr>';
+    return;
+  }
+
+  confidenceScoreRows.innerHTML = rows.map((score, index) => {
+    const resultUrl = `/result.html?run=${encodeURIComponent(confidenceRun.id)}&ticker=${encodeURIComponent(score.ticker)}`;
+    const logo = score.logo
+      ? `<img class="logo" src="${escapeHtml(score.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
+      : "";
+    const hasScore = score.score !== null && score.score !== undefined && score.score !== "" && Number.isFinite(Number(score.score));
+    const status = score.error
+      ? `<span class="confidence-error" title="${escapeHtml(score.error)}">Failed</span>`
+      : hasScore
+        ? '<span class="pill good">Scored</span>'
+        : '<span class="pill live">Pending</span>';
+    return `
+      <tr class="clickable-row" data-confidence-result="${escapeHtml(resultUrl)}">
+        <td>${index + 1}</td>
+        <td class="confidence-score">${hasScore ? escapeHtml(score.score) : "--"}</td>
+        <td>
+          <div class="company-cell">
+            ${logo}
+            <div><strong>${escapeHtml(score.company_name)}</strong><span class="ticker">${escapeHtml(score.ticker)}</span></div>
+          </div>
+        </td>
+        <td>${escapeHtml(score.market_cap || "--")}</td>
+        <td>${status}</td>
+        <td><a class="secondary-button confidence-details-link" href="${escapeHtml(resultUrl)}">Details</a></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+async function loadConfidenceScores() {
+  confidenceScoresStatus.textContent = "Loading confidence scores...";
+  const payload = await fetchJson("/api/confidence-scores");
+  confidenceRun = payload.run;
+  confidenceScores = payload.scores || [];
+  confidenceRunLink.hidden = !confidenceRun;
+  if (confidenceRun) confidenceRunLink.href = `/run.html?id=${encodeURIComponent(confidenceRun.id)}`;
+  renderConfidenceScores();
 }
 
 function companyByTicker(ticker) {
@@ -655,6 +740,21 @@ newListButton.addEventListener("click", resetListEditor);
 saveListButton.addEventListener("click", saveCurrentStockList);
 archiveListButton.addEventListener("click", archiveCurrentStockList);
 stockSearchInput.addEventListener("input", renderStockPicker);
+confidenceSearchInput.addEventListener("input", renderConfidenceScores);
+document.querySelectorAll("[data-confidence-sort]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const key = button.dataset.confidenceSort;
+    confidenceSort = confidenceSort.key === key
+      ? { key, direction: confidenceSort.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: key === "company_name" ? "asc" : "desc" };
+    renderConfidenceScores();
+  });
+});
+confidenceScoreRows.addEventListener("click", (event) => {
+  if (event.target.closest("a, button")) return;
+  const row = event.target.closest("[data-confidence-result]");
+  if (row) window.location.href = row.dataset.confidenceResult;
+});
 stockSearchResults.addEventListener("click", (event) => {
   const button = event.target.closest("[data-add-ticker]");
   if (!button || selectedTickers.includes(button.dataset.addTicker)) return;
@@ -709,6 +809,10 @@ window.addEventListener("pageshow", (event) => {
       setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
       setRunRows("Starred runs could not be loaded. Refresh the page to try again.", starredRunRows);
     });
+    loadConfidenceScores().catch((error) => {
+      confidenceScoresStatus.textContent = error.message;
+      confidenceScoreRows.innerHTML = '<tr><td colspan="6">Confidence scores could not be loaded.</td></tr>';
+    });
   }
 });
 
@@ -725,10 +829,13 @@ try {
   await loadModels();
   await loadStockLists();
   if (editRunId) await prefillFromRun(editRunId);
+  await loadConfidenceScores();
   await loadRuns();
 } catch (error) {
   statusEl.textContent = error.message;
   setRunsStatus(error.message);
   setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
   setRunRows("Starred runs could not be loaded. Refresh the page to try again.", starredRunRows);
+  confidenceScoresStatus.textContent = error.message;
+  confidenceScoreRows.innerHTML = '<tr><td colspan="6">Confidence scores could not be loaded.</td></tr>';
 }

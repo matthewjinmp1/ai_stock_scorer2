@@ -13,8 +13,7 @@ MODEL = "deepseek/deepseek-v4-flash-0731"
 REASONING_MODE = "none"
 DEFAULT_MAX_TOKENS = 250
 DEFAULT_WORKERS = 20
-PROMPT = """rate from 0 to 100 on how well you know, understand, and are confident in your ability to evaluate this company: (COMPANY, ticker: TICKER)
-write about a 100 word explanation and then end only with the number score"""
+PROMPT = server.CONFIDENCE_SCORE_PROMPT
 FINAL_STATUSES = {"completed", "failed", "stopped"}
 
 

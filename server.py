@@ -111,6 +111,8 @@ OPENROUTER_MAX_ATTEMPT_TIMEOUT_SECONDS = 900
 MAX_OPENROUTER_RESPONSE_TOKENS = 32768
 OPENROUTER_RESPONSE_CACHE_TTL_SECONDS = 86400
 TOKEN_LIMIT_ERROR = "Invalid response: model hit the response token limit before completing."
+CONFIDENCE_SCORE_PROMPT = """rate from 0 to 100 on how well you know, understand, and are confident in your ability to evaluate this company: (COMPANY, ticker: TICKER)
+write about a 100 word explanation and then end only with the number score"""
 RUN_TABLE_COLUMN_KEYS = (
     "rank",
     "score",
@@ -1832,6 +1834,49 @@ def list_runs():
     return runs
 
 
+def latest_confidence_scores():
+    with db_connect() as connection:
+        run = connection.execute(
+            """
+            SELECT id, name, status, company_count, completed_count, failed_count,
+                   created_at, finished_at
+            FROM scoring_runs
+            WHERE deleted_at IS NULL AND prompt = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (CONFIDENCE_SCORE_PROMPT,),
+        ).fetchone()
+        if not run:
+            return {"run": None, "scores": []}
+
+        rows = connection.execute(
+            """
+            SELECT scoring_run_companies.position,
+                   scoring_run_companies.ticker,
+                   COALESCE(scoring_results.company_name, companies.name) AS company_name,
+                   COALESCE(scoring_results.rank, companies.rank) AS market_cap_rank,
+                   COALESCE(scoring_results.market_cap, companies.market_cap) AS market_cap,
+                   COALESCE(scoring_results.market_cap_value, companies.market_cap_value) AS market_cap_value,
+                   companies.logo,
+                   scoring_results.score,
+                   scoring_results.error
+            FROM scoring_run_companies
+            JOIN companies ON companies.ticker = scoring_run_companies.ticker
+            LEFT JOIN scoring_results
+              ON scoring_results.run_id = scoring_run_companies.run_id
+             AND scoring_results.ticker = scoring_run_companies.ticker
+            WHERE scoring_run_companies.run_id = ?
+            ORDER BY scoring_results.score IS NULL,
+                     scoring_results.score DESC,
+                     scoring_run_companies.position
+            """,
+            (run["id"],),
+        ).fetchall()
+
+    return {"run": dict(run), "scores": [dict(row) for row in rows]}
+
+
 def rename_scoring_run(run_id, name):
     return update_scoring_run(run_id, name=name)
 
@@ -2760,6 +2805,11 @@ class Handler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/stock-lists":
             ensure_scoring_schema()
             self.send_json({"lists": list_stock_lists()})
+            return
+
+        if parsed.path == "/api/confidence-scores":
+            ensure_scoring_schema()
+            self.send_json(latest_confidence_scores())
             return
 
         if parsed.path == "/api/cost-estimate":
