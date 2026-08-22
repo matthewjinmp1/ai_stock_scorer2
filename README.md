@@ -32,3 +32,15 @@ Count source lines by module and language:
 ```
 
 Use `./count_lines.py --json` for machine-readable output.
+
+## Refresh company data
+
+Fetch every company currently listed by CompaniesMarketCap:
+
+```bash
+./fetch_companies_to_db.py --all
+```
+
+The command prints progress after each page and only updates `companies.db`
+after the complete scrape succeeds. A complete refresh also removes stale
+companies that are no longer present in the site's full listing.

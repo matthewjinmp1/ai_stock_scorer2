@@ -514,6 +514,34 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertEqual(companies[0]["ticker"], "NVDA")
         self.assertEqual(companies[0]["logo"], "https://companiesmarketcap.com/img/company-logos/64/NVDA.png")
 
+    def test_fetch_all_companies_stops_on_first_empty_page(self):
+        def page_html(start_rank):
+            return "".join(
+                f"""
+                <tr>
+                  <td class="rank-td">{rank}</td>
+                  <td><div class="company-name">Company {rank}</div><div class="company-code">C{rank}</div></td>
+                  <td></td><td>$ 1.00 B</td><td>$10.00</td><td>0.00%</td><td>USA</td>
+                </tr>
+                """
+                for rank in range(start_rank, start_rank + 2)
+            )
+
+        with mock.patch.object(
+            server,
+            "_fetch_html",
+            side_effect=[page_html(1), page_html(3), "<html>No companies here</html>"],
+        ) as fetch:
+            progress = []
+            companies = server.fetch_top_market_cap_companies(
+                None,
+                progress_callback=lambda page, count, rank: progress.append((page, count, rank)),
+            )
+
+        self.assertEqual([company["ticker"] for company in companies], ["C1", "C2", "C3", "C4"])
+        self.assertEqual(progress, [(1, 2, 2), (2, 4, 4)])
+        self.assertEqual(fetch.call_count, 3)
+
     def test_parse_numeric_score_uses_last_number(self):
         score = server.parse_numeric_score(
             "The company has 3 strong product lines and roughly 20 major partners.\nScore: 87"

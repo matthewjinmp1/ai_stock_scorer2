@@ -490,7 +490,7 @@ def _parse_companies(page_html):
         # Fallback for the text-like shape returned by some crawlers.
         compact = re.sub(r"\s+", " ", _clean(page_html))
         pattern = re.compile(
-            r"(?:favorite icon )?(?P<rank>\d{1,3}) Image: (?P<name>.+?) logo "
+            r"(?:favorite icon )?(?P<rank>\d+) Image: (?P<name>.+?) logo "
             r"(?P=name) (?P<ticker>[A-Z0-9.\-]+) (?P<cap>\$[\d,.]+ [TBM])"
             r"(?P<price>\$[\d,.]+) (?P<today>[\d.\-]+%) (?P<country>[A-Za-z. ]+?)(?= favorite icon \d|$)"
         )
@@ -512,16 +512,54 @@ def _parse_companies(page_html):
     return sorted(companies, key=lambda item: item["rank"])
 
 
-def fetch_top_market_cap_companies(limit=COMPANY_UNIVERSE_LIMIT):
+def fetch_top_market_cap_companies(limit=COMPANY_UNIVERSE_LIMIT, progress_callback=None):
     companies_by_ticker = {}
-    page_count = (limit + COMPANIESMARKETCAP_PAGE_SIZE - 1) // COMPANIESMARKETCAP_PAGE_SIZE
-    for page in range(1, page_count + 1):
-        parsed = _parse_companies(_fetch_html(company_source_url_for_page(page)))
+    page_count = None if limit is None else (
+        limit + COMPANIESMARKETCAP_PAGE_SIZE - 1
+    ) // COMPANIESMARKETCAP_PAGE_SIZE
+    page = 1
+    previous_ranks = None
+    while page_count is None or page <= page_count:
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                parsed = _parse_companies(_fetch_html(company_source_url_for_page(page)))
+                break
+            except Exception as exc:
+                last_error = exc
+                if attempt == 3:
+                    raise
+                time.sleep(attempt)
+        else:
+            raise last_error
+
+        if not parsed:
+            if limit is None and companies_by_ticker:
+                break
+            raise ValueError(f"No companies found on CompaniesMarketCap page {page}")
+
+        page_ranks = tuple(company["rank"] for company in parsed)
+        if page_ranks == previous_ranks:
+            if limit is None:
+                break
+            raise ValueError(f"CompaniesMarketCap repeated page data at page {page}")
+        previous_ranks = page_ranks
+
+        count_before = len(companies_by_ticker)
         for company in parsed:
             companies_by_ticker[company["ticker"]] = company
+        if len(companies_by_ticker) == count_before:
+            if limit is None:
+                break
+            raise ValueError(f"CompaniesMarketCap returned no new companies on page {page}")
+        if progress_callback:
+            progress_callback(page, len(companies_by_ticker), parsed[-1]["rank"])
+        page += 1
 
-    companies = sorted(companies_by_ticker.values(), key=lambda item: item["rank"])[:limit]
-    if len(companies) < limit:
+    companies = sorted(companies_by_ticker.values(), key=lambda item: item["rank"])
+    if limit is not None:
+        companies = companies[:limit]
+    if limit is not None and len(companies) < limit:
         raise ValueError(f"Expected {limit} companies, parsed {len(companies)}")
     return companies
 

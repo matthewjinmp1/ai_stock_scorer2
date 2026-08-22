@@ -49,7 +49,7 @@ def create_schema(connection):
     connection.commit()
 
 
-def upsert_companies(connection, companies, fetched_at):
+def upsert_companies(connection, companies, fetched_at, prune=False):
     rows = [
         (
             company["ticker"],
@@ -98,10 +98,25 @@ def upsert_companies(connection, companies, fetched_at):
             """,
             (SOURCE_URL, len(companies), fetched_at),
         )
+        pruned_count = 0
+        if prune:
+            cursor = connection.execute(
+                "DELETE FROM companies WHERE fetched_at <> ?",
+                (fetched_at,),
+            )
+            pruned_count = cursor.rowcount
+    return pruned_count
 
 
 def fetch_top_companies(limit):
-    return fetch_top_market_cap_companies(limit)
+    def show_progress(page, company_count, last_rank):
+        print(
+            f"Fetched page {page}: {company_count:,} unique companies "
+            f"through rank {last_rank:,}",
+            flush=True,
+        )
+
+    return fetch_top_market_cap_companies(limit, progress_callback=show_progress)
 
 
 def main():
@@ -115,19 +130,28 @@ def main():
         default=COMPANY_UNIVERSE_LIMIT,
         help="Number of companies to fetch.",
     )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Fetch every available CompaniesMarketCap page instead of stopping at --limit.",
+    )
     args = parser.parse_args()
 
     db_path = Path(args.db).expanduser().resolve()
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     fetched_at = int(time.time())
-    companies = fetch_top_companies(args.limit)
+    if args.limit < 1:
+        parser.error("--limit must be at least 1")
+    companies = fetch_top_companies(None if args.all else args.limit)
 
     with connect(db_path) as connection:
         create_schema(connection)
-        upsert_companies(connection, companies, fetched_at)
+        pruned_count = upsert_companies(connection, companies, fetched_at, prune=args.all)
 
     print(f"Stored {len(companies)} companies in {db_path}")
+    if args.all:
+        print(f"Removed {pruned_count} companies no longer present in the complete listing")
     print(f"Source: {SOURCE_URL}")
 
 
