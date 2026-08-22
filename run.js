@@ -356,6 +356,12 @@ function formatPercent(value) {
   return `${number.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`;
 }
 
+function formatWholePercent(value) {
+  const number = Number(value);
+  if (value === null || value === undefined || !Number.isFinite(number)) return "--";
+  return `${number.toLocaleString(undefined, { maximumFractionDigits: 0 })}%`;
+}
+
 function formatMarketCap(value, fallback = "") {
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0) return fallback || "--";
@@ -1275,7 +1281,7 @@ function renderRun(run) {
           <td class="position-cell">${displayIndex + 1}</td>
           <td data-column="rank">${result.scoreRank}</td>
           <td data-column="score"><strong>${formatScore(result.score)}</strong></td>
-          <td data-column="scorePercentile">${formatPercent(result.score_percentile)}</td>
+          <td data-column="scorePercentile">${formatWholePercent(result.score_percentile)}</td>
           <td data-column="confidence">${formatScore(result.confidence_score)}</td>
           <td data-column="company">
             <div class="company-cell">
