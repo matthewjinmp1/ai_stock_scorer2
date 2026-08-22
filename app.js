@@ -29,12 +29,20 @@ const confidenceRunRows = document.querySelector("#confidenceRunRows");
 const companiesSearchInput = document.querySelector("#companiesSearchInput");
 const companiesStatus = document.querySelector("#companiesStatus");
 const companyRows = document.querySelector("#companyRows");
+const companiesPreviousButton = document.querySelector("#companiesPreviousButton");
+const companiesNextButton = document.querySelector("#companiesNextButton");
+const companiesPageStatus = document.querySelector("#companiesPageStatus");
 const homeTabs = [...document.querySelectorAll("[data-home-tab]")];
 const homePanels = [...document.querySelectorAll("[data-home-panel]")];
 const pageParams = new URLSearchParams(window.location.search);
 const editRunId = pageParams.get("editRun");
 let companiesAvailable = 0;
 let allCompanies = [];
+const companyCache = new Map();
+let stockPickerMatches = [];
+let companyPagination = { page: 1, page_size: 100, total: 0, total_pages: 1, offset: 0 };
+let companiesSearchTimer = null;
+let stockSearchTimer = null;
 let stockLists = [];
 let editingListId = null;
 let selectedTickers = [];
@@ -106,46 +114,28 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-function companySortValue(company, key) {
-  if (["name", "country"].includes(key)) return String(company[key] || "").toLowerCase();
-  const value = Number(company[key]);
-  return Number.isFinite(value) ? value : null;
-}
-
 function renderCompanies() {
-  const query = companiesSearchInput.value.trim().toLowerCase();
-  const rows = allCompanies
-    .filter(
-      (company) =>
-        !query ||
-        company.name.toLowerCase().includes(query) ||
-        company.ticker.toLowerCase().includes(query)
-    )
-    .sort((left, right) => {
-      const leftValue = companySortValue(left, companySort.key);
-      const rightValue = companySortValue(right, companySort.key);
-      if (leftValue === null && rightValue !== null) return 1;
-      if (rightValue === null && leftValue !== null) return -1;
-      if (leftValue === rightValue) return Number(left.rank) - Number(right.rank);
-      const comparison = typeof leftValue === "string"
-        ? leftValue.localeCompare(rightValue)
-        : leftValue - rightValue;
-      return companySort.direction === "asc" ? comparison : -comparison;
-    });
-
-  companiesStatus.textContent = `${rows.length.toLocaleString()} of ${allCompanies.length.toLocaleString()} companies shown.`;
-  if (!rows.length) {
+  companiesStatus.textContent = companyPagination.total
+    ? `${(companyPagination.offset + 1).toLocaleString()}-${Math.min(
+        companyPagination.offset + allCompanies.length,
+        companyPagination.total
+      ).toLocaleString()} of ${companyPagination.total.toLocaleString()} companies.`
+    : "No companies found.";
+  companiesPageStatus.textContent = `Page ${companyPagination.page.toLocaleString()} of ${companyPagination.total_pages.toLocaleString()}`;
+  companiesPreviousButton.disabled = companyPagination.page <= 1;
+  companiesNextButton.disabled = companyPagination.page >= companyPagination.total_pages;
+  if (!allCompanies.length) {
     companyRows.innerHTML = '<tr><td colspan="6">No companies match this search.</td></tr>';
     return;
   }
 
-  companyRows.innerHTML = rows.map((company, index) => {
+  companyRows.innerHTML = allCompanies.map((company, index) => {
     const logo = company.logo
       ? `<img class="logo" src="${escapeHtml(company.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
       : "";
     return `
       <tr>
-        <td>${index + 1}</td>
+        <td>${companyPagination.offset + index + 1}</td>
         <td>${escapeHtml(company.rank)}</td>
         <td>
           <div class="company-cell">
@@ -216,7 +206,7 @@ async function pinConfidenceRun(runId) {
 }
 
 function companyByTicker(ticker) {
-  return allCompanies.find((company) => company.ticker === ticker);
+  return companyCache.get(ticker);
 }
 
 function companyPickerRow(company, action, label) {
@@ -241,17 +231,8 @@ function companyPickerRow(company, action, label) {
 }
 
 function renderStockPicker() {
-  const query = stockSearchInput.value.trim().toLowerCase();
   const selected = new Set(selectedTickers);
-  const matches = allCompanies
-    .filter((company) => !selected.has(company.ticker))
-    .filter(
-      (company) =>
-        !query ||
-        company.name.toLowerCase().includes(query) ||
-        company.ticker.toLowerCase().includes(query)
-    )
-    .slice(0, 12);
+  const matches = stockPickerMatches.filter((company) => !selected.has(company.ticker));
 
   stockSearchResults.innerHTML = matches.length
     ? matches.map((company) => companyPickerRow(company, "add", "Add")).join("")
@@ -461,13 +442,35 @@ async function deleteRun(runId, currentName) {
 }
 
 async function loadCompanies() {
-  const payload = await fetchJson("/api/companies");
+  const query = new URLSearchParams({
+    page: String(companyPagination.page),
+    pageSize: "100",
+    q: companiesSearchInput.value.trim(),
+    sort: companySort.key,
+    dir: companySort.direction,
+  });
+  const payload = await fetchJson(`/api/companies?${query.toString()}`);
   allCompanies = payload.companies;
-  companiesAvailable = allCompanies.length;
+  companyPagination = payload.pagination;
+  companiesAvailable = companyPagination.total;
+  for (const company of allCompanies) companyCache.set(company.ticker, company);
   companyCountInput.max = String(companiesAvailable);
   companyCountHelp.textContent = `Choose 1-${companiesAvailable}. Scoring starts from the largest companies by market cap.`;
-  renderStockPicker();
   renderCompanies();
+}
+
+async function loadStockPickerMatches() {
+  const query = new URLSearchParams({
+    page: "1",
+    pageSize: "12",
+    q: stockSearchInput.value.trim(),
+    sort: "rank",
+    dir: "asc",
+  });
+  const payload = await fetchJson(`/api/companies?${query.toString()}`);
+  stockPickerMatches = payload.companies || [];
+  for (const company of stockPickerMatches) companyCache.set(company.ticker, company);
+  renderStockPicker();
 }
 
 async function loadModels() {
@@ -494,6 +497,9 @@ async function loadModels() {
 async function loadStockLists(preferredUniverseValue = universeSelect.value) {
   const payload = await fetchJson("/api/stock-lists");
   stockLists = payload.lists || [];
+  for (const stockList of stockLists) {
+    for (const company of stockList.companies || []) companyCache.set(company.ticker, company);
+  }
   renderStockListSelectors(preferredUniverseValue);
 }
 
@@ -809,15 +815,37 @@ listEditorSelect.addEventListener("change", () => {
 newListButton.addEventListener("click", resetListEditor);
 saveListButton.addEventListener("click", saveCurrentStockList);
 archiveListButton.addEventListener("click", archiveCurrentStockList);
-stockSearchInput.addEventListener("input", renderStockPicker);
-companiesSearchInput.addEventListener("input", renderCompanies);
+stockSearchInput.addEventListener("input", () => {
+  window.clearTimeout(stockSearchTimer);
+  stockSearchTimer = window.setTimeout(() => loadStockPickerMatches().catch((error) => {
+    stockSearchResults.innerHTML = `<p class="stock-picker-empty">${escapeHtml(error.message)}</p>`;
+  }), 250);
+});
+companiesSearchInput.addEventListener("input", () => {
+  window.clearTimeout(companiesSearchTimer);
+  companiesSearchTimer = window.setTimeout(() => {
+    companyPagination.page = 1;
+    loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
+  }, 250);
+});
+companiesPreviousButton.addEventListener("click", () => {
+  if (companyPagination.page <= 1) return;
+  companyPagination.page -= 1;
+  loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
+});
+companiesNextButton.addEventListener("click", () => {
+  if (companyPagination.page >= companyPagination.total_pages) return;
+  companyPagination.page += 1;
+  loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
+});
 document.querySelectorAll("[data-company-sort]").forEach((button) => {
   button.addEventListener("click", () => {
     const key = button.dataset.companySort;
     companySort = companySort.key === key
       ? { key, direction: companySort.direction === "asc" ? "desc" : "asc" }
       : { key, direction: ["name", "country"].includes(key) ? "asc" : "desc" };
-    renderCompanies();
+    companyPagination.page = 1;
+    loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
   });
 });
 confidenceRunRows.addEventListener("click", (event) => {
@@ -903,6 +931,7 @@ try {
   setRunRows("Loading saved scoring runs...");
   setRunRows("Loading starred scoring runs...", starredRunRows);
   await loadCompanies();
+  await loadStockPickerMatches();
   await loadModels();
   await loadStockLists();
   if (editRunId) await prefillFromRun(editRunId);

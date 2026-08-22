@@ -1069,6 +1069,33 @@ class RunWorkerTests(ServerTestCase):
         run = server.get_run(run_id)
         self.assertEqual(run["results"][0]["logo"], "https://logos/aaa.png")
 
+    def test_companies_are_paginated_and_searched_on_the_server(self):
+        first_page = server.paginated_companies(page=1, page_size=2)
+        second_page = server.paginated_companies(page=2, page_size=2)
+        searched = server.paginated_companies(query="Gamma")
+
+        self.assertEqual(first_page["pagination"]["total"], 3)
+        self.assertEqual([company["ticker"] for company in first_page["companies"]], ["AAA", "BBB"])
+        self.assertEqual([company["ticker"] for company in second_page["companies"]], ["CCC"])
+        self.assertEqual([company["ticker"] for company in searched["companies"]], ["CCC"])
+
+    def test_run_page_omits_responses_and_keeps_global_ranks(self):
+        run_id = self.create_run(company_count=3)
+        companies = server.scoring_companies(3)
+        with self.connect() as connection:
+            for index, company in enumerate(companies):
+                server.save_result(connection, run_id, company, 90 - index, f"Long response {index}", None)
+            server.update_run_counts(connection, run_id)
+            connection.commit()
+
+        second_page = server.paginated_run(run_id, page=2, page_size=2)
+
+        self.assertEqual(second_page["result_page"]["total"], 3)
+        self.assertEqual(second_page["result_page"]["offset"], 2)
+        self.assertEqual(second_page["results"][0]["scoreRank"], 3)
+        self.assertNotIn("raw_response", second_page["results"][0])
+        self.assertEqual(second_page["score_stats"]["median"], 89)
+
 
 class StockListTests(ServerTestCase):
     def test_stock_list_can_be_created_and_updated(self):

@@ -102,7 +102,7 @@ async function loadDetail() {
 
   const backUrl = new URL("/run.html", window.location.origin);
   backUrl.searchParams.set("id", runId);
-  ["sort", "dir", "tab", "score", "q", "y"].forEach((key) => {
+  ["sort", "dir", "tab", "score", "q", "page", "y"].forEach((key) => {
     const value = params.get(key);
     if (value) backUrl.searchParams.set(key, value);
   });

@@ -71,7 +71,7 @@ function setResponseView(view, preserveScroll = true) {
 function setBackLink() {
   const url = new URL("/run.html", window.location.origin);
   url.searchParams.set("id", runId);
-  ["sort", "dir", "tab", "score", "q", "y"].forEach((key) => {
+  ["sort", "dir", "tab", "score", "q", "page", "y"].forEach((key) => {
     const value = params.get(key);
     if (value) url.searchParams.set(key, value);
   });

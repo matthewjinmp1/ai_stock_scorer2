@@ -896,6 +896,55 @@ def db_companies(active_only=True):
     return [row_to_company(row) for row in rows]
 
 
+def paginated_companies(page=1, page_size=100, query="", sort_key="rank", direction="asc"):
+    page = max(1, int(page or 1))
+    page_size = max(1, min(100, int(page_size or 100)))
+    query = str(query or "").strip()
+    direction = "DESC" if str(direction).lower() == "desc" else "ASC"
+    sort_columns = {
+        "rank": "rank",
+        "name": "name COLLATE NOCASE",
+        "marketCapValue": "market_cap_value",
+        "country": "country COLLATE NOCASE",
+    }
+    sort_column = sort_columns.get(sort_key, "rank")
+    where_parts = ["fetched_at = (SELECT MAX(fetched_at) FROM companies)"]
+    parameters = []
+    if query:
+        where_parts.append("(name LIKE ? COLLATE NOCASE OR ticker LIKE ? COLLATE NOCASE)")
+        match = f"%{query}%"
+        parameters.extend([match, match])
+    where_clause = " AND ".join(where_parts)
+
+    with db_connect() as connection:
+        total = connection.execute(
+            f"SELECT COUNT(*) FROM companies WHERE {where_clause}", parameters
+        ).fetchone()[0]
+        total_pages = max(1, math.ceil(total / page_size))
+        page = min(page, total_pages)
+        offset = (page - 1) * page_size
+        rows = connection.execute(
+            f"""
+            SELECT ticker, rank, name, market_cap, market_cap_value, price, today, country, logo
+            FROM companies
+            WHERE {where_clause}
+            ORDER BY {sort_column} {direction}, rank ASC
+            LIMIT ? OFFSET ?
+            """,
+            [*parameters, page_size, offset],
+        ).fetchall()
+    return {
+        "companies": [row_to_company(row) for row in rows],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "total_pages": total_pages,
+            "offset": offset,
+        },
+    }
+
+
 def scoring_companies(company_count):
     return db_companies()[:company_count]
 
@@ -1577,7 +1626,7 @@ def redrive_failed_scoring_run(run_id, requested_tickers=None):
     return get_run(run_id)
 
 
-def get_run(run_id):
+def get_run(run_id, include_raw_response=True):
     with db_connect() as connection:
         run = connection.execute(
             """
@@ -1598,12 +1647,13 @@ def get_run(run_id):
         ).fetchone()
         if not run:
             return None
+        raw_response_column = ", raw_response" if include_raw_response else ""
         results = connection.execute(
-            """
+            f"""
             SELECT scoring_results.ticker, company_name, scoring_results.rank,
                    scoring_results.market_cap, scoring_results.market_cap_value,
                    scoring_results.price, scoring_results.country,
-                   score, raw_response, error, created_at
+                   score{raw_response_column}, error, created_at
             FROM scoring_results
             WHERE run_id = ?
             ORDER BY score IS NULL, score DESC, rank ASC
@@ -1648,6 +1698,108 @@ def get_run(run_id):
     payload["company_tickers"] = [company["ticker"] for company in scoring_companies_for_run(run_id)]
     payload["extension_limit"] = len(extension_companies_for_run(run_id, run["stock_list_id"]))
     payload["pinned_confidence_run_id"] = current_confidence_run_id
+    return payload
+
+
+def _run_result_sort_value(result, key):
+    values = {
+        "scoreRank": result.get("scoreRank"),
+        "score": result.get("score"),
+        "scorePercentile": result.get("score_percentile"),
+        "confidence": result.get("confidence_score"),
+        "company": f"{result.get('company_name') or ''} {result.get('ticker') or ''}".lower(),
+        "marketCap": result.get("market_cap_value"),
+        "inputTokens": result.get("prompt_tokens"),
+        "responseTokens": result.get("response_tokens"),
+        "reasoningTokens": result.get("reasoning_tokens"),
+        "totalTokens": result.get("total_tokens"),
+        "tokenBudgetPercent": result.get("token_budget_used_percent"),
+        "durationMs": result.get("duration_ms"),
+        "cost": result.get("cost"),
+        "error": (result.get("error") or "").lower(),
+    }
+    return values.get(key, result.get("scoreRank"))
+
+
+def paginated_run(run_id, page=1, page_size=100, view="ranking", sort_key="scoreRank",
+                  direction="asc", query="", score_target=None):
+    payload = get_run(run_id, include_raw_response=False)
+    if not payload:
+        return None
+
+    successful = [
+        result for result in payload["results"]
+        if result.get("score") is not None and not result.get("error")
+    ]
+    failed = [
+        result for result in payload["results"]
+        if result.get("score") is None or result.get("error")
+    ]
+    for index, result in enumerate(successful, 1):
+        result["scoreRank"] = index
+    for index, result in enumerate(failed, 1):
+        result["scoreRank"] = index
+
+    scores = sorted({float(result["score"]) for result in successful})
+    matched_score = None
+    if score_target not in (None, "") and scores:
+        target = float(score_target)
+        matched_score = min(scores, key=lambda score: (abs(score - target), -score))
+
+    rows = failed if view == "failed" else successful
+    if matched_score is not None and view != "failed":
+        rows = [result for result in rows if float(result["score"]) == matched_score]
+    query = str(query or "").strip().lower()
+    if query:
+        rows = [
+            result for result in rows
+            if query in f"{result.get('company_name') or ''} {result.get('ticker') or ''}".lower()
+        ]
+
+    reverse = str(direction).lower() == "desc"
+    present = []
+    missing = []
+    for result in rows:
+        value = _run_result_sort_value(result, sort_key)
+        (missing if value in (None, "") else present).append(result)
+    present.sort(
+        key=lambda result: (_run_result_sort_value(result, sort_key), result.get("scoreRank", 0)),
+        reverse=reverse,
+    )
+    rows = present + sorted(missing, key=lambda result: result.get("scoreRank", 0))
+
+    total = len(rows)
+    page = max(1, int(page or 1))
+    page_size = max(1, min(100, int(page_size or 100)))
+    total_pages = max(1, math.ceil(total / page_size))
+    page = min(page, total_pages)
+    offset = (page - 1) * page_size
+    all_scores = [float(result["score"]) for result in successful]
+    sorted_scores = sorted(all_scores)
+    middle = len(sorted_scores) // 2
+    median = None
+    if sorted_scores:
+        median = sorted_scores[middle] if len(sorted_scores) % 2 else (
+            sorted_scores[middle - 1] + sorted_scores[middle]
+        ) / 2
+
+    payload["results"] = rows[offset:offset + page_size]
+    payload["result_page"] = {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "offset": offset,
+        "counts": {"ranking": len(successful), "failed": len(failed)},
+        "score_values": scores,
+        "matched_score": matched_score,
+    }
+    payload["score_stats"] = {
+        "minimum": min(all_scores) if all_scores else None,
+        "maximum": max(all_scores) if all_scores else None,
+        "average": sum(all_scores) / len(all_scores) if all_scores else None,
+        "median": median,
+    }
     return payload
 
 
@@ -3027,11 +3179,21 @@ class Handler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/companies":
             try:
-                companies = db_companies()
+                query = dict(parse_qsl(parsed.query))
+                if query:
+                    page_payload = paginated_companies(
+                        query.get("page", 1), query.get("pageSize", 100),
+                        query.get("q", ""), query.get("sort", "rank"), query.get("dir", "asc")
+                    )
+                    companies = page_payload["companies"]
+                else:
+                    page_payload = None
+                    companies = db_companies()
                 self.send_json(
                     {
                         "source": str(DB_PATH),
                         "companies": companies,
+                        **({"pagination": page_payload["pagination"]} if page_payload else {}),
                     }
                 )
             except (urllib.error.URLError, ValueError, TimeoutError) as exc:
@@ -3117,7 +3279,16 @@ class Handler(SimpleHTTPRequestHandler):
         run_match = re.fullmatch(r"/api/runs/(\d+)", parsed.path)
         if run_match:
             ensure_scoring_schema()
-            run = get_run(int(run_match.group(1)))
+            query = dict(parse_qsl(parsed.query))
+            try:
+                run = paginated_run(
+                    int(run_match.group(1)), query.get("page", 1), query.get("pageSize", 100),
+                    query.get("view", "ranking"), query.get("sort", "scoreRank"),
+                    query.get("dir", "asc"), query.get("q", ""), query.get("score")
+                ) if query else get_run(int(run_match.group(1)))
+            except (TypeError, ValueError):
+                self.send_json({"error": "Invalid pagination or filter value"}, 400)
+                return
             if not run:
                 self.send_json({"error": "Run not found"}, 404)
                 return
