@@ -1,6 +1,5 @@
 const params = new URLSearchParams(window.location.search);
 const stopButton = document.querySelector("#stopButton");
-const rerunButton = document.querySelector("#rerunButton");
 const editRunButton = document.querySelector("#editRunButton");
 const copyRunButton = document.querySelector("#copyRunButton");
 const extendButton = document.querySelector("#extendButton");
@@ -1192,7 +1191,6 @@ function renderRun(run) {
   updateResultViewTabs(run);
   stopButton.disabled = !canStop(run);
   stopButton.textContent = run.status === "stop_requested" ? "Stopping..." : "Stop";
-  rerunButton.disabled = false;
   editRunButton.disabled = false;
   copyRunButton.disabled = false;
   extendButton.disabled = canStop(run) || Number(run.extension_limit || 0) <= Number(run.company_count || 0);
@@ -1309,7 +1307,6 @@ function renderRun(run) {
 async function loadCurrentRun() {
   if (!currentRunId) {
     currentRun = null;
-    rerunButton.disabled = true;
     editRunButton.disabled = true;
     copyRunButton.disabled = true;
     extendButton.disabled = true;
@@ -1378,69 +1375,7 @@ async function stopCurrentRun() {
   }
 }
 
-async function rerunCurrentPrompt() {
-  if (!currentRun) {
-    statusEl.textContent = "Pick a saved run before rerunning.";
-    return;
-  }
-
-  const name = window.prompt("Name this rerun", `${currentRun.name || `Run #${currentRun.id}`} rerun`);
-  if (name === null) return;
-  const trimmed = name.trim();
-  if (!trimmed) {
-    statusEl.textContent = "Run name is required.";
-    return;
-  }
-
-  rerunButton.disabled = true;
-
-  try {
-    statusEl.textContent = "Estimating rerun cost...";
-    const confirmed = await confirmCostEstimate({
-      model: currentRun.model,
-      reasoningMode: currentRun.reasoning_mode,
-      companyCount: currentRun.company_count,
-      actionLabel: "Start this rerun?",
-    });
-    if (!confirmed) {
-      statusEl.textContent = "Rerun canceled before any AI requests were sent.";
-      return;
-    }
-
-    statusEl.textContent = "Starting rerun...";
-    const response = await fetch("/api/runs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: trimmed,
-        prompt: currentRun.prompt,
-        model: currentRun.model,
-        reasoningMode: currentRun.reasoning_mode,
-        maxTokens: currentRun.max_tokens,
-        stockListId: currentRun.stock_list_id,
-        ...(currentRun.stock_list_id ? { tickers: currentRun.company_tickers } : {}),
-        companyCount: currentRun.company_count,
-      }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not start rerun");
-
-    currentRunId = String(payload.runId);
-    history.replaceState(null, "", `/run.html?id=${currentRunId}`);
-    sortState = { key: "scoreRank", direction: "asc" };
-    activeResultView = "ranking";
-    restoredScroll = true;
-    if (pollTimer) window.clearTimeout(pollTimer);
-    await loadCurrentRun();
-  } catch (error) {
-    statusEl.textContent = error.message;
-  } finally {
-    rerunButton.disabled = !currentRun;
-  }
-}
-
 stopButton.addEventListener("click", stopCurrentRun);
-rerunButton.addEventListener("click", rerunCurrentPrompt);
 editRunButton.addEventListener("click", showRunEditor);
 copyRunButton.addEventListener("click", copyCurrentRun);
 extendButton.addEventListener("click", extendCurrentRun);
