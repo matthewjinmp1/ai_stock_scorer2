@@ -71,6 +71,7 @@ function renderPortfolio(portfolio) {
           <td data-label="Multiplier">${formatNumber(holding.score_multiplier, 2)}x</td>
           <td data-label="Adjusted Market Cap">${formatMarketCap(holding.adjusted_market_cap)}</td>
           <td data-label="Weight" class="portfolio-weight">${formatNumber(holding.portfolio_weight, 4)}%</td>
+          <td data-label="Weight Uplift" class="portfolio-weight">${formatNumber(holding.weight_uplift, 2)}x</td>
         </tr>
       `;
     })
@@ -95,5 +96,5 @@ try {
   loadPortfolio();
 } catch (error) {
   statusEl.textContent = error.message;
-  rowsEl.innerHTML = '<tr><td colspan="8">Portfolio composition is unavailable.</td></tr>';
+  rowsEl.innerHTML = '<tr><td colspan="9">Portfolio composition is unavailable.</td></tr>';
 }

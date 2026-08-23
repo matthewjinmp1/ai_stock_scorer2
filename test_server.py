@@ -1163,6 +1163,10 @@ class PortfolioTests(ServerTestCase):
         self.assertEqual(portfolio["holdings"][1]["score_multiplier"], 1)
         self.assertAlmostEqual(portfolio["holdings"][0]["portfolio_weight"], 85.7142857)
         self.assertAlmostEqual(portfolio["holdings"][1]["portfolio_weight"], 14.2857143)
+        self.assertAlmostEqual(portfolio["holdings"][0]["market_cap_weight"], 60)
+        self.assertAlmostEqual(portfolio["holdings"][1]["market_cap_weight"], 40)
+        self.assertAlmostEqual(portfolio["holdings"][0]["weight_uplift"], 1.4285714)
+        self.assertAlmostEqual(portfolio["holdings"][1]["weight_uplift"], 0.3571429)
         self.assertAlmostEqual(
             sum(holding["portfolio_weight"] for holding in portfolio["holdings"]),
             100,

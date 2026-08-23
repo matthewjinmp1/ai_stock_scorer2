@@ -1756,11 +1756,18 @@ def calculate_portfolio(
             holding["adjusted_market_cap"] = holding["market_cap_value"] * multiplier
 
         adjusted_total = sum(holding["adjusted_market_cap"] for holding in holdings)
+        market_cap_total = sum(holding["market_cap_value"] for holding in holdings)
         if adjusted_total <= 0:
             raise ValueError("The selected stocks do not have usable market-cap data.")
         for holding in holdings:
+            holding["market_cap_weight"] = (
+                holding["market_cap_value"] / market_cap_total * 100
+            )
             holding["portfolio_weight"] = (
                 holding["adjusted_market_cap"] / adjusted_total * 100
+            )
+            holding["weight_uplift"] = (
+                holding["portfolio_weight"] / holding["market_cap_weight"]
             )
         holdings.sort(
             key=lambda holding: (

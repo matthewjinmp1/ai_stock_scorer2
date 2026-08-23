@@ -571,19 +571,26 @@ button:hover {
 }
 
 .portfolio-table th:nth-child(1) { width: 4%; }
-.portfolio-table th:nth-child(2) { width: 25%; }
-.portfolio-table th:nth-child(3) { width: 8%; }
-.portfolio-table th:nth-child(4) { width: 13%; }
-.portfolio-table th:nth-child(5) { width: 13%; }
-.portfolio-table th:nth-child(6) { width: 10%; }
-.portfolio-table th:nth-child(7) { width: 15%; }
-.portfolio-table th:nth-child(8) { width: 12%; }
+.portfolio-table th:nth-child(2) { width: 22%; }
+.portfolio-table th:nth-child(3) { width: 7%; }
+.portfolio-table th:nth-child(4) { width: 12%; }
+.portfolio-table th:nth-child(5) { width: 12%; }
+.portfolio-table th:nth-child(6) { width: 9%; }
+.portfolio-table th:nth-child(7) { width: 13%; }
+.portfolio-table th:nth-child(8) { width: 10%; }
+.portfolio-table th:nth-child(9) { width: 11%; }
 
 .portfolio-table th,
 .portfolio-table td {
   padding-left: 12px;
   padding-right: 12px;
   overflow-wrap: anywhere;
+}
+
+.portfolio-table th {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .portfolio-weight {
