@@ -1025,7 +1025,7 @@ button:disabled {
   top: calc(100% + 6px);
   right: 0;
   display: grid;
-  width: 220px;
+  width: 285px;
   max-height: calc(100vh - 100px);
   overflow-y: auto;
   padding: 10px;
@@ -1033,6 +1033,45 @@ button:disabled {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: 0 16px 34px rgba(29, 45, 68, 0.16);
+}
+
+.column-selector-options {
+  display: grid;
+}
+
+.column-selector-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.column-order-controls {
+  display: flex;
+  gap: 3px;
+}
+
+.column-order-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--blue);
+  font-size: 0.9rem;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.column-order-button:hover:not(:disabled) {
+  background: var(--soft-blue);
+}
+
+.column-order-button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .column-selector-menu [hidden] {
@@ -1070,6 +1109,10 @@ button:disabled {
   color: var(--blue);
   font-weight: 800;
   cursor: pointer;
+}
+
+.column-reset-button + .column-reset-button {
+  margin-top: 0;
 }
 
 .is-column-hidden {

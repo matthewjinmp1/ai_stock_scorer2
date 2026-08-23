@@ -125,6 +125,19 @@ class AppPreferenceTests(ServerTestCase):
         with self.assertRaisesRegex(ValueError, "Keep at least one portfolio table column"):
             server.save_portfolio_table_columns_preference([])
 
+    def test_portfolio_table_column_order_persists_and_appends_new_columns(self):
+        saved = server.save_portfolio_table_column_order_preference(
+            ["weight", "company", "weight"]
+        )
+
+        self.assertEqual(saved[:2], ["weight", "company"])
+        self.assertEqual(saved, server.get_portfolio_table_column_order_preference())
+        self.assertEqual(set(saved), set(server.PORTFOLIO_TABLE_COLUMN_KEYS))
+
+    def test_portfolio_table_column_order_rejects_unknown_column(self):
+        with self.assertRaisesRegex(ValueError, "Unknown portfolio table column"):
+            server.save_portfolio_table_column_order_preference(["not-a-column"])
+
     def test_run_table_columns_persist_in_database(self):
         saved = server.save_run_table_columns_preference(
             ["company", "score", "total", "company"]
@@ -152,6 +165,24 @@ class AppPreferenceTests(ServerTestCase):
             server.get_run_table_columns_preference("failed"),
             ["company", "error"],
         )
+
+    def test_run_table_column_orders_persist_separately(self):
+        ranking = server.save_run_table_column_order_preference(
+            ["company", "score", "company"], "ranking"
+        )
+        failed = server.save_run_table_column_order_preference(
+            ["error", "company"], "failed"
+        )
+
+        self.assertEqual(ranking[:2], ["company", "score"])
+        self.assertEqual(failed[:2], ["error", "company"])
+        self.assertEqual(ranking, server.get_run_table_column_order_preference("ranking"))
+        self.assertEqual(failed, server.get_run_table_column_order_preference("failed"))
+        self.assertEqual(set(ranking), set(server.RUN_TABLE_COLUMN_KEYS))
+
+    def test_run_table_column_order_rejects_unknown_column(self):
+        with self.assertRaisesRegex(ValueError, "Unknown run table column"):
+            server.save_run_table_column_order_preference(["not-a-column"])
 
     def test_run_table_columns_reject_unknown_view(self):
         with self.assertRaisesRegex(ValueError, "Unknown run table view"):

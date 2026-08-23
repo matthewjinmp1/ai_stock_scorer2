@@ -48,16 +48,9 @@
         <details id="portfolioColumnSelector" class="column-selector">
           <summary>Columns</summary>
           <div class="column-selector-menu">
-            <label><input type="checkbox" data-portfolio-column-toggle="position" /> Number</label>
-            <label><input type="checkbox" data-portfolio-column-toggle="company" /> Company</label>
-            <label><input type="checkbox" data-portfolio-column-toggle="score" /> Score</label>
-            <label><input type="checkbox" data-portfolio-column-toggle="scorePercentile" /> Score Percentile</label>
-            <label><input type="checkbox" data-portfolio-column-toggle="marketCap" /> Market Cap</label>
-            <label><input type="checkbox" data-portfolio-column-toggle="multiplier" /> Score Multiplier</label>
-            <label><input type="checkbox" data-portfolio-column-toggle="adjustedMarketCap" /> Adjusted Market Cap</label>
-            <label><input type="checkbox" data-portfolio-column-toggle="weight" /> Weight</label>
-            <label><input type="checkbox" data-portfolio-column-toggle="weightUplift" /> Weight Uplift</label>
+            <div id="portfolioColumnSelectorOptions" class="column-selector-options"></div>
             <button id="resetPortfolioColumnsButton" class="column-reset-button" type="button">Show all</button>
+            <button id="resetPortfolioColumnOrderButton" class="column-reset-button" type="button">Reset order</button>
           </div>
         </details>
       </section>

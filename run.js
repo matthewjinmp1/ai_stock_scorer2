@@ -59,8 +59,9 @@ const rankingTabCount = document.querySelector("#rankingTabCount");
 const failedTabCount = document.querySelector("#failedTabCount");
 const failedActions = document.querySelector("#failedActions");
 const columnSelector = document.querySelector("#columnSelector");
+const columnSelectorOptions = document.querySelector("#columnSelectorOptions");
 const resetColumnsButton = document.querySelector("#resetColumnsButton");
-const errorColumnOption = document.querySelector("#errorColumnOption");
+const resetColumnOrderButton = document.querySelector("#resetColumnOrderButton");
 const resultsPreviousButton = document.querySelector("#resultsPreviousButton");
 const resultsNextButton = document.querySelector("#resultsNextButton");
 const resultsPageStatus = document.querySelector("#resultsPageStatus");
@@ -103,11 +104,50 @@ const COLUMN_KEYS = [
   "dashboard",
   "actions",
 ];
+const COLUMN_LABELS = {
+  rank: "Rank",
+  score: "Score",
+  scorePercentile: "Score Percentile",
+  confidence: "Confidence",
+  company: "Company",
+  marketCap: "Market Cap",
+  input: "Input",
+  response: "Response",
+  reasoning: "Reasoning",
+  total: "Total Tokens",
+  budget: "Budget Used",
+  time: "Time",
+  cost: "Cost",
+  error: "Error",
+  search: "Search",
+  chart: "Price Chart",
+  dashboard: "Stock Dashboard",
+  actions: "Details",
+};
 const LEGACY_COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v6";
 const COLUMN_STORAGE_KEYS = {
   ranking: "ai-stock-scorer-visible-ranking-columns-v1",
   failed: "ai-stock-scorer-visible-failed-columns-v1",
 };
+const COLUMN_ORDER_STORAGE_KEYS = {
+  ranking: "ai-stock-scorer-ranking-column-order-v1",
+  failed: "ai-stock-scorer-failed-column-order-v1",
+};
+
+function normalizeColumnOrder(order) {
+  const valid = Array.isArray(order)
+    ? [...new Set(order.filter((column) => COLUMN_KEYS.includes(column)))]
+    : [];
+  return [...valid, ...COLUMN_KEYS.filter((column) => !valid.includes(column))];
+}
+
+function loadColumnOrder(view) {
+  try {
+    return normalizeColumnOrder(JSON.parse(window.localStorage.getItem(COLUMN_ORDER_STORAGE_KEYS[view])));
+  } catch (_error) {
+    return [...COLUMN_KEYS];
+  }
+}
 
 function loadVisibleColumns(view) {
   try {
@@ -150,6 +190,11 @@ const visibleColumnsByView = {
   failed: loadVisibleColumns("failed"),
 };
 let visibleColumns = visibleColumnsByView[activeResultView];
+const columnOrderByView = {
+  ranking: loadColumnOrder("ranking"),
+  failed: loadColumnOrder("failed"),
+};
+let columnOrder = columnOrderByView[activeResultView];
 const columnSaveTimers = { ranking: null, failed: null };
 
 function saveVisibleColumnsLocally(view, columns) {
@@ -160,11 +205,19 @@ function saveVisibleColumnsLocally(view, columns) {
   }
 }
 
-async function persistVisibleColumns(view, columns) {
+function saveColumnOrderLocally(view, order) {
+  try {
+    window.localStorage.setItem(COLUMN_ORDER_STORAGE_KEYS[view], JSON.stringify(order));
+  } catch (_error) {
+    // The order still works for this page when browser storage is unavailable.
+  }
+}
+
+async function persistVisibleColumns(view, columns, order) {
   const response = await fetch(`/api/preferences/run-table-columns?view=${encodeURIComponent(view)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ columns: [...columns] }),
+    body: JSON.stringify({ columns: [...columns], order }),
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
@@ -177,10 +230,12 @@ function saveVisibleColumns() {
   const columns = new Set(visibleColumns);
   visibleColumnsByView[view] = columns;
   visibleColumns = columns;
+  columnOrderByView[view] = [...columnOrder];
   saveVisibleColumnsLocally(view, columns);
+  saveColumnOrderLocally(view, columnOrderByView[view]);
   if (columnSaveTimers[view]) window.clearTimeout(columnSaveTimers[view]);
   columnSaveTimers[view] = window.setTimeout(() => {
-    persistVisibleColumns(view, columns).catch(() => {
+    persistVisibleColumns(view, columns, columnOrderByView[view]).catch(() => {
       // Browser storage remains a usable fallback if the server is unavailable.
     });
   }, 200);
@@ -200,20 +255,68 @@ async function loadPersistedVisibleColumns() {
           if (valid.length) {
             visibleColumnsByView[view] = new Set(valid);
             saveVisibleColumnsLocally(view, visibleColumnsByView[view]);
-            return;
           }
         }
-        await persistVisibleColumns(view, visibleColumnsByView[view]);
+        if (Array.isArray(payload.order)) {
+          columnOrderByView[view] = normalizeColumnOrder(payload.order);
+          saveColumnOrderLocally(view, columnOrderByView[view]);
+        }
+        await persistVisibleColumns(
+          view,
+          visibleColumnsByView[view],
+          columnOrderByView[view]
+        );
       } catch (_error) {
         // Keep the local selection when persistent preferences cannot be reached.
       }
     })
   );
   visibleColumns = visibleColumnsByView[activeResultView];
+  columnOrder = columnOrderByView[activeResultView];
   applyColumnVisibility();
 }
 
+function currentMovableColumns() {
+  return columnOrder.filter((column) => activeResultView === "failed" || column !== "error");
+}
+
+function renderColumnSelectorOptions() {
+  const movableColumns = currentMovableColumns();
+  columnSelectorOptions.innerHTML = columnOrder
+    .filter((column) => activeResultView === "failed" || column !== "error")
+    .map((column) => {
+      const index = movableColumns.indexOf(column);
+      const label = COLUMN_LABELS[column];
+      return `<div class="column-selector-row">
+        <label><input type="checkbox" data-column-toggle="${column}" /> ${label}</label>
+        <div class="column-order-controls">
+          <button class="column-order-button" type="button" data-move-column="${column}" data-move-direction="-1" title="Move earlier" aria-label="Move ${label} earlier" ${index === 0 ? "disabled" : ""}>↑</button>
+          <button class="column-order-button" type="button" data-move-column="${column}" data-move-direction="1" title="Move later" aria-label="Move ${label} later" ${index === movableColumns.length - 1 ? "disabled" : ""}>↓</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+function applyColumnOrder() {
+  rankingTable.querySelectorAll("tr").forEach((row) => {
+    const children = [...row.children];
+    const position = children.find((cell) =>
+      cell.classList.contains("position-column") || cell.classList.contains("position-cell")
+    );
+    const redrive = children.find((cell) => cell.classList.contains("failed-redrive-column"));
+    if (position) row.append(position);
+    columnOrder.forEach((column) => {
+      const cell = children.find((candidate) => candidate.dataset.column === column);
+      if (cell) row.append(cell);
+    });
+    if (redrive) row.append(redrive);
+  });
+}
+
 function applyColumnVisibility() {
+  applyColumnOrder();
+  renderColumnSelectorOptions();
   document.querySelectorAll("[data-column]").forEach((element) => {
     element.classList.toggle("is-column-hidden", !visibleColumns.has(element.dataset.column));
   });
@@ -222,6 +325,22 @@ function applyColumnVisibility() {
   });
   const emptyCell = resultRows.querySelector("[data-empty-results]");
   if (emptyCell) emptyCell.colSpan = visibleTableColumnCount();
+}
+
+function moveColumn(column, direction) {
+  const movableColumns = currentMovableColumns();
+  const index = movableColumns.indexOf(column);
+  const neighbor = movableColumns[index + direction];
+  if (index < 0 || !neighbor) return;
+  const columnIndex = columnOrder.indexOf(column);
+  const neighborIndex = columnOrder.indexOf(neighbor);
+  [columnOrder[columnIndex], columnOrder[neighborIndex]] = [
+    columnOrder[neighborIndex],
+    columnOrder[columnIndex],
+  ];
+  columnOrderByView[activeResultView] = [...columnOrder];
+  saveVisibleColumns();
+  applyColumnVisibility();
 }
 
 function visibleTableColumnCount() {
@@ -260,6 +379,13 @@ function updateVisibleColumn(event) {
 function resetVisibleColumns() {
   visibleColumns = new Set(COLUMN_KEYS);
   visibleColumnsByView[activeResultView] = visibleColumns;
+  saveVisibleColumns();
+  applyColumnVisibility();
+}
+
+function resetColumnOrder() {
+  columnOrder = [...COLUMN_KEYS];
+  columnOrderByView[activeResultView] = columnOrder;
   saveVisibleColumns();
   applyColumnVisibility();
 }
@@ -727,7 +853,6 @@ function updateResultViewTabs(run) {
   });
   scoreFilterToolbar.hidden = activeResultView !== "ranking";
   failedActions.hidden = activeResultView !== "failed";
-  errorColumnOption.hidden = activeResultView !== "failed";
   rankingTable.classList.toggle("ranking-view", activeResultView === "ranking");
   rankingTable.classList.toggle("failed-view", activeResultView === "failed");
   resultsTableWrap.setAttribute(
@@ -741,6 +866,7 @@ function setResultView(view) {
   activeResultView = view;
   currentPage = 1;
   visibleColumns = visibleColumnsByView[view];
+  columnOrder = columnOrderByView[view];
   saveRunViewState();
   if (currentRun) loadCurrentRun();
 }
@@ -1500,7 +1626,13 @@ document.querySelectorAll("[data-result-view]").forEach((button) => {
   button.addEventListener("click", () => setResultView(button.dataset.resultView));
 });
 columnSelector.addEventListener("change", updateVisibleColumn);
+columnSelector.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-move-column]");
+  if (!button) return;
+  moveColumn(button.dataset.moveColumn, Number(button.dataset.moveDirection));
+});
 resetColumnsButton.addEventListener("click", resetVisibleColumns);
+resetColumnOrderButton.addEventListener("click", resetColumnOrder);
 document.addEventListener("click", (event) => {
   if (columnSelector.open && !columnSelector.contains(event.target)) {
     columnSelector.open = false;

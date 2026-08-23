@@ -3,8 +3,11 @@ const statusEl = document.querySelector("#portfolioStatus");
 const rowsEl = document.querySelector("#portfolioRows");
 const backToRunButton = document.querySelector("#backToRunButton");
 const columnSelector = document.querySelector("#portfolioColumnSelector");
+const columnSelectorOptions = document.querySelector("#portfolioColumnSelectorOptions");
 const resetColumnsButton = document.querySelector("#resetPortfolioColumnsButton");
+const resetColumnOrderButton = document.querySelector("#resetPortfolioColumnOrderButton");
 const PORTFOLIO_COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-portfolio-columns-v1";
+const PORTFOLIO_COLUMN_ORDER_STORAGE_KEY = "ai-stock-scorer-portfolio-column-order-v1";
 const PORTFOLIO_COLUMN_KEYS = [
   "position",
   "company",
@@ -16,6 +19,34 @@ const PORTFOLIO_COLUMN_KEYS = [
   "weight",
   "weightUplift",
 ];
+const PORTFOLIO_COLUMN_LABELS = {
+  position: "Number",
+  company: "Company",
+  score: "Score",
+  scorePercentile: "Score Percentile",
+  marketCap: "Market Cap",
+  multiplier: "Score Multiplier",
+  adjustedMarketCap: "Adjusted Market Cap",
+  weight: "Weight",
+  weightUplift: "Weight Uplift",
+};
+
+function normalizeColumnOrder(order) {
+  const valid = Array.isArray(order)
+    ? [...new Set(order.filter((column) => PORTFOLIO_COLUMN_KEYS.includes(column)))]
+    : [];
+  return [...valid, ...PORTFOLIO_COLUMN_KEYS.filter((column) => !valid.includes(column))];
+}
+
+function loadColumnOrderLocally() {
+  try {
+    return normalizeColumnOrder(
+      JSON.parse(window.localStorage.getItem(PORTFOLIO_COLUMN_ORDER_STORAGE_KEY))
+    );
+  } catch (_error) {
+    return [...PORTFOLIO_COLUMN_KEYS];
+  }
+}
 
 function loadVisibleColumnsLocally() {
   try {
@@ -31,6 +62,7 @@ function loadVisibleColumnsLocally() {
 }
 
 let visibleColumns = loadVisibleColumnsLocally();
+let columnOrder = loadColumnOrderLocally();
 let columnSaveTimer = null;
 
 function saveVisibleColumnsLocally() {
@@ -44,11 +76,19 @@ function saveVisibleColumnsLocally() {
   }
 }
 
+function saveColumnOrderLocally() {
+  try {
+    window.localStorage.setItem(PORTFOLIO_COLUMN_ORDER_STORAGE_KEY, JSON.stringify(columnOrder));
+  } catch (_error) {
+    // The order still works for this page when browser storage is unavailable.
+  }
+}
+
 async function persistVisibleColumns() {
   const response = await fetch("/api/preferences/portfolio-table-columns", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ columns: [...visibleColumns] }),
+    body: JSON.stringify({ columns: [...visibleColumns], order: columnOrder }),
   });
   if (!response.ok) throw new Error("Unable to save portfolio table columns.");
 }
@@ -57,7 +97,34 @@ function visibleColumnCount() {
   return visibleColumns.size;
 }
 
+function renderColumnSelectorOptions() {
+  columnSelectorOptions.innerHTML = columnOrder
+    .map((column, index) => {
+      const label = PORTFOLIO_COLUMN_LABELS[column];
+      return `<div class="column-selector-row">
+        <label><input type="checkbox" data-portfolio-column-toggle="${column}" /> ${label}</label>
+        <div class="column-order-controls">
+          <button class="column-order-button" type="button" data-move-portfolio-column="${column}" data-move-direction="-1" title="Move earlier" aria-label="Move ${label} earlier" ${index === 0 ? "disabled" : ""}>↑</button>
+          <button class="column-order-button" type="button" data-move-portfolio-column="${column}" data-move-direction="1" title="Move later" aria-label="Move ${label} later" ${index === columnOrder.length - 1 ? "disabled" : ""}>↓</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+}
+
+function applyColumnOrder() {
+  document.querySelectorAll(".portfolio-table tr").forEach((row) => {
+    const children = [...row.children];
+    columnOrder.forEach((column) => {
+      const cell = children.find((candidate) => candidate.dataset.portfolioColumn === column);
+      if (cell) row.append(cell);
+    });
+  });
+}
+
 function applyColumnVisibility() {
+  applyColumnOrder();
+  renderColumnSelectorOptions();
   document.querySelectorAll("[data-portfolio-column]").forEach((element) => {
     element.classList.toggle(
       "is-column-hidden",
@@ -73,6 +140,7 @@ function applyColumnVisibility() {
 
 function saveVisibleColumns() {
   saveVisibleColumnsLocally();
+  saveColumnOrderLocally();
   if (columnSaveTimer) window.clearTimeout(columnSaveTimer);
   columnSaveTimer = window.setTimeout(() => {
     persistVisibleColumns().catch(() => {
@@ -92,9 +160,12 @@ async function loadPersistedVisibleColumns() {
         visibleColumns = new Set(valid);
         saveVisibleColumnsLocally();
       }
-    } else {
-      await persistVisibleColumns();
     }
+    if (Array.isArray(payload.order)) {
+      columnOrder = normalizeColumnOrder(payload.order);
+      saveColumnOrderLocally();
+    }
+    await persistVisibleColumns();
   } catch (_error) {
     // Keep the local selection when persistent preferences cannot be reached.
   }
@@ -119,6 +190,21 @@ function updateVisibleColumn(event) {
 
 function resetVisibleColumns() {
   visibleColumns = new Set(PORTFOLIO_COLUMN_KEYS);
+  saveVisibleColumns();
+  applyColumnVisibility();
+}
+
+function moveColumn(column, direction) {
+  const index = columnOrder.indexOf(column);
+  const targetIndex = index + direction;
+  if (index < 0 || targetIndex < 0 || targetIndex >= columnOrder.length) return;
+  [columnOrder[index], columnOrder[targetIndex]] = [columnOrder[targetIndex], columnOrder[index]];
+  saveVisibleColumns();
+  applyColumnVisibility();
+}
+
+function resetColumnOrder() {
+  columnOrder = [...PORTFOLIO_COLUMN_KEYS];
   saveVisibleColumns();
   applyColumnVisibility();
 }
@@ -214,7 +300,13 @@ function loadPortfolio() {
 
 ensureHomeButton();
 columnSelector.addEventListener("change", updateVisibleColumn);
+columnSelector.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-move-portfolio-column]");
+  if (!button) return;
+  moveColumn(button.dataset.movePortfolioColumn, Number(button.dataset.moveDirection));
+});
 resetColumnsButton.addEventListener("click", resetVisibleColumns);
+resetColumnOrderButton.addEventListener("click", resetColumnOrder);
 document.addEventListener("click", (event) => {
   if (columnSelector.open && !columnSelector.contains(event.target)) {
     columnSelector.open = false;

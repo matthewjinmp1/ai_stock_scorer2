@@ -139,6 +139,10 @@ RUN_TABLE_COLUMNS_PREFERENCE_KEYS = {
     "ranking": "run_table_columns_ranking",
     "failed": "run_table_columns_failed",
 }
+RUN_TABLE_COLUMN_ORDER_PREFERENCE_KEYS = {
+    "ranking": "run_table_column_order_ranking",
+    "failed": "run_table_column_order_failed",
+}
 PORTFOLIO_TABLE_COLUMN_KEYS = (
     "position",
     "company",
@@ -151,6 +155,7 @@ PORTFOLIO_TABLE_COLUMN_KEYS = (
     "weightUplift",
 )
 PORTFOLIO_TABLE_COLUMNS_PREFERENCE_KEY = "portfolio_table_columns"
+PORTFOLIO_TABLE_COLUMN_ORDER_PREFERENCE_KEY = "portfolio_table_column_order"
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
@@ -757,6 +762,77 @@ def run_table_columns_preference_key(view):
     return RUN_TABLE_COLUMNS_PREFERENCE_KEYS[normalized_view]
 
 
+def run_table_column_order_preference_key(view):
+    normalized_view = str(view or "ranking").strip().lower()
+    if normalized_view not in RUN_TABLE_COLUMN_ORDER_PREFERENCE_KEYS:
+        raise ValueError("Unknown run table view.")
+    return RUN_TABLE_COLUMN_ORDER_PREFERENCE_KEYS[normalized_view]
+
+
+def normalized_column_order(columns, allowed_columns, label):
+    if not isinstance(columns, list):
+        raise ValueError("Column order must be a list.")
+    unknown_columns = [column for column in columns if column not in allowed_columns]
+    if unknown_columns:
+        raise ValueError(f"Unknown {label} column: {unknown_columns[0]}")
+    ordered_columns = list(dict.fromkeys(columns))
+    ordered_columns.extend(
+        column for column in allowed_columns if column not in ordered_columns
+    )
+    return ordered_columns
+
+
+def get_column_order_preference(preference_key, allowed_columns):
+    with db_connect() as connection:
+        row = connection.execute(
+            "SELECT value FROM app_preferences WHERE key = ?",
+            (preference_key,),
+        ).fetchone()
+    if not row:
+        return list(allowed_columns)
+    try:
+        stored_order = json.loads(row["value"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return list(allowed_columns)
+    if not isinstance(stored_order, list):
+        return list(allowed_columns)
+    valid_order = [column for column in stored_order if column in allowed_columns]
+    valid_order.extend(column for column in allowed_columns if column not in valid_order)
+    return list(dict.fromkeys(valid_order))
+
+
+def save_column_order_preference(preference_key, columns, allowed_columns, label):
+    ordered_columns = normalized_column_order(columns, allowed_columns, label)
+    with db_connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO app_preferences (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            (preference_key, json.dumps(ordered_columns), int(time.time())),
+        )
+        connection.commit()
+    return ordered_columns
+
+
+def get_run_table_column_order_preference(view="ranking"):
+    return get_column_order_preference(
+        run_table_column_order_preference_key(view), RUN_TABLE_COLUMN_KEYS
+    )
+
+
+def save_run_table_column_order_preference(columns, view="ranking"):
+    return save_column_order_preference(
+        run_table_column_order_preference_key(view),
+        columns,
+        RUN_TABLE_COLUMN_KEYS,
+        "run table",
+    )
+
+
 def get_run_table_columns_preference(view="ranking"):
     preference_key = run_table_columns_preference_key(view)
     with db_connect() as connection:
@@ -902,6 +978,22 @@ def save_portfolio_table_columns_preference(columns):
         )
         connection.commit()
     return selected_columns
+
+
+def get_portfolio_table_column_order_preference():
+    return get_column_order_preference(
+        PORTFOLIO_TABLE_COLUMN_ORDER_PREFERENCE_KEY,
+        PORTFOLIO_TABLE_COLUMN_KEYS,
+    )
+
+
+def save_portfolio_table_column_order_preference(columns):
+    return save_column_order_preference(
+        PORTFOLIO_TABLE_COLUMN_ORDER_PREFERENCE_KEY,
+        columns,
+        PORTFOLIO_TABLE_COLUMN_KEYS,
+        "portfolio table",
+    )
 
 
 def row_to_company(row):
@@ -3407,14 +3499,24 @@ class Handler(SimpleHTTPRequestHandler):
             ensure_scoring_schema()
             try:
                 view = dict(parse_qsl(parsed.query)).get("view", "ranking")
-                self.send_json({"columns": get_run_table_columns_preference(view)})
+                self.send_json(
+                    {
+                        "columns": get_run_table_columns_preference(view),
+                        "order": get_run_table_column_order_preference(view),
+                    }
+                )
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)
             return
 
         if parsed.path == "/api/preferences/portfolio-table-columns":
             ensure_scoring_schema()
-            self.send_json({"columns": get_portfolio_table_columns_preference()})
+            self.send_json(
+                {
+                    "columns": get_portfolio_table_columns_preference(),
+                    "order": get_portfolio_table_column_order_preference(),
+                }
+            )
             return
 
         if parsed.path == "/api/stock-lists":
@@ -3677,7 +3779,12 @@ class Handler(SimpleHTTPRequestHandler):
                 payload = self.read_json()
                 view = dict(parse_qsl(parsed.query)).get("view", "ranking")
                 columns = save_run_table_columns_preference(payload.get("columns"), view)
-                self.send_json({"columns": columns})
+                order = (
+                    save_run_table_column_order_preference(payload["order"], view)
+                    if "order" in payload
+                    else get_run_table_column_order_preference(view)
+                )
+                self.send_json({"columns": columns, "order": order})
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)
             except Exception as exc:
@@ -3689,7 +3796,12 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 payload = self.read_json()
                 columns = save_portfolio_table_columns_preference(payload.get("columns"))
-                self.send_json({"columns": columns})
+                order = (
+                    save_portfolio_table_column_order_preference(payload["order"])
+                    if "order" in payload
+                    else get_portfolio_table_column_order_preference()
+                )
+                self.send_json({"columns": columns, "order": order})
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)
             except Exception as exc:
