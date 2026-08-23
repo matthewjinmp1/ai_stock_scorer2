@@ -1,5 +1,4 @@
-const params = new URLSearchParams(window.location.search);
-const portfolioId = Number(params.get("id"));
+const PORTFOLIO_PREVIEW_STORAGE_KEY = "ai-stock-scorer-portfolio-preview-v1";
 const statusEl = document.querySelector("#portfolioStatus");
 const rowsEl = document.querySelector("#portfolioRows");
 const backToRunButton = document.querySelector("#backToRunButton");
@@ -79,19 +78,21 @@ function renderPortfolio(portfolio) {
   statusEl.textContent = "";
 }
 
-async function loadPortfolio() {
-  if (!Number.isInteger(portfolioId) || portfolioId < 1) {
-    throw new Error("Choose a saved portfolio to view its composition.");
+function loadPortfolio() {
+  const storedPortfolio = window.sessionStorage.getItem(PORTFOLIO_PREVIEW_STORAGE_KEY);
+  if (!storedPortfolio) {
+    throw new Error("This one-time portfolio is no longer available. Build it again from a run.");
   }
-  const response = await fetch(`/api/portfolios/${portfolioId}`, { cache: "no-store" });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.error || "Could not load portfolio");
-  renderPortfolio(payload.portfolio);
+  const portfolio = JSON.parse(storedPortfolio);
+  if (!portfolio || !Array.isArray(portfolio.holdings)) {
+    throw new Error("This one-time portfolio is unavailable. Build it again from a run.");
+  }
+  renderPortfolio(portfolio);
 }
 
 ensureHomeButton();
 try {
-  await loadPortfolio();
+  loadPortfolio();
 } catch (error) {
   statusEl.textContent = error.message;
   rowsEl.innerHTML = '<tr><td colspan="8">Portfolio composition is unavailable.</td></tr>';

@@ -675,40 +675,10 @@ def ensure_scoring_schema():
                 updated_at INTEGER NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS portfolios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                market_cap_limit INTEGER NOT NULL,
-                minimum_score_percentile REAL NOT NULL,
-                maximum_multiplier REAL NOT NULL,
-                created_at INTEGER NOT NULL,
-                FOREIGN KEY(run_id) REFERENCES scoring_runs(id)
-            );
-
-            CREATE TABLE IF NOT EXISTS portfolio_holdings (
-                portfolio_id INTEGER NOT NULL,
-                ticker TEXT NOT NULL,
-                company_name TEXT NOT NULL,
-                source_rank INTEGER NOT NULL,
-                market_cap TEXT NOT NULL,
-                market_cap_value INTEGER NOT NULL,
-                score REAL NOT NULL,
-                score_percentile REAL NOT NULL,
-                score_multiplier REAL NOT NULL,
-                adjusted_market_cap REAL NOT NULL,
-                portfolio_weight REAL NOT NULL,
-                position INTEGER NOT NULL,
-                PRIMARY KEY(portfolio_id, ticker),
-                FOREIGN KEY(portfolio_id) REFERENCES portfolios(id)
-            );
-
             CREATE INDEX IF NOT EXISTS idx_scoring_runs_created_at ON scoring_runs(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_scoring_results_run_score ON scoring_results(run_id, score DESC);
             CREATE INDEX IF NOT EXISTS idx_stock_list_members_position ON stock_list_members(list_id, position);
             CREATE INDEX IF NOT EXISTS idx_scoring_run_companies_position ON scoring_run_companies(run_id, position);
-            CREATE INDEX IF NOT EXISTS idx_portfolios_run_id ON portfolios(run_id, created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_portfolio_holdings_position ON portfolio_holdings(portfolio_id, position);
             """
         )
         columns = {
@@ -1696,11 +1666,10 @@ def get_run(run_id, include_raw_response=True):
     payload["company_tickers"] = [company["ticker"] for company in scoring_companies_for_run(run_id)]
     payload["extension_limit"] = len(extension_companies_for_run(run_id, run["stock_list_id"]))
     payload["pinned_confidence_run_id"] = current_confidence_run_id
-    payload["portfolios"] = list_portfolios_for_run(run_id)
     return payload
 
 
-def create_portfolio(
+def calculate_portfolio(
     run_id,
     name,
     market_cap_limit,
@@ -1731,7 +1700,7 @@ def create_portfolio(
     with db_connect() as connection:
         run = connection.execute(
             """
-            SELECT id
+            SELECT id, name, prompt
             FROM scoring_runs
             WHERE id = ? AND deleted_at IS NULL
             """,
@@ -1741,13 +1710,18 @@ def create_portfolio(
             raise ValueError("Run not found.")
         rows = connection.execute(
             """
-            SELECT ticker, company_name, rank, market_cap, market_cap_value, score
+            SELECT scoring_results.ticker, scoring_results.company_name,
+                   scoring_results.rank, scoring_results.market_cap,
+                   scoring_results.market_cap_value, scoring_results.score,
+                   companies.logo
             FROM scoring_results
-            WHERE run_id = ?
-              AND score IS NOT NULL
-              AND error IS NULL
-              AND market_cap_value > 0
-            ORDER BY market_cap_value DESC, rank ASC, ticker ASC
+            LEFT JOIN companies ON companies.ticker = scoring_results.ticker
+            WHERE scoring_results.run_id = ?
+              AND scoring_results.score IS NOT NULL
+              AND scoring_results.error IS NULL
+              AND scoring_results.market_cap_value > 0
+            ORDER BY scoring_results.market_cap_value DESC,
+                     scoring_results.rank ASC, scoring_results.ticker ASC
             """,
             (run_id,),
         ).fetchall()
@@ -1796,117 +1770,27 @@ def create_portfolio(
             )
         )
 
-        now = int(time.time())
-        cursor = connection.execute(
-            """
-            INSERT INTO portfolios (
-                run_id, name, market_cap_limit, minimum_score_percentile,
-                maximum_multiplier, created_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                run_id,
-                portfolio_name,
-                market_cap_limit,
-                minimum_score_percentile,
-                maximum_multiplier,
-                now,
-            ),
-        )
-        portfolio_id = cursor.lastrowid
-        connection.executemany(
-            """
-            INSERT INTO portfolio_holdings (
-                portfolio_id, ticker, company_name, source_rank, market_cap,
-                market_cap_value, score, score_percentile, score_multiplier,
-                adjusted_market_cap, portfolio_weight, position
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
-                (
-                    portfolio_id,
-                    holding["ticker"],
-                    holding["company_name"],
-                    holding["rank"],
-                    holding["market_cap"],
-                    holding["market_cap_value"],
-                    holding["score"],
-                    holding["score_percentile"],
-                    holding["score_multiplier"],
-                    holding["adjusted_market_cap"],
-                    holding["portfolio_weight"],
-                    position,
-                )
-                for position, holding in enumerate(holdings, start=1)
-            ],
-        )
-        connection.commit()
-    return get_portfolio(portfolio_id)
-
-
-def get_portfolio(portfolio_id):
-    with db_connect() as connection:
-        portfolio = connection.execute(
-            """
-            SELECT portfolios.id, portfolios.run_id, portfolios.name,
-                   portfolios.market_cap_limit,
-                   portfolios.minimum_score_percentile,
-                   portfolios.maximum_multiplier, portfolios.created_at,
-                   scoring_runs.name AS run_name, scoring_runs.prompt AS run_prompt
-            FROM portfolios
-            JOIN scoring_runs ON scoring_runs.id = portfolios.run_id
-            WHERE portfolios.id = ?
-            """,
-            (portfolio_id,),
-        ).fetchone()
-        if not portfolio:
-            return None
-        holdings = connection.execute(
-            """
-            SELECT portfolio_holdings.ticker, portfolio_holdings.company_name,
-                   portfolio_holdings.source_rank, portfolio_holdings.market_cap,
-                   portfolio_holdings.market_cap_value, portfolio_holdings.score,
-                   portfolio_holdings.score_percentile,
-                   portfolio_holdings.score_multiplier,
-                   portfolio_holdings.adjusted_market_cap,
-                   portfolio_holdings.portfolio_weight,
-                   portfolio_holdings.position, companies.logo
-            FROM portfolio_holdings
-            LEFT JOIN companies ON companies.ticker = portfolio_holdings.ticker
-            WHERE portfolio_holdings.portfolio_id = ?
-            ORDER BY portfolio_holdings.position ASC
-            """,
-            (portfolio_id,),
-        ).fetchall()
-    payload = dict(portfolio)
-    payload["holdings"] = [dict(holding) for holding in holdings]
-    payload["holding_count"] = len(payload["holdings"])
-    payload["total_market_cap_value"] = sum(
-        holding["market_cap_value"] for holding in payload["holdings"]
-    )
-    payload["total_adjusted_market_cap"] = sum(
-        holding["adjusted_market_cap"] for holding in payload["holdings"]
-    )
-    return payload
-
-
-def list_portfolios_for_run(run_id):
-    with db_connect() as connection:
-        rows = connection.execute(
-            """
-            SELECT id, name, market_cap_limit, minimum_score_percentile,
-                   maximum_multiplier, created_at,
-                   (SELECT COUNT(*) FROM portfolio_holdings
-                    WHERE portfolio_holdings.portfolio_id = portfolios.id) AS holding_count
-            FROM portfolios
-            WHERE run_id = ?
-            ORDER BY created_at DESC, id DESC
-            """,
-            (run_id,),
-        ).fetchall()
-    return [dict(row) for row in rows]
+    for position, holding in enumerate(holdings, start=1):
+        holding["position"] = position
+        holding["source_rank"] = holding.pop("rank")
+    return {
+        "run_id": run_id,
+        "run_name": run["name"] or f"Run #{run_id}",
+        "run_prompt": run["prompt"],
+        "name": portfolio_name,
+        "market_cap_limit": market_cap_limit,
+        "minimum_score_percentile": minimum_score_percentile,
+        "maximum_multiplier": maximum_multiplier,
+        "created_at": int(time.time()),
+        "holdings": holdings,
+        "holding_count": len(holdings),
+        "total_market_cap_value": sum(
+            holding["market_cap_value"] for holding in holdings
+        ),
+        "total_adjusted_market_cap": sum(
+            holding["adjusted_market_cap"] for holding in holdings
+        ),
+    }
 
 
 def _run_result_sort_value(result, key):
@@ -3494,16 +3378,6 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"runs": list_runs()})
             return
 
-        portfolio_match = re.fullmatch(r"/api/portfolios/(\d+)", parsed.path)
-        if portfolio_match:
-            ensure_scoring_schema()
-            portfolio = get_portfolio(int(portfolio_match.group(1)))
-            if not portfolio:
-                self.send_json({"error": "Portfolio not found"}, 404)
-                return
-            self.send_json({"portfolio": portfolio})
-            return
-
         universe_options_match = re.fullmatch(r"/api/runs/(\d+)/universe-options", parsed.path)
         if universe_options_match:
             ensure_scoring_schema()
@@ -3608,11 +3482,11 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, 500)
             return
 
-        if parsed.path == "/api/portfolios":
+        if parsed.path == "/api/portfolios/preview":
             ensure_scoring_schema()
             try:
                 payload = self.read_json()
-                portfolio = create_portfolio(
+                portfolio = calculate_portfolio(
                     payload.get("runId"),
                     payload.get("name"),
                     payload.get("marketCapLimit"),
@@ -3622,9 +3496,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json(
                     {
                         "portfolio": portfolio,
-                        "url": f"/portfolio.html?id={portfolio['id']}",
+                        "url": "/portfolio.html?preview=1",
                     },
-                    201,
                 )
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)

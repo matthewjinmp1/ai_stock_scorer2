@@ -1152,7 +1152,7 @@ class PortfolioTests(ServerTestCase):
         return run_id
 
     def test_portfolio_applies_percentile_multiplier_and_normalizes_weights(self):
-        portfolio = server.create_portfolio(
+        portfolio = server.calculate_portfolio(
             self.scored_run(), "Test Portfolio", 3, 50, 4
         )
 
@@ -1167,12 +1167,19 @@ class PortfolioTests(ServerTestCase):
             sum(holding["portfolio_weight"] for holding in portfolio["holdings"]),
             100,
         )
-        saved = server.list_portfolios_for_run(portfolio["run_id"])
-        self.assertEqual(saved[0]["name"], "Test Portfolio")
-        self.assertEqual(saved[0]["holding_count"], 2)
+        self.assertEqual(portfolio["name"], "Test Portfolio")
+        self.assertEqual(portfolio["holding_count"], 2)
+        with self.connect() as connection:
+            portfolio_tables = connection.execute(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type = 'table' AND name IN ('portfolios', 'portfolio_holdings')
+                """
+            ).fetchall()
+        self.assertEqual(portfolio_tables, [])
 
     def test_market_cap_limit_is_applied_before_score_percentiles(self):
-        portfolio = server.create_portfolio(
+        portfolio = server.calculate_portfolio(
             self.scored_run(), "Top Two", 2, 50, 4
         )
 
@@ -1182,7 +1189,7 @@ class PortfolioTests(ServerTestCase):
 
     def test_portfolio_rejects_more_companies_than_successful_results(self):
         with self.assertRaisesRegex(ValueError, "no more than 3"):
-            server.create_portfolio(self.scored_run(), "Too Large", 4, 50, 4)
+            server.calculate_portfolio(self.scored_run(), "Too Large", 4, 50, 4)
 
 
 class CostEstimateTests(ServerTestCase):

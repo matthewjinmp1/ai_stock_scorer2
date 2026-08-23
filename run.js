@@ -21,8 +21,7 @@ const portfolioMinimumPercentile = document.querySelector("#portfolioMinimumPerc
 const portfolioMaximumMultiplier = document.querySelector("#portfolioMaximumMultiplier");
 const createPortfolioButton = document.querySelector("#createPortfolioButton");
 const cancelPortfolioButton = document.querySelector("#cancelPortfolioButton");
-const savedPortfolios = document.querySelector("#savedPortfolios");
-const savedPortfolioButtons = document.querySelector("#savedPortfolioButtons");
+const PORTFOLIO_PREVIEW_STORAGE_KEY = "ai-stock-scorer-portfolio-preview-v1";
 const runTitle = document.querySelector("#runTitle");
 const runPrompt = document.querySelector("#runPrompt");
 const runStatus = document.querySelector("#runStatus");
@@ -963,22 +962,6 @@ function hidePortfolioBuilder() {
   portfolioBuilder.hidden = true;
 }
 
-function renderSavedPortfolios(portfolios) {
-  const items = Array.isArray(portfolios) ? portfolios : [];
-  savedPortfolios.hidden = !items.length;
-  savedPortfolioButtons.innerHTML = items
-    .map(
-      (portfolio) => `
-        <button
-          class="secondary-button saved-portfolio-button"
-          type="button"
-          data-portfolio-url="/portfolio.html?id=${encodeURIComponent(portfolio.id)}"
-        >${escapeHtml(portfolio.name)} · ${formatNumber(portfolio.holding_count)} holdings</button>
-      `
-    )
-    .join("");
-}
-
 async function createPortfolioFromRun() {
   if (!currentRun) return;
   const name = portfolioName.value.trim();
@@ -1010,7 +993,7 @@ async function createPortfolioFromRun() {
   createPortfolioButton.disabled = true;
   statusEl.textContent = "Building portfolio...";
   try {
-    const response = await fetch("/api/portfolios", {
+    const response = await fetch("/api/portfolios/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1023,6 +1006,10 @@ async function createPortfolioFromRun() {
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "Could not create portfolio");
+    window.sessionStorage.setItem(
+      PORTFOLIO_PREVIEW_STORAGE_KEY,
+      JSON.stringify(payload.portfolio)
+    );
     window.location.href = payload.url;
   } catch (error) {
     statusEl.textContent = error.message;
@@ -1286,7 +1273,6 @@ function renderRun(run) {
   resultsPreviousButton.disabled = page.page <= 1;
   resultsNextButton.disabled = page.page >= page.total_pages;
   statusEl.textContent = run.error || "";
-  renderSavedPortfolios(run.portfolios);
   renderRunStats(run);
   updateMatchedScore(run);
   updateResultViewTabs(run);
@@ -1489,11 +1475,6 @@ redriveFailedButton.addEventListener("click", redriveFailedStocks);
 saveRunButton.addEventListener("click", saveCurrentRun);
 cancelRunEditButton.addEventListener("click", hideRunEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
-savedPortfolioButtons.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-portfolio-url]");
-  if (!button) return;
-  window.location.href = button.dataset.portfolioUrl;
-});
 scoreTargetInput.addEventListener("input", updateScoreFilter);
 rankingSearchInput.addEventListener("input", updateRankingSearch);
 scoreDownButton.addEventListener("click", () => stepScoreFilter(-1));

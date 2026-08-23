@@ -481,33 +481,6 @@ button:hover {
   color: var(--muted);
 }
 
-.saved-portfolios {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 14px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-}
-
-.saved-portfolios[hidden] {
-  display: none;
-}
-
-.saved-portfolios > span {
-  flex: 0 0 auto;
-  color: var(--muted);
-  font-size: 0.76rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.saved-portfolio-button {
-  min-height: 38px;
-}
-
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -1373,11 +1346,6 @@ tbody tr:hover {
   .portfolio-rule-grid,
   .portfolio-metric-grid {
     grid-template-columns: 1fr;
-  }
-
-  .saved-portfolios {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .portfolio-table {
