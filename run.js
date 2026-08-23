@@ -35,8 +35,10 @@ const statEta = document.querySelector("#statEta");
 const statCost = document.querySelector("#statCost");
 const statTokens = document.querySelector("#statTokens");
 const statTokenLimit = document.querySelector("#statTokenLimit");
+const statAverageInputTokens = document.querySelector("#statAverageInputTokens");
 const statAverageResponseTokens = document.querySelector("#statAverageResponseTokens");
 const statAverageReasoningTokens = document.querySelector("#statAverageReasoningTokens");
+const statAverageTotalTokens = document.querySelector("#statAverageTotalTokens");
 const statTokenLimitRisk = document.querySelector("#statTokenLimitRisk");
 const statTokenLimitRiskNote = document.querySelector("#statTokenLimitRiskNote");
 const statLatency = document.querySelector("#statLatency");
@@ -722,8 +724,10 @@ function renderRunStats(run) {
   statCost.textContent = formatCents(stats.cost);
   statTokens.textContent = formatNumber(stats.total_tokens);
   statTokenLimit.textContent = formatNumber(run.max_tokens);
+  statAverageInputTokens.textContent = formatNumber(stats.average_prompt_tokens);
   statAverageResponseTokens.textContent = formatNumber(stats.average_response_tokens);
   statAverageReasoningTokens.textContent = formatNumber(stats.average_reasoning_tokens);
+  statAverageTotalTokens.textContent = formatNumber(stats.average_total_tokens);
   const riskSampleSize = Number(stats.token_limit_risk_sample_size || 0);
   const riskOneIn = Number(stats.token_limit_risk_one_in);
   if (Number.isFinite(riskOneIn) && riskOneIn > 0) {

@@ -415,7 +415,9 @@ class PromptAndParsingTests(ServerTestCase):
                 "run_id": 7,
                 "response": {"success": True},
                 "token_stats": {
+                    "prompt_tokens": 30,
                     "completion_tokens": 120,
+                    "total_tokens": 150,
                     "completion_tokens_details": {"reasoning_tokens": 20},
                 },
             },
@@ -423,7 +425,9 @@ class PromptAndParsingTests(ServerTestCase):
                 "run_id": 7,
                 "response": {"success": False},
                 "token_stats": {
+                    "prompt_tokens": 20,
                     "completion_tokens": 80,
+                    "total_tokens": 100,
                     "completion_tokens_details": {"reasoning_tokens": 0},
                 },
             },
@@ -438,9 +442,11 @@ class PromptAndParsingTests(ServerTestCase):
             stats = server.ai_request_stats_for_run(7)
 
         self.assertEqual(stats["response_tokens"], 180)
+        self.assertEqual(stats["average_prompt_tokens"], 25.0)
         self.assertEqual(stats["average_response_tokens"], 90.0)
         self.assertEqual(stats["reasoning_tokens"], 20)
         self.assertEqual(stats["average_reasoning_tokens"], 10.0)
+        self.assertEqual(stats["average_total_tokens"], 125.0)
 
     def test_token_limit_risk_uses_successful_completion_distribution(self):
         risk = server.estimate_token_limit_failure_risk(

@@ -119,13 +119,14 @@
           <span>Response Token Limit</span>
           <strong id="statTokenLimit">--</strong>
         </article>
-        <article class="metric-card">
-          <span>Avg Response Tokens</span>
-          <strong id="statAverageResponseTokens">--</strong>
-        </article>
-        <article class="metric-card">
-          <span>Avg Reasoning Tokens</span>
-          <strong id="statAverageReasoningTokens">--</strong>
+        <article class="metric-card token-breakdown-card">
+          <span>Average Tokens</span>
+          <dl class="token-breakdown">
+            <div><dt>Input</dt><dd id="statAverageInputTokens">--</dd></div>
+            <div><dt>Reasoning</dt><dd id="statAverageReasoningTokens">--</dd></div>
+            <div><dt>Output</dt><dd id="statAverageResponseTokens">--</dd></div>
+            <div><dt>Total</dt><dd id="statAverageTotalTokens">--</dd></div>
+          </dl>
         </article>
         <article class="metric-card">
           <span>Expected Stocks Per Limit Failure</span>

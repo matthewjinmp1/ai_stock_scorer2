@@ -2305,8 +2305,10 @@ def ai_request_stats_for_run(run_id, token_limit=None):
         "successful_request_count": 0,
         "failed_request_count": 0,
         "total_latency_ms": 0,
+        "average_prompt_tokens": None,
         "average_response_tokens": None,
         "average_reasoning_tokens": None,
+        "average_total_tokens": None,
         "average_latency_ms": None,
         "token_limit_risk_one_in": None,
         "token_limit_risk_probability": None,
@@ -2354,11 +2356,17 @@ def ai_request_stats_for_run(run_id, token_limit=None):
             pass
 
     if stats["request_count"]:
+        stats["average_prompt_tokens"] = round(
+            stats["prompt_tokens"] / stats["request_count"], 1
+        )
         stats["average_response_tokens"] = round(
             stats["response_tokens"] / stats["request_count"], 1
         )
         stats["average_reasoning_tokens"] = round(
             stats["reasoning_tokens"] / stats["request_count"], 1
+        )
+        stats["average_total_tokens"] = round(
+            stats["total_tokens"] / stats["request_count"], 1
         )
         stats["average_latency_ms"] = round(stats["total_latency_ms"] / stats["request_count"])
     risk = estimate_token_limit_failure_risk(
