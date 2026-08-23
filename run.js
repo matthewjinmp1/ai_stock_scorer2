@@ -1237,7 +1237,7 @@ function renderRun(run) {
       const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
         `what does ${result.company_name} (ticker: ${result.ticker}) do`
       )}`;
-      const chartUrl = `https://www.google.com/search?q=${encodeURIComponent(
+      const chartUrl = `https://www.google.com/search?udm=14&q=${encodeURIComponent(
         `${result.ticker} stock`
       )}`;
       const dashboardUrl = `http://localhost:3000/?ticker=${encodeURIComponent(result.ticker)}`;
