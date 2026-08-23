@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Portfolio Composition</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell portfolio-shell">
+      <nav class="page-nav portfolio-page-nav" aria-label="Page navigation">
+        <button id="backToRunButton" class="secondary-button nav-link" type="button">Back to run</button>
+        <button class="secondary-button nav-link" type="button" data-home-button>Home</button>
+      </nav>
+
+      <section class="portfolio-heading">
+        <p class="eyebrow">Saved Portfolio</p>
+        <h1 id="portfolioTitle">Portfolio Composition</h1>
+        <p id="portfolioSubtitle" class="lede">Loading portfolio rules...</p>
+      </section>
+
+      <p id="portfolioStatus" class="status" role="status"></p>
+
+      <section class="metric-grid portfolio-metric-grid" aria-label="Portfolio summary">
+        <article class="metric-card">
+          <span>Source Run</span>
+          <strong id="portfolioRun">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Market Cap Universe</span>
+          <strong id="portfolioUniverse">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Minimum Score Percentile</span>
+          <strong id="portfolioPercentile">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Maximum Multiplier</span>
+          <strong id="portfolioMultiplier">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Holdings</span>
+          <strong id="portfolioHoldingCount">--</strong>
+        </article>
+      </section>
+
+      <section class="table-wrap portfolio-table-wrap" aria-label="Portfolio holdings">
+        <table class="portfolio-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Company</th>
+              <th>Score</th>
+              <th>Score Percentile</th>
+              <th>Market Cap</th>
+              <th>Multiplier</th>
+              <th>Adjusted Market Cap</th>
+              <th>Weight</th>
+            </tr>
+          </thead>
+          <tbody id="portfolioRows">
+            <tr><td colspan="8">Loading portfolio composition...</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+    <script type="module" src="/portfolio.js"></script>
+  </body>
+</html>

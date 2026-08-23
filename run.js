@@ -3,6 +3,7 @@ const stopButton = document.querySelector("#stopButton");
 const editRunButton = document.querySelector("#editRunButton");
 const copyRunButton = document.querySelector("#copyRunButton");
 const extendButton = document.querySelector("#extendButton");
+const buildPortfolioButton = document.querySelector("#buildPortfolioButton");
 const redriveFailedButton = document.querySelector("#redriveFailedButton");
 const deleteButton = document.querySelector("#deleteButton");
 const runEditor = document.querySelector("#runEditor");
@@ -13,6 +14,15 @@ const runEditorUniverse = document.querySelector("#runEditorUniverse");
 const runEditorUniverseHelp = document.querySelector("#runEditorUniverseHelp");
 const saveRunButton = document.querySelector("#saveRunButton");
 const cancelRunEditButton = document.querySelector("#cancelRunEditButton");
+const portfolioBuilder = document.querySelector("#portfolioBuilder");
+const portfolioName = document.querySelector("#portfolioName");
+const portfolioMarketCapLimit = document.querySelector("#portfolioMarketCapLimit");
+const portfolioMinimumPercentile = document.querySelector("#portfolioMinimumPercentile");
+const portfolioMaximumMultiplier = document.querySelector("#portfolioMaximumMultiplier");
+const createPortfolioButton = document.querySelector("#createPortfolioButton");
+const cancelPortfolioButton = document.querySelector("#cancelPortfolioButton");
+const savedPortfolios = document.querySelector("#savedPortfolios");
+const savedPortfolioButtons = document.querySelector("#savedPortfolioButtons");
 const runTitle = document.querySelector("#runTitle");
 const runPrompt = document.querySelector("#runPrompt");
 const runStatus = document.querySelector("#runStatus");
@@ -930,6 +940,96 @@ function hideRunEditor() {
   runEditor.hidden = true;
 }
 
+function showPortfolioBuilder() {
+  if (!currentRun) {
+    statusEl.textContent = "Pick a saved run before building a portfolio.";
+    return;
+  }
+  const successfulCount = Number(currentRun.result_page?.counts?.ranking || 0);
+  if (!successfulCount) {
+    statusEl.textContent = "This run does not have any successful scores yet.";
+    return;
+  }
+  portfolioBuilder.hidden = false;
+  portfolioName.value = `${currentRun.name || `Run #${currentRun.id}`} portfolio`;
+  portfolioMarketCapLimit.max = String(successfulCount);
+  portfolioMarketCapLimit.value = String(Math.min(500, successfulCount));
+  portfolioMinimumPercentile.value = "50";
+  portfolioMaximumMultiplier.value = "4";
+  portfolioName.focus();
+}
+
+function hidePortfolioBuilder() {
+  portfolioBuilder.hidden = true;
+}
+
+function renderSavedPortfolios(portfolios) {
+  const items = Array.isArray(portfolios) ? portfolios : [];
+  savedPortfolios.hidden = !items.length;
+  savedPortfolioButtons.innerHTML = items
+    .map(
+      (portfolio) => `
+        <button
+          class="secondary-button saved-portfolio-button"
+          type="button"
+          data-portfolio-url="/portfolio.html?id=${encodeURIComponent(portfolio.id)}"
+        >${escapeHtml(portfolio.name)} · ${formatNumber(portfolio.holding_count)} holdings</button>
+      `
+    )
+    .join("");
+}
+
+async function createPortfolioFromRun() {
+  if (!currentRun) return;
+  const name = portfolioName.value.trim();
+  const marketCapLimit = Number(portfolioMarketCapLimit.value);
+  const minimumScorePercentile = Number(portfolioMinimumPercentile.value);
+  const maximumMultiplier = Number(portfolioMaximumMultiplier.value);
+  const successfulCount = Number(currentRun.result_page?.counts?.ranking || 0);
+  if (!name) {
+    statusEl.textContent = "Portfolio name is required.";
+    portfolioName.focus();
+    return;
+  }
+  if (!Number.isInteger(marketCapLimit) || marketCapLimit < 1 || marketCapLimit > successfulCount) {
+    statusEl.textContent = `Choose from 1 to ${successfulCount} successfully scored companies.`;
+    portfolioMarketCapLimit.focus();
+    return;
+  }
+  if (!Number.isFinite(minimumScorePercentile) || minimumScorePercentile < 0 || minimumScorePercentile > 100) {
+    statusEl.textContent = "Minimum score percentile must be from 0 to 100.";
+    portfolioMinimumPercentile.focus();
+    return;
+  }
+  if (!Number.isFinite(maximumMultiplier) || maximumMultiplier < 1 || maximumMultiplier > 100) {
+    statusEl.textContent = "Maximum score multiplier must be from 1 to 100.";
+    portfolioMaximumMultiplier.focus();
+    return;
+  }
+
+  createPortfolioButton.disabled = true;
+  statusEl.textContent = "Building portfolio...";
+  try {
+    const response = await fetch("/api/portfolios", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        runId: currentRun.id,
+        name,
+        marketCapLimit,
+        minimumScorePercentile,
+        maximumMultiplier,
+      }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not create portfolio");
+    window.location.href = payload.url;
+  } catch (error) {
+    statusEl.textContent = error.message;
+    createPortfolioButton.disabled = false;
+  }
+}
+
 async function saveCurrentRun() {
   if (!currentRun) {
     statusEl.textContent = "Pick a saved run before editing it.";
@@ -1186,6 +1286,7 @@ function renderRun(run) {
   resultsPreviousButton.disabled = page.page <= 1;
   resultsNextButton.disabled = page.page >= page.total_pages;
   statusEl.textContent = run.error || "";
+  renderSavedPortfolios(run.portfolios);
   renderRunStats(run);
   updateMatchedScore(run);
   updateResultViewTabs(run);
@@ -1194,6 +1295,7 @@ function renderRun(run) {
   editRunButton.disabled = false;
   copyRunButton.disabled = false;
   extendButton.disabled = canStop(run) || Number(run.extension_limit || 0) <= Number(run.company_count || 0);
+  buildPortfolioButton.disabled = canStop(run) || !(page.counts?.ranking || 0);
   redriveFailedButton.disabled = canStop(run) || !(page.counts?.failed || 0);
   deleteButton.disabled = false;
 
@@ -1310,6 +1412,7 @@ async function loadCurrentRun() {
     editRunButton.disabled = true;
     copyRunButton.disabled = true;
     extendButton.disabled = true;
+    buildPortfolioButton.disabled = true;
     redriveFailedButton.disabled = true;
     deleteButton.disabled = true;
     stopButton.disabled = true;
@@ -1379,10 +1482,18 @@ stopButton.addEventListener("click", stopCurrentRun);
 editRunButton.addEventListener("click", showRunEditor);
 copyRunButton.addEventListener("click", copyCurrentRun);
 extendButton.addEventListener("click", extendCurrentRun);
+buildPortfolioButton.addEventListener("click", showPortfolioBuilder);
+createPortfolioButton.addEventListener("click", createPortfolioFromRun);
+cancelPortfolioButton.addEventListener("click", hidePortfolioBuilder);
 redriveFailedButton.addEventListener("click", redriveFailedStocks);
 saveRunButton.addEventListener("click", saveCurrentRun);
 cancelRunEditButton.addEventListener("click", hideRunEditor);
 deleteButton.addEventListener("click", deleteCurrentRun);
+savedPortfolioButtons.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-portfolio-url]");
+  if (!button) return;
+  window.location.href = button.dataset.portfolioUrl;
+});
 scoreTargetInput.addEventListener("input", updateScoreFilter);
 rankingSearchInput.addEventListener("input", updateRankingSearch);
 scoreDownButton.addEventListener("click", () => stepScoreFilter(-1));

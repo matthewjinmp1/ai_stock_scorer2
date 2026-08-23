@@ -1133,6 +1133,58 @@ class StockListTests(ServerTestCase):
         self.assertEqual([company["ticker"] for company in updated["companies"]], ["BBB", "AAA"])
 
 
+class PortfolioTests(ServerTestCase):
+    def scored_run(self):
+        run_id = self.create_run(company_count=3)
+        scores = {"AAA": 90, "BBB": 50, "CCC": 10}
+        with self.connect() as connection:
+            for company in server.scoring_companies(3):
+                server.save_result(
+                    connection,
+                    run_id,
+                    company,
+                    scores[company["ticker"]],
+                    str(scores[company["ticker"]]),
+                    None,
+                )
+            server.update_run_counts(connection, run_id)
+            connection.commit()
+        return run_id
+
+    def test_portfolio_applies_percentile_multiplier_and_normalizes_weights(self):
+        portfolio = server.create_portfolio(
+            self.scored_run(), "Test Portfolio", 3, 50, 4
+        )
+
+        self.assertEqual([holding["ticker"] for holding in portfolio["holdings"]], ["AAA", "BBB"])
+        self.assertEqual(portfolio["holdings"][0]["score_percentile"], 100)
+        self.assertEqual(portfolio["holdings"][0]["score_multiplier"], 4)
+        self.assertEqual(portfolio["holdings"][1]["score_percentile"], 50)
+        self.assertEqual(portfolio["holdings"][1]["score_multiplier"], 1)
+        self.assertAlmostEqual(portfolio["holdings"][0]["portfolio_weight"], 85.7142857)
+        self.assertAlmostEqual(portfolio["holdings"][1]["portfolio_weight"], 14.2857143)
+        self.assertAlmostEqual(
+            sum(holding["portfolio_weight"] for holding in portfolio["holdings"]),
+            100,
+        )
+        saved = server.list_portfolios_for_run(portfolio["run_id"])
+        self.assertEqual(saved[0]["name"], "Test Portfolio")
+        self.assertEqual(saved[0]["holding_count"], 2)
+
+    def test_market_cap_limit_is_applied_before_score_percentiles(self):
+        portfolio = server.create_portfolio(
+            self.scored_run(), "Top Two", 2, 50, 4
+        )
+
+        self.assertEqual([holding["ticker"] for holding in portfolio["holdings"]], ["AAA"])
+        self.assertEqual(portfolio["holdings"][0]["score_percentile"], 100)
+        self.assertEqual(portfolio["market_cap_limit"], 2)
+
+    def test_portfolio_rejects_more_companies_than_successful_results(self):
+        with self.assertRaisesRegex(ValueError, "no more than 3"):
+            server.create_portfolio(self.scored_run(), "Too Large", 4, 50, 4)
+
+
 class CostEstimateTests(ServerTestCase):
     def test_cost_estimate_uses_recent_request_average(self):
         entries = [
