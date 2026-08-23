@@ -1101,43 +1101,16 @@ table {
   display: none;
 }
 
-.failed-table-wrap {
-  overflow-x: auto;
-}
-
 .ranking-table.failed-view {
-  min-width: 1480px;
-  table-layout: auto;
-}
-
-.ranking-table.failed-view .position-column,
-.ranking-table.failed-view .position-cell {
-  min-width: 54px;
-}
-
-.ranking-table.failed-view [data-column="company"] {
-  min-width: 260px;
-}
-
-.ranking-table.failed-view [data-column="marketCap"],
-.ranking-table.failed-view [data-column="time"] {
-  min-width: 115px;
-}
-
-.ranking-table.failed-view [data-column="input"],
-.ranking-table.failed-view [data-column="response"],
-.ranking-table.failed-view [data-column="reasoning"],
-.ranking-table.failed-view [data-column="total"],
-.ranking-table.failed-view [data-column="budget"],
-.ranking-table.failed-view [data-column="cost"],
-.ranking-table.failed-view [data-column="confidence"] {
-  min-width: 105px;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
 }
 
 .ranking-table.failed-view [data-column="error"] {
-  min-width: 250px;
+  width: 14%;
   white-space: normal;
-  overflow: visible;
+  overflow: hidden;
   text-overflow: clip;
 }
 
@@ -1146,10 +1119,20 @@ table {
 .ranking-table.failed-view [data-column="chart"],
 .ranking-table.failed-view [data-column="dashboard"],
 .ranking-table.failed-view [data-column="actions"] {
-  min-width: 118px;
-  padding-right: 8px;
-  padding-left: 8px;
-  overflow: visible;
+  width: 7%;
+  padding-right: 4px;
+  padding-left: 4px;
+  overflow: hidden;
+}
+
+.ranking-table.failed-view .details-link {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding-right: 4px;
+  padding-left: 4px;
+  box-sizing: border-box;
+  font-size: 0.76rem;
 }
 
 th,
