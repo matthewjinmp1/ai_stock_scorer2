@@ -1509,6 +1509,11 @@ document.querySelectorAll("[data-result-view]").forEach((button) => {
 });
 columnSelector.addEventListener("change", updateVisibleColumn);
 resetColumnsButton.addEventListener("click", resetVisibleColumns);
+document.addEventListener("click", (event) => {
+  if (columnSelector.open && !columnSelector.contains(event.target)) {
+    columnSelector.open = false;
+  }
+});
 resultRows.addEventListener("click", (event) => {
   const navigationButton = event.target.closest("[data-navigation-url]");
   if (navigationButton) {
