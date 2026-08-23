@@ -617,10 +617,10 @@ function renderRunStats(run) {
     : Number(rawSizeScoreCorrelation);
   const sizeScoreSampleSize = Number(scoreStats.size_score_sample_size || 0);
   statSizeScoreCorrelation.textContent = Number.isFinite(sizeScoreCorrelation)
-    ? sizeScoreCorrelation.toFixed(3)
+    ? `${(sizeScoreCorrelation ** 2 * 100).toFixed(1)}%`
     : "--";
   statSizeScoreCorrelationNote.textContent = sizeScoreSampleSize >= 2
-    ? `Pearson r · log market cap · ${formatNumber(sizeScoreSampleSize)} stocks`
+    ? `R² using log market cap · ${formatNumber(sizeScoreSampleSize)} stocks`
     : "Needs at least 2 scored stocks with market cap";
   statRequests.textContent = `${formatNumber(stats.successful_request_count || 0)} ok / ${formatNumber(
     stats.failed_request_count || 0
