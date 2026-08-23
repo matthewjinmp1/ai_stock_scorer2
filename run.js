@@ -4,7 +4,6 @@ const rerunButton = document.querySelector("#rerunButton");
 const editRunButton = document.querySelector("#editRunButton");
 const copyRunButton = document.querySelector("#copyRunButton");
 const extendButton = document.querySelector("#extendButton");
-const fillButton = document.querySelector("#fillButton");
 const redriveFailedButton = document.querySelector("#redriveFailedButton");
 const deleteButton = document.querySelector("#deleteButton");
 const runEditor = document.querySelector("#runEditor");
@@ -1084,49 +1083,6 @@ async function extendCurrentRun() {
   }
 }
 
-async function fillCurrentRun() {
-  if (!currentRun) {
-    statusEl.textContent = "Pick a saved run before filling missing scores.";
-    return;
-  }
-
-  const missingCount = incompleteCount(currentRun);
-  if (!missingCount) {
-    statusEl.textContent = "This run already has a completed score for every selected stock.";
-    return;
-  }
-
-  fillButton.disabled = true;
-  try {
-    statusEl.textContent = "Estimating fill cost...";
-    const confirmed = await confirmCostEstimate({
-      model: currentRun.model,
-      reasoningMode: currentRun.reasoning_mode,
-      companyCount: missingCount,
-      actionLabel: `Fill ${missingCount} missing score${missingCount === 1 ? "" : "s"}?`,
-    });
-    if (!confirmed) {
-      statusEl.textContent = "Fill canceled before any AI requests were sent.";
-      return;
-    }
-
-    statusEl.textContent = `Filling ${missingCount} missing score${missingCount === 1 ? "" : "s"}...`;
-    const response = await fetch(`/api/runs/${currentRun.id}/fill`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: "{}",
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "Could not fill missing scores");
-    await loadCurrentRun();
-    if (pollTimer) window.clearTimeout(pollTimer);
-    pollTimer = window.setTimeout(loadCurrentRun, 1000);
-  } catch (error) {
-    statusEl.textContent = error.message;
-    fillButton.disabled = !currentRun || canStop(currentRun) || !incompleteCount(currentRun);
-  }
-}
-
 async function redriveFailedStocks() {
   if (!currentRun) {
     statusEl.textContent = "Pick a saved run before redriving failed stocks.";
@@ -1240,7 +1196,6 @@ function renderRun(run) {
   editRunButton.disabled = false;
   copyRunButton.disabled = false;
   extendButton.disabled = canStop(run) || Number(run.extension_limit || 0) <= Number(run.company_count || 0);
-  fillButton.disabled = canStop(run) || !incompleteCount(run);
   redriveFailedButton.disabled = canStop(run) || !(page.counts?.failed || 0);
   deleteButton.disabled = false;
 
@@ -1358,7 +1313,6 @@ async function loadCurrentRun() {
     editRunButton.disabled = true;
     copyRunButton.disabled = true;
     extendButton.disabled = true;
-    fillButton.disabled = true;
     redriveFailedButton.disabled = true;
     deleteButton.disabled = true;
     stopButton.disabled = true;
@@ -1490,7 +1444,6 @@ rerunButton.addEventListener("click", rerunCurrentPrompt);
 editRunButton.addEventListener("click", showRunEditor);
 copyRunButton.addEventListener("click", copyCurrentRun);
 extendButton.addEventListener("click", extendCurrentRun);
-fillButton.addEventListener("click", fillCurrentRun);
 redriveFailedButton.addEventListener("click", redriveFailedStocks);
 saveRunButton.addEventListener("click", saveCurrentRun);
 cancelRunEditButton.addEventListener("click", hideRunEditor);

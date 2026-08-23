@@ -1535,38 +1535,6 @@ def extend_scoring_run(run_id, company_count):
     return get_run(run_id)
 
 
-def fill_incomplete_scoring_run(run_id):
-    with db_connect() as connection:
-        run = connection.execute(
-            """
-            SELECT id, status
-            FROM scoring_runs
-            WHERE id = ? AND deleted_at IS NULL
-            """,
-            (run_id,),
-        ).fetchone()
-        if not run:
-            return None
-        if run["status"] in ("queued", "running", "stop_requested"):
-            raise ValueError("Wait for the current run to finish before filling missing scores.")
-        missing_count = incomplete_company_count(run_id)
-        if missing_count <= 0:
-            raise ValueError("This run already has a completed score for every selected stock.")
-
-        connection.execute(
-            """
-            UPDATE scoring_runs
-            SET status = ?, queue_count = ?, started_at = ?, finished_at = NULL, error = NULL
-            WHERE id = ?
-            """,
-            ("queued", missing_count, int(time.time()), run_id),
-        )
-        connection.commit()
-
-    start_scoring_worker_process(run_id)
-    return get_run(run_id)
-
-
 def failed_tickers_for_run(run_id):
     with db_connect() as connection:
         rows = connection.execute(
@@ -3445,20 +3413,6 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, 500)
             return
 
-        fill_match = re.fullmatch(r"/api/runs/(\d+)/fill", parsed.path)
-        if fill_match:
-            ensure_scoring_schema()
-            try:
-                run = fill_incomplete_scoring_run(int(fill_match.group(1)))
-                if not run:
-                    self.send_json({"error": "Run not found"}, 404)
-                    return
-                self.send_json({"run": run})
-            except ValueError as exc:
-                self.send_json({"error": str(exc)}, 400)
-            except Exception as exc:
-                self.send_json({"error": str(exc)}, 500)
-            return
         redrive_match = re.fullmatch(r"/api/runs/(\d+)/redrive-failed", parsed.path)
         if redrive_match:
             ensure_scoring_schema()
