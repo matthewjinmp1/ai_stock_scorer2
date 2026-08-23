@@ -710,6 +710,7 @@ function updateResultViewTabs(run) {
   errorColumnOption.hidden = activeResultView !== "failed";
   rankingTable.classList.toggle("ranking-view", activeResultView === "ranking");
   rankingTable.classList.toggle("failed-view", activeResultView === "failed");
+  resultsTableWrap.classList.toggle("failed-table-wrap", activeResultView === "failed");
   resultsTableWrap.setAttribute(
     "aria-label",
     activeResultView === "ranking" ? "Successful stock score ranking" : "Failed stock responses"
