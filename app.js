@@ -40,6 +40,9 @@ let companiesAvailable = 0;
 let allCompanies = [];
 const companyCache = new Map();
 let stockPickerMatches = [];
+let stockPickerPagination = { page: 0, page_size: 100, total: 0, total_pages: 1 };
+let stockPickerLoading = false;
+let stockPickerRequestGeneration = 0;
 let companyPagination = { page: 1, page_size: 100, total: 0, total_pages: 1, offset: 0 };
 let companiesSearchTimer = null;
 let stockSearchTimer = null;
@@ -233,10 +236,23 @@ function companyPickerRow(company, action, label) {
 function renderStockPicker() {
   const selected = new Set(selectedTickers);
   const matches = stockPickerMatches.filter((company) => !selected.has(company.ticker));
+  const hasMore = stockPickerPagination.page < stockPickerPagination.total_pages;
+  const progress = stockPickerLoading
+    ? (stockPickerMatches.length ? "Loading more stocks..." : "Loading stocks...")
+    : hasMore && stockPickerMatches.length
+      ? `${stockPickerMatches.length.toLocaleString()} of ${stockPickerPagination.total.toLocaleString()} loaded. Scroll for more.`
+      : stockPickerMatches.length
+        ? `All ${stockPickerPagination.total.toLocaleString()} matching stocks loaded.`
+        : "";
 
-  stockSearchResults.innerHTML = matches.length
-    ? matches.map((company) => companyPickerRow(company, "add", "Add")).join("")
-    : '<p class="stock-picker-empty">No matching stocks available.</p>';
+  stockSearchResults.innerHTML = [
+    matches.length
+      ? matches.map((company) => companyPickerRow(company, "add", "Add")).join("")
+      : (!stockPickerLoading && !hasMore
+        ? '<p class="stock-picker-empty">No matching stocks available.</p>'
+        : ""),
+    progress ? `<p class="stock-picker-progress">${escapeHtml(progress)}</p>` : "",
+  ].join("");
 
   const selectedCompanies = selectedTickers.map(companyByTicker).filter(Boolean);
   selectedStockCount.textContent = String(selectedCompanies.length);
@@ -254,6 +270,9 @@ function resetListEditor() {
   archiveListButton.disabled = true;
   listStatus.textContent = "Creating a new list.";
   renderStockPicker();
+  loadStockPickerMatches({ reset: true }).catch((error) => {
+    stockSearchResults.innerHTML = `<p class="stock-picker-empty">${escapeHtml(error.message)}</p>`;
+  });
   listNameInput.focus();
 }
 
@@ -271,6 +290,9 @@ function openListEditor(listId) {
   archiveListButton.disabled = false;
   listStatus.textContent = `${stockList.company_count} stocks saved.`;
   renderStockPicker();
+  loadStockPickerMatches({ reset: true }).catch((error) => {
+    stockSearchResults.innerHTML = `<p class="stock-picker-empty">${escapeHtml(error.message)}</p>`;
+  });
 }
 
 function renderStockListSelectors(preferredUniverseValue = universeSelect.value) {
@@ -459,18 +481,59 @@ async function loadCompanies() {
   renderCompanies();
 }
 
-async function loadStockPickerMatches() {
+async function loadStockPickerMatches({ reset = false } = {}) {
+  if (reset) {
+    stockPickerRequestGeneration += 1;
+    stockPickerMatches = [];
+    stockPickerPagination = { page: 0, page_size: 100, total: 0, total_pages: 1 };
+    stockPickerLoading = false;
+  }
+  if (stockPickerLoading || stockPickerPagination.page >= stockPickerPagination.total_pages) return;
+
+  const requestGeneration = stockPickerRequestGeneration;
+  const nextPage = stockPickerPagination.page + 1;
+  stockPickerLoading = true;
+  renderStockPicker();
   const query = new URLSearchParams({
-    page: "1",
-    pageSize: "12",
+    page: String(nextPage),
+    pageSize: "100",
     q: stockSearchInput.value.trim(),
     sort: "rank",
     dir: "asc",
   });
-  const payload = await fetchJson(`/api/companies?${query.toString()}`);
-  stockPickerMatches = payload.companies || [];
-  for (const company of stockPickerMatches) companyCache.set(company.ticker, company);
-  renderStockPicker();
+  try {
+    const payload = await fetchJson(`/api/companies?${query.toString()}`);
+    if (requestGeneration !== stockPickerRequestGeneration) return;
+    const existingTickers = new Set(stockPickerMatches.map((company) => company.ticker));
+    const newCompanies = (payload.companies || []).filter(
+      (company) => !existingTickers.has(company.ticker)
+    );
+    stockPickerMatches.push(...newCompanies);
+    stockPickerPagination = payload.pagination || {
+      page: nextPage,
+      page_size: 100,
+      total: stockPickerMatches.length,
+      total_pages: nextPage,
+    };
+    for (const company of newCompanies) companyCache.set(company.ticker, company);
+  } finally {
+    if (requestGeneration === stockPickerRequestGeneration) {
+      stockPickerLoading = false;
+      renderStockPicker();
+    }
+  }
+}
+
+function loadNextStockPickerPageIfNeeded() {
+  const distanceFromBottom =
+    stockSearchResults.scrollHeight - stockSearchResults.scrollTop - stockSearchResults.clientHeight;
+  if (distanceFromBottom > 120) return;
+  loadStockPickerMatches().catch((error) => {
+    stockSearchResults.insertAdjacentHTML(
+      "beforeend",
+      `<p class="stock-picker-empty">${escapeHtml(error.message)}</p>`
+    );
+  });
 }
 
 async function loadModels() {
@@ -819,10 +882,16 @@ saveListButton.addEventListener("click", saveCurrentStockList);
 archiveListButton.addEventListener("click", archiveCurrentStockList);
 stockSearchInput.addEventListener("input", () => {
   window.clearTimeout(stockSearchTimer);
-  stockSearchTimer = window.setTimeout(() => loadStockPickerMatches().catch((error) => {
+  stockPickerRequestGeneration += 1;
+  stockPickerLoading = false;
+  stockPickerMatches = [];
+  stockPickerPagination = { page: 0, page_size: 100, total: 0, total_pages: 1 };
+  renderStockPicker();
+  stockSearchTimer = window.setTimeout(() => loadStockPickerMatches({ reset: true }).catch((error) => {
     stockSearchResults.innerHTML = `<p class="stock-picker-empty">${escapeHtml(error.message)}</p>`;
   }), 250);
 });
+stockSearchResults.addEventListener("scroll", loadNextStockPickerPageIfNeeded);
 companiesSearchInput.addEventListener("input", () => {
   window.clearTimeout(companiesSearchTimer);
   companiesSearchTimer = window.setTimeout(() => {
@@ -867,6 +936,7 @@ stockSearchResults.addEventListener("click", (event) => {
   if (!button || selectedTickers.includes(button.dataset.addTicker)) return;
   selectedTickers.push(button.dataset.addTicker);
   renderStockPicker();
+  window.requestAnimationFrame(loadNextStockPickerPageIfNeeded);
 });
 selectedStocks.addEventListener("click", (event) => {
   const button = event.target.closest("[data-remove-ticker]");
@@ -933,7 +1003,7 @@ try {
   setRunRows("Loading saved scoring runs...");
   setRunRows("Loading starred scoring runs...", starredRunRows);
   await loadCompanies();
-  await loadStockPickerMatches();
+  await loadStockPickerMatches({ reset: true });
   await loadModels();
   await loadStockLists();
   if (editRunId) await prefillFromRun(editRunId);

@@ -373,6 +373,14 @@ button:hover {
   color: var(--muted);
 }
 
+.stock-picker-progress {
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
 .stock-picker-row,
 .selected-stock-row {
   display: grid;
