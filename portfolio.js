@@ -26,7 +26,7 @@ const PORTFOLIO_COLUMN_LABELS = {
   scorePercentile: "Score Percentile",
   marketCap: "Market Cap",
   multiplier: "Score Multiplier",
-  adjustedMarketCap: "Adjusted Market Cap",
+  adjustedMarketCap: "Adjusted Weight Basis",
   weight: "Weight",
   weightUplift: "Weight Uplift",
 };
@@ -242,12 +242,15 @@ function ensureHomeButton() {
 }
 
 function renderPortfolio(portfolio) {
+  const baseWeighting = portfolio.base_weighting === "equal" ? "equal" : "market_cap";
   document.title = `${portfolio.name} - Portfolio`;
   document.querySelector("#portfolioTitle").textContent = portfolio.name;
   document.querySelector("#portfolioSubtitle").textContent =
-    `Top ${formatNumber(portfolio.market_cap_limit, 0)} by market cap, then scores at or above the ${formatNumber(portfolio.minimum_score_percentile)}th percentile.`;
+    `Top ${formatNumber(portfolio.market_cap_limit, 0)} by market cap, then scores at or above the ${formatNumber(portfolio.minimum_score_percentile)}th percentile, starting from ${baseWeighting === "equal" ? "equal" : "market-cap"} weights.`;
   document.querySelector("#portfolioRun").textContent = portfolio.run_name;
   document.querySelector("#portfolioUniverse").textContent = `Top ${formatNumber(portfolio.market_cap_limit, 0)}`;
+  document.querySelector("#portfolioBaseWeighting").textContent =
+    baseWeighting === "equal" ? "Equal Weight" : "Market Cap";
   document.querySelector("#portfolioPercentile").textContent = `${formatNumber(portfolio.minimum_score_percentile)}th`;
   document.querySelector("#portfolioMultiplier").textContent = `${formatNumber(portfolio.maximum_multiplier)}x`;
   document.querySelector("#portfolioHoldingCount").textContent = formatNumber(portfolio.holding_count, 0);
@@ -275,7 +278,7 @@ function renderPortfolio(portfolio) {
           <td data-label="Score Percentile" data-portfolio-column="scorePercentile">${formatNumber(holding.score_percentile, 1)}%</td>
           <td data-label="Market Cap" data-portfolio-column="marketCap">${formatMarketCap(holding.market_cap_value)}</td>
           <td data-label="Multiplier" data-portfolio-column="multiplier">${formatNumber(holding.score_multiplier, 2)}x</td>
-          <td data-label="Adjusted Market Cap" data-portfolio-column="adjustedMarketCap">${formatMarketCap(holding.adjusted_market_cap)}</td>
+          <td data-label="Adjusted Weight Basis" data-portfolio-column="adjustedMarketCap">${baseWeighting === "equal" ? `${formatNumber(holding.adjusted_weighting_value ?? holding.adjusted_market_cap, 2)}x` : formatMarketCap(holding.adjusted_weighting_value ?? holding.adjusted_market_cap)}</td>
           <td data-label="Weight" data-portfolio-column="weight" class="portfolio-weight">${formatNumber(holding.portfolio_weight, 4)}%</td>
           <td data-label="Weight Uplift" data-portfolio-column="weightUplift" class="portfolio-weight">${formatNumber(holding.weight_uplift, 2)}x</td>
         </tr>

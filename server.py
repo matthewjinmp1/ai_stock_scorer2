@@ -1829,6 +1829,7 @@ def calculate_portfolio(
     market_cap_limit,
     minimum_score_percentile,
     maximum_multiplier,
+    base_weighting="market_cap",
 ):
     portfolio_name = str(name or "").strip()
     if not portfolio_name:
@@ -1850,6 +1851,9 @@ def calculate_portfolio(
         raise ValueError("Minimum score percentile must be from 0 to 100.")
     if not 1 <= maximum_multiplier <= 100:
         raise ValueError("Maximum score multiplier must be from 1 to 100.")
+    base_weighting = str(base_weighting or "market_cap").strip().lower()
+    if base_weighting not in {"market_cap", "equal"}:
+        raise ValueError("Starting weights must be market cap weighted or equal weighted.")
 
     with db_connect() as connection:
         run = connection.execute(
@@ -1907,9 +1911,16 @@ def calculate_portfolio(
                 ) / percentile_span
                 multiplier = 1 + percentile_progress * (maximum_multiplier - 1)
             holding["score_multiplier"] = multiplier
-            holding["adjusted_market_cap"] = holding["market_cap_value"] * multiplier
+            holding["weighting_base_value"] = (
+                holding["market_cap_value"] if base_weighting == "market_cap" else 1
+            )
+            holding["adjusted_weighting_value"] = (
+                holding["weighting_base_value"] * multiplier
+            )
+            holding["adjusted_market_cap"] = holding["adjusted_weighting_value"]
 
-        adjusted_total = sum(holding["adjusted_market_cap"] for holding in holdings)
+        adjusted_total = sum(holding["adjusted_weighting_value"] for holding in holdings)
+        weighting_base_total = sum(holding["weighting_base_value"] for holding in holdings)
         market_cap_total = sum(holding["market_cap_value"] for holding in holdings)
         if adjusted_total <= 0:
             raise ValueError("The selected stocks do not have usable market-cap data.")
@@ -1917,11 +1928,14 @@ def calculate_portfolio(
             holding["market_cap_weight"] = (
                 holding["market_cap_value"] / market_cap_total * 100
             )
+            holding["base_weight"] = (
+                holding["weighting_base_value"] / weighting_base_total * 100
+            )
             holding["portfolio_weight"] = (
-                holding["adjusted_market_cap"] / adjusted_total * 100
+                holding["adjusted_weighting_value"] / adjusted_total * 100
             )
             holding["weight_uplift"] = (
-                holding["portfolio_weight"] / holding["market_cap_weight"]
+                holding["portfolio_weight"] / holding["base_weight"]
             )
         holdings.sort(
             key=lambda holding: (
@@ -1942,6 +1956,7 @@ def calculate_portfolio(
         "market_cap_limit": market_cap_limit,
         "minimum_score_percentile": minimum_score_percentile,
         "maximum_multiplier": maximum_multiplier,
+        "base_weighting": base_weighting,
         "created_at": int(time.time()),
         "holdings": holdings,
         "holding_count": len(holdings),
@@ -1949,7 +1964,7 @@ def calculate_portfolio(
             holding["market_cap_value"] for holding in holdings
         ),
         "total_adjusted_market_cap": sum(
-            holding["adjusted_market_cap"] for holding in holdings
+            holding["adjusted_weighting_value"] for holding in holdings
         ),
     }
 
@@ -3676,6 +3691,7 @@ class Handler(SimpleHTTPRequestHandler):
                     payload.get("marketCapLimit"),
                     payload.get("minimumScorePercentile"),
                     payload.get("maximumMultiplier"),
+                    payload.get("baseWeighting", "market_cap"),
                 )
                 self.send_json(
                     {

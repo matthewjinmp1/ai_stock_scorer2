@@ -16,9 +16,11 @@ const saveRunButton = document.querySelector("#saveRunButton");
 const cancelRunEditButton = document.querySelector("#cancelRunEditButton");
 const portfolioBuilder = document.querySelector("#portfolioBuilder");
 const portfolioName = document.querySelector("#portfolioName");
+const portfolioBaseWeighting = document.querySelector("#portfolioBaseWeighting");
 const portfolioMarketCapLimit = document.querySelector("#portfolioMarketCapLimit");
 const portfolioMinimumPercentile = document.querySelector("#portfolioMinimumPercentile");
 const portfolioMaximumMultiplier = document.querySelector("#portfolioMaximumMultiplier");
+const portfolioRuleSummary = document.querySelector("#portfolioRuleSummary");
 const createPortfolioButton = document.querySelector("#createPortfolioButton");
 const cancelPortfolioButton = document.querySelector("#cancelPortfolioButton");
 const PORTFOLIO_PREVIEW_STORAGE_KEY = "ai-stock-scorer-portfolio-preview-v1";
@@ -1081,11 +1083,21 @@ function showPortfolioBuilder() {
   }
   portfolioBuilder.hidden = false;
   portfolioName.value = `${currentRun.name || `Run #${currentRun.id}`} portfolio`;
+  portfolioBaseWeighting.value = "market_cap";
   portfolioMarketCapLimit.max = String(successfulCount);
   portfolioMarketCapLimit.value = String(Math.min(500, successfulCount));
   portfolioMinimumPercentile.value = "50";
   portfolioMaximumMultiplier.value = "4";
+  updatePortfolioRuleSummary();
   portfolioName.focus();
+}
+
+function updatePortfolioRuleSummary() {
+  const baseDescription = portfolioBaseWeighting.value === "equal"
+    ? "Eligible stocks start at equal weight."
+    : "Eligible stocks start at market-cap weight.";
+  portfolioRuleSummary.textContent =
+    `${baseDescription} The multiplier rises linearly to the maximum at the 100th score percentile.`;
 }
 
 function hidePortfolioBuilder() {
@@ -1095,6 +1107,7 @@ function hidePortfolioBuilder() {
 async function createPortfolioFromRun() {
   if (!currentRun) return;
   const name = portfolioName.value.trim();
+  const baseWeighting = portfolioBaseWeighting.value;
   const marketCapLimit = Number(portfolioMarketCapLimit.value);
   const minimumScorePercentile = Number(portfolioMinimumPercentile.value);
   const maximumMultiplier = Number(portfolioMaximumMultiplier.value);
@@ -1129,6 +1142,7 @@ async function createPortfolioFromRun() {
       body: JSON.stringify({
         runId: currentRun.id,
         name,
+        baseWeighting,
         marketCapLimit,
         minimumScorePercentile,
         maximumMultiplier,
@@ -1599,6 +1613,7 @@ editRunButton.addEventListener("click", showRunEditor);
 copyRunButton.addEventListener("click", copyCurrentRun);
 extendButton.addEventListener("click", extendCurrentRun);
 buildPortfolioButton.addEventListener("click", showPortfolioBuilder);
+portfolioBaseWeighting.addEventListener("change", updatePortfolioRuleSummary);
 createPortfolioButton.addEventListener("click", createPortfolioFromRun);
 cancelPortfolioButton.addEventListener("click", hidePortfolioBuilder);
 redriveFailedButton.addEventListener("click", redriveFailedStocks);

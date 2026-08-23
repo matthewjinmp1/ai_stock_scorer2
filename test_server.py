@@ -1246,6 +1246,26 @@ class PortfolioTests(ServerTestCase):
         self.assertEqual(portfolio["holdings"][0]["score_percentile"], 100)
         self.assertEqual(portfolio["market_cap_limit"], 2)
 
+    def test_portfolio_can_start_from_equal_weights(self):
+        portfolio = server.calculate_portfolio(
+            self.scored_run(), "Equal Weight", 3, 50, 4, "equal"
+        )
+
+        self.assertEqual(portfolio["base_weighting"], "equal")
+        self.assertEqual([holding["ticker"] for holding in portfolio["holdings"]], ["AAA", "BBB"])
+        self.assertAlmostEqual(portfolio["holdings"][0]["base_weight"], 50)
+        self.assertAlmostEqual(portfolio["holdings"][1]["base_weight"], 50)
+        self.assertAlmostEqual(portfolio["holdings"][0]["portfolio_weight"], 80)
+        self.assertAlmostEqual(portfolio["holdings"][1]["portfolio_weight"], 20)
+        self.assertAlmostEqual(portfolio["holdings"][0]["weight_uplift"], 1.6)
+        self.assertAlmostEqual(portfolio["holdings"][1]["weight_uplift"], 0.4)
+
+    def test_portfolio_rejects_unknown_starting_weights(self):
+        with self.assertRaisesRegex(ValueError, "Starting weights"):
+            server.calculate_portfolio(
+                self.scored_run(), "Bad Weighting", 3, 50, 4, "price_weighted"
+            )
+
     def test_portfolio_rejects_more_companies_than_successful_results(self):
         with self.assertRaisesRegex(ValueError, "no more than 3"):
             server.calculate_portfolio(self.scored_run(), "Too Large", 4, 50, 4)
