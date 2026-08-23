@@ -36,6 +36,8 @@ const statLatency = document.querySelector("#statLatency");
 const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
 const statMedianScore = document.querySelector("#statMedianScore");
+const statSizeScoreCorrelation = document.querySelector("#statSizeScoreCorrelation");
+const statSizeScoreCorrelationNote = document.querySelector("#statSizeScoreCorrelationNote");
 const statRequests = document.querySelector("#statRequests");
 const scoreTargetInput = document.querySelector("#scoreTargetInput");
 const scoreDownButton = document.querySelector("#scoreDownButton");
@@ -609,6 +611,17 @@ function renderRunStats(run) {
     minScore === null ? "--" : `${formatScore(minScore)}-${formatScore(maxScore)}`;
   statAverageScore.textContent = averageScore === null ? "--" : formatScore(averageScore);
   statMedianScore.textContent = medianScore === null ? "--" : formatScore(medianScore);
+  const rawSizeScoreCorrelation = scoreStats.size_score_correlation;
+  const sizeScoreCorrelation = rawSizeScoreCorrelation === null || rawSizeScoreCorrelation === undefined
+    ? NaN
+    : Number(rawSizeScoreCorrelation);
+  const sizeScoreSampleSize = Number(scoreStats.size_score_sample_size || 0);
+  statSizeScoreCorrelation.textContent = Number.isFinite(sizeScoreCorrelation)
+    ? sizeScoreCorrelation.toFixed(3)
+    : "--";
+  statSizeScoreCorrelationNote.textContent = sizeScoreSampleSize >= 2
+    ? `Pearson r · log market cap · ${formatNumber(sizeScoreSampleSize)} stocks`
+    : "Needs at least 2 scored stocks with market cap";
   statRequests.textContent = `${formatNumber(stats.successful_request_count || 0)} ok / ${formatNumber(
     stats.failed_request_count || 0
   )} failed`;

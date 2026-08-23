@@ -1721,6 +1721,33 @@ def _run_result_sort_value(result, key):
     return values.get(key, result.get("scoreRank"))
 
 
+def size_score_correlation(results):
+    points = []
+    for result in results:
+        try:
+            score = float(result.get("score"))
+            market_cap = float(result.get("market_cap_value"))
+        except (TypeError, ValueError):
+            continue
+        if market_cap > 0 and math.isfinite(score) and math.isfinite(market_cap):
+            points.append((math.log10(market_cap), score))
+
+    if len(points) < 2:
+        return None, len(points)
+
+    mean_size = sum(size for size, _ in points) / len(points)
+    mean_score = sum(score for _, score in points) / len(points)
+    covariance = sum(
+        (size - mean_size) * (score - mean_score) for size, score in points
+    )
+    size_variance = sum((size - mean_size) ** 2 for size, _ in points)
+    score_variance = sum((score - mean_score) ** 2 for _, score in points)
+    denominator = math.sqrt(size_variance * score_variance)
+    if denominator == 0:
+        return None, len(points)
+    return covariance / denominator, len(points)
+
+
 def paginated_run(run_id, page=1, page_size=100, view="ranking", sort_key="scoreRank",
                   direction="asc", query="", score_target=None):
     payload = get_run(run_id, include_raw_response=False)
@@ -1782,6 +1809,7 @@ def paginated_run(run_id, page=1, page_size=100, view="ranking", sort_key="score
         median = sorted_scores[middle] if len(sorted_scores) % 2 else (
             sorted_scores[middle - 1] + sorted_scores[middle]
         ) / 2
+    correlation, correlation_sample_size = size_score_correlation(successful)
 
     payload["results"] = rows[offset:offset + page_size]
     payload["result_page"] = {
@@ -1799,6 +1827,8 @@ def paginated_run(run_id, page=1, page_size=100, view="ranking", sort_key="score
         "maximum": max(all_scores) if all_scores else None,
         "average": sum(all_scores) / len(all_scores) if all_scores else None,
         "median": median,
+        "size_score_correlation": correlation,
+        "size_score_sample_size": correlation_sample_size,
     }
     return payload
 

@@ -1105,6 +1105,21 @@ class RunWorkerTests(ServerTestCase):
         self.assertEqual(second_page["results"][0]["scoreRank"], 3)
         self.assertNotIn("raw_response", second_page["results"][0])
         self.assertEqual(second_page["score_stats"]["median"], 89)
+        self.assertEqual(second_page["score_stats"]["size_score_sample_size"], 3)
+        self.assertGreater(second_page["score_stats"]["size_score_correlation"], 0.98)
+
+    def test_size_score_correlation_uses_log_market_cap(self):
+        correlation, sample_size = server.size_score_correlation(
+            [
+                {"score": 30, "market_cap_value": 1_000},
+                {"score": 20, "market_cap_value": 100},
+                {"score": 10, "market_cap_value": 10},
+                {"score": None, "market_cap_value": 1},
+            ]
+        )
+
+        self.assertEqual(sample_size, 3)
+        self.assertAlmostEqual(correlation, 1.0)
 
 
 class StockListTests(ServerTestCase):
