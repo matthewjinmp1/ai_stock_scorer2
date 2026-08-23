@@ -139,6 +139,18 @@ RUN_TABLE_COLUMNS_PREFERENCE_KEYS = {
     "ranking": "run_table_columns_ranking",
     "failed": "run_table_columns_failed",
 }
+PORTFOLIO_TABLE_COLUMN_KEYS = (
+    "position",
+    "company",
+    "score",
+    "scorePercentile",
+    "marketCap",
+    "multiplier",
+    "adjustedMarketCap",
+    "weight",
+    "weightUplift",
+)
+PORTFOLIO_TABLE_COLUMNS_PREFERENCE_KEY = "portfolio_table_columns"
 
 _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
@@ -835,6 +847,56 @@ def save_run_table_columns_preference(columns, view="ranking"):
             (
                 preference_key,
                 json.dumps({"version": 7, "columns": selected_columns}),
+                int(time.time()),
+            ),
+        )
+        connection.commit()
+    return selected_columns
+
+
+def get_portfolio_table_columns_preference():
+    with db_connect() as connection:
+        row = connection.execute(
+            "SELECT value FROM app_preferences WHERE key = ?",
+            (PORTFOLIO_TABLE_COLUMNS_PREFERENCE_KEY,),
+        ).fetchone()
+    if not row:
+        return None
+    try:
+        columns = json.loads(row["value"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(columns, list):
+        return None
+    valid_columns = [
+        column for column in columns if column in PORTFOLIO_TABLE_COLUMN_KEYS
+    ]
+    return valid_columns or None
+
+
+def save_portfolio_table_columns_preference(columns):
+    if not isinstance(columns, list):
+        raise ValueError("Columns must be a list.")
+    unknown_columns = [
+        column for column in columns if column not in PORTFOLIO_TABLE_COLUMN_KEYS
+    ]
+    if unknown_columns:
+        raise ValueError(f"Unknown portfolio table column: {unknown_columns[0]}")
+    selected_columns = list(dict.fromkeys(columns))
+    if not selected_columns:
+        raise ValueError("Keep at least one portfolio table column visible.")
+    with db_connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO app_preferences (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            (
+                PORTFOLIO_TABLE_COLUMNS_PREFERENCE_KEY,
+                json.dumps(selected_columns),
                 int(time.time()),
             ),
         )
@@ -3350,6 +3412,11 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, 400)
             return
 
+        if parsed.path == "/api/preferences/portfolio-table-columns":
+            ensure_scoring_schema()
+            self.send_json({"columns": get_portfolio_table_columns_preference()})
+            return
+
         if parsed.path == "/api/stock-lists":
             ensure_scoring_schema()
             self.send_json({"lists": list_stock_lists()})
@@ -3610,6 +3677,18 @@ class Handler(SimpleHTTPRequestHandler):
                 payload = self.read_json()
                 view = dict(parse_qsl(parsed.query)).get("view", "ranking")
                 columns = save_run_table_columns_preference(payload.get("columns"), view)
+                self.send_json({"columns": columns})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
+        if parsed.path == "/api/preferences/portfolio-table-columns":
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                columns = save_portfolio_table_columns_preference(payload.get("columns"))
                 self.send_json({"columns": columns})
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)

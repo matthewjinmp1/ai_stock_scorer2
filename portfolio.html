@@ -44,19 +44,37 @@
         </article>
       </section>
 
+      <section class="table-display-tools" aria-label="Portfolio table display options">
+        <details id="portfolioColumnSelector" class="column-selector">
+          <summary>Columns</summary>
+          <div class="column-selector-menu">
+            <label><input type="checkbox" data-portfolio-column-toggle="position" /> Number</label>
+            <label><input type="checkbox" data-portfolio-column-toggle="company" /> Company</label>
+            <label><input type="checkbox" data-portfolio-column-toggle="score" /> Score</label>
+            <label><input type="checkbox" data-portfolio-column-toggle="scorePercentile" /> Score Percentile</label>
+            <label><input type="checkbox" data-portfolio-column-toggle="marketCap" /> Market Cap</label>
+            <label><input type="checkbox" data-portfolio-column-toggle="multiplier" /> Score Multiplier</label>
+            <label><input type="checkbox" data-portfolio-column-toggle="adjustedMarketCap" /> Adjusted Market Cap</label>
+            <label><input type="checkbox" data-portfolio-column-toggle="weight" /> Weight</label>
+            <label><input type="checkbox" data-portfolio-column-toggle="weightUplift" /> Weight Uplift</label>
+            <button id="resetPortfolioColumnsButton" class="column-reset-button" type="button">Show all</button>
+          </div>
+        </details>
+      </section>
+
       <section class="table-wrap portfolio-table-wrap" aria-label="Portfolio holdings">
         <table class="portfolio-table">
           <thead>
             <tr>
-              <th>#</th>
-              <th>Company</th>
-              <th>Score</th>
-              <th>Score Percentile</th>
-              <th>Market Cap</th>
-              <th>Multiplier</th>
-              <th>Adjusted Market Cap</th>
-              <th>Weight</th>
-              <th>Weight Uplift</th>
+              <th data-portfolio-column="position">#</th>
+              <th data-portfolio-column="company">Company</th>
+              <th data-portfolio-column="score">Score</th>
+              <th data-portfolio-column="scorePercentile">Score Percentile</th>
+              <th data-portfolio-column="marketCap">Market Cap</th>
+              <th data-portfolio-column="multiplier">Multiplier</th>
+              <th data-portfolio-column="adjustedMarketCap">Adjusted Market Cap</th>
+              <th data-portfolio-column="weight">Weight</th>
+              <th data-portfolio-column="weightUplift">Weight Uplift</th>
             </tr>
           </thead>
           <tbody id="portfolioRows">

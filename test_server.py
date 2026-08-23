@@ -107,6 +107,24 @@ class ServerTestCase(unittest.TestCase):
 
 
 class AppPreferenceTests(ServerTestCase):
+    def test_portfolio_table_columns_persist_in_database(self):
+        saved = server.save_portfolio_table_columns_preference(
+            ["company", "weight", "weightUplift", "company"]
+        )
+
+        self.assertEqual(saved, ["company", "weight", "weightUplift"])
+        self.assertEqual(
+            server.get_portfolio_table_columns_preference(),
+            ["company", "weight", "weightUplift"],
+        )
+
+    def test_portfolio_table_columns_reject_invalid_selections(self):
+        with self.assertRaisesRegex(ValueError, "Unknown portfolio table column"):
+            server.save_portfolio_table_columns_preference(["company", "not-a-column"])
+
+        with self.assertRaisesRegex(ValueError, "Keep at least one portfolio table column"):
+            server.save_portfolio_table_columns_preference([])
+
     def test_run_table_columns_persist_in_database(self):
         saved = server.save_run_table_columns_preference(
             ["company", "score", "total", "company"]
