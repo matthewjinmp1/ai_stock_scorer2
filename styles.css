@@ -1190,51 +1190,51 @@ table {
   width: 3%;
 }
 
-.ranking-table [data-column="rank"],
-.ranking-table [data-column="score"] {
+.ranking-table [data-table-column="rank"],
+.ranking-table [data-table-column="score"] {
   width: 4%;
 }
 
-.ranking-table [data-column="scorePercentile"] {
+.ranking-table [data-table-column="scorePercentile"] {
   width: 7%;
 }
 
-.ranking-table [data-column="confidence"] {
+.ranking-table [data-table-column="confidence"] {
   width: 6%;
 }
 
-.ranking-table [data-column="company"] {
+.ranking-table [data-table-column="company"] {
   width: 15%;
 }
 
-.ranking-table [data-column="marketCap"] {
+.ranking-table [data-table-column="marketCap"] {
   width: 7%;
 }
 
-.ranking-table [data-column="input"],
-.ranking-table [data-column="response"],
-.ranking-table [data-column="reasoning"],
-.ranking-table [data-column="total"],
-.ranking-table [data-column="time"],
-.ranking-table [data-column="search"] {
+.ranking-table [data-table-column="input"],
+.ranking-table [data-table-column="response"],
+.ranking-table [data-table-column="reasoning"],
+.ranking-table [data-table-column="total"],
+.ranking-table [data-table-column="time"],
+.ranking-table [data-table-column="search"] {
   width: 5%;
 }
 
-.ranking-table [data-column="budget"] {
+.ranking-table [data-table-column="budget"] {
   width: 6%;
 }
 
-.ranking-table [data-column="cost"],
-.ranking-table [data-column="chart"],
-.ranking-table [data-column="actions"] {
+.ranking-table [data-table-column="cost"],
+.ranking-table [data-table-column="chart"],
+.ranking-table [data-table-column="actions"] {
   width: 5.5%;
 }
 
-.ranking-table [data-column="error"] {
+.ranking-table [data-table-column="error"] {
   width: 8%;
 }
 
-.ranking-table [data-column="dashboard"] {
+.ranking-table [data-table-column="dashboard"] {
   width: 6.5%;
 }
 
@@ -1242,7 +1242,7 @@ table {
   width: 5.5%;
 }
 
-.ranking-table.ranking-view [data-column="error"],
+.ranking-table.ranking-view [data-table-column="error"],
 .ranking-table.ranking-view .failed-redrive-column {
   display: none;
 }
@@ -1253,7 +1253,7 @@ table {
   table-layout: fixed;
 }
 
-.ranking-table.failed-view [data-column="error"] {
+.ranking-table.failed-view [data-table-column="error"] {
   width: 14%;
   white-space: normal;
   overflow: hidden;
@@ -1261,10 +1261,10 @@ table {
 }
 
 .ranking-table.failed-view .failed-redrive-column,
-.ranking-table.failed-view [data-column="search"],
-.ranking-table.failed-view [data-column="chart"],
-.ranking-table.failed-view [data-column="dashboard"],
-.ranking-table.failed-view [data-column="actions"] {
+.ranking-table.failed-view [data-table-column="search"],
+.ranking-table.failed-view [data-table-column="chart"],
+.ranking-table.failed-view [data-table-column="dashboard"],
+.ranking-table.failed-view [data-table-column="actions"] {
   width: 7%;
   padding-right: 4px;
   padding-left: 4px;

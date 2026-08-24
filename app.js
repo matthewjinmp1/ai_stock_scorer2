@@ -1,3 +1,5 @@
+import { DataTable, bindTablePagination } from "./data-table.js";
+
 const promptInput = document.querySelector("#promptInput");
 const runNameInput = document.querySelector("#runNameInput");
 const modelSelect = document.querySelector("#modelSelect");
@@ -85,7 +87,8 @@ function selectHomeTab(tabName, updateHash = true) {
 }
 
 function setRunRows(message, target = runRows) {
-  target.innerHTML = `<tr><td colspan="9">${escapeHtml(message)}</td></tr>`;
+  const controller = target === starredRunRows ? starredRunsTable : savedRunsTable;
+  controller.setLoading(message);
 }
 
 function setRunsStatus(message) {
@@ -117,6 +120,87 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+const companyTable = new DataTable({
+  table: document.querySelector(".companies-table"),
+  body: companyRows,
+  onSort: (key) => {
+    companySort = companySort.key === key
+      ? { key, direction: companySort.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: ["name", "country"].includes(key) ? "asc" : "desc" };
+    companyPagination.page = 1;
+    loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
+  },
+  columns: [
+    { key: "position", label: "#", render: (_company, index) => companyPagination.offset + index + 1 },
+    { key: "rank", label: "Market Cap Rank", sortKey: "rank", render: (company) => escapeHtml(company.rank) },
+    {
+      key: "company",
+      label: "Company",
+      sortKey: "name",
+      render: (company) => {
+        const logo = company.logo ? `<img class="logo" src="${escapeHtml(company.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />` : "";
+        return `<div class="company-cell">${logo}<div><strong>${escapeHtml(company.name)}</strong><span class="ticker">${escapeHtml(company.ticker)}</span></div></div>`;
+      },
+    },
+    { key: "marketCap", label: "Market Cap", sortKey: "marketCapValue", render: (company) => escapeHtml(company.marketCap || "--") },
+    { key: "price", label: "Price", render: (company) => escapeHtml(company.price || "--") },
+    { key: "country", label: "Country", sortKey: "country", render: (company) => escapeHtml(company.country || "--") },
+  ],
+});
+
+const updateCompaniesPagination = bindTablePagination({
+  previousButton: companiesPreviousButton,
+  nextButton: companiesNextButton,
+  statusElement: companiesPageStatus,
+  onPageChange: (page) => {
+    companyPagination.page = page;
+    loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
+  },
+});
+
+const runColumns = [
+  { key: "run", label: "Run", render: (run) => `#${run.id}` },
+  { key: "name", label: "Name", render: (run) => `<strong>${escapeHtml(run.name || `Run #${run.id}`)}</strong>` },
+  { key: "status", label: "Status", render: (run) => `<span class="${statusClass(run.status)}">${escapeHtml(run.status)}</span>` },
+  { key: "progress", label: "Progress", render: (run) => progress(run) },
+  { key: "cost", label: "Cost", render: (run) => formatCost(run.cost) },
+  { key: "created", label: "Created", render: (run) => formatDate(run.created_at) },
+  { key: "star", label: "Star", cellClass: "table-action-cell", render: (run) => `<button class="table-action-button" type="button" data-star-run="${run.id}" data-starred="${run.starred ? "false" : "true"}" data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}">${run.starred ? "Unstar" : "Star"}</button>` },
+  { key: "rename", label: "Rename", cellClass: "table-action-cell", render: (run) => `<button class="table-action-button" type="button" data-rename-run="${run.id}" data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}">Rename</button>` },
+  { key: "archive", label: "Archive", cellClass: "table-action-cell", render: (run) => `<button class="table-action-button table-action-button-danger" type="button" data-delete-run="${run.id}" data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}">Archive</button>` },
+];
+
+function makeRunTable(table, body) {
+  const controller = new DataTable({
+    table,
+    body,
+    columns: runColumns,
+  });
+  controller.setContext({ rowClass: "clickable-row", rowAttributes: (run) => `data-run-id="${run.id}"` });
+  return controller;
+}
+
+const savedRunsTable = makeRunTable(document.querySelector("#runsPanel table"), runRows);
+const starredRunsTable = makeRunTable(document.querySelector("#starredRunsPanel table"), starredRunRows);
+
+const confidenceRunsTable = new DataTable({
+  table: document.querySelector(".confidence-table"),
+  body: confidenceRunRows,
+  columns: [
+    { key: "run", label: "Run", render: (run) => `#${run.id}` },
+    { key: "name", label: "Name", render: (run) => `<strong>${escapeHtml(run.name || `Run #${run.id}`)}</strong>` },
+    { key: "status", label: "Status", render: (run) => `<span class="${statusClass(run.status)}">${escapeHtml(run.status)}</span>` },
+    { key: "progress", label: "Progress", render: (run) => progress(run) },
+    { key: "cost", label: "Cost", render: (run) => formatCost(run.cost) },
+    { key: "created", label: "Created", render: (run) => formatDate(run.created_at) },
+    { key: "pin", label: "Pin", cellClass: "table-action-cell", render: (run) => `<button class="table-action-button confidence-pin-button" type="button" data-pin-confidence-run="${run.id}" ${run.pinned ? "disabled" : ""}>${run.pinned ? "Pinned" : "Pin"}</button>` },
+  ],
+});
+confidenceRunsTable.setContext({
+  rowClass: "clickable-row",
+  rowAttributes: (run) => `data-confidence-run-id="${run.id}"`,
+});
+
 function renderCompanies() {
   companiesStatus.textContent = companyPagination.total
     ? `${(companyPagination.offset + 1).toLocaleString()}-${Math.min(
@@ -124,34 +208,9 @@ function renderCompanies() {
         companyPagination.total
       ).toLocaleString()} of ${companyPagination.total.toLocaleString()} companies.`
     : "No companies found.";
-  companiesPageStatus.textContent = `Page ${companyPagination.page.toLocaleString()} of ${companyPagination.total_pages.toLocaleString()}`;
-  companiesPreviousButton.disabled = companyPagination.page <= 1;
-  companiesNextButton.disabled = companyPagination.page >= companyPagination.total_pages;
-  if (!allCompanies.length) {
-    companyRows.innerHTML = '<tr><td colspan="6">No companies match this search.</td></tr>';
-    return;
-  }
-
-  companyRows.innerHTML = allCompanies.map((company, index) => {
-    const logo = company.logo
-      ? `<img class="logo" src="${escapeHtml(company.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
-      : "";
-    return `
-      <tr>
-        <td>${companyPagination.offset + index + 1}</td>
-        <td>${escapeHtml(company.rank)}</td>
-        <td>
-          <div class="company-cell">
-            ${logo}
-            <div><strong>${escapeHtml(company.name)}</strong><span class="ticker">${escapeHtml(company.ticker)}</span></div>
-          </div>
-        </td>
-        <td>${escapeHtml(company.marketCap || "--")}</td>
-        <td>${escapeHtml(company.price || "--")}</td>
-        <td>${escapeHtml(company.country || "--")}</td>
-      </tr>
-    `;
-  }).join("");
+  updateCompaniesPagination({ page: companyPagination.page, totalPages: companyPagination.total_pages });
+  companyTable.setSortState(companySort);
+  companyTable.setRows(allCompanies, { emptyMessage: "No companies match this search." });
 }
 
 function updateConfidenceFilterState() {
@@ -165,7 +224,7 @@ function updateConfidenceFilterState() {
 
 function renderConfidenceRuns() {
   if (!confidenceRuns.length) {
-    confidenceRunRows.innerHTML = '<tr><td colspan="7">No confidence score runs yet.</td></tr>';
+    confidenceRunsTable.setRows([], { emptyMessage: "No confidence score runs yet." });
     confidenceRunsStatus.textContent = "Run the confidence scoring program to create a dataset.";
     updateConfidenceFilterState();
     return;
@@ -174,21 +233,7 @@ function renderConfidenceRuns() {
   confidenceRunsStatus.textContent = pinned
     ? `${pinned.name || `Run #${pinned.id}`} is pinned for scoring filters and run-table confidence scores.`
     : "Pin one confidence run to use its scores in standard scoring runs.";
-  confidenceRunRows.innerHTML = confidenceRuns.map((run) => `
-    <tr class="clickable-row" data-confidence-run-id="${run.id}">
-      <td>#${run.id}</td>
-      <td><strong>${escapeHtml(run.name || `Run #${run.id}`)}</strong></td>
-      <td><span class="${statusClass(run.status)}">${escapeHtml(run.status)}</span></td>
-      <td>${progress(run)}</td>
-      <td>${formatCost(run.cost)}</td>
-      <td>${formatDate(run.created_at)}</td>
-      <td>
-        <button class="table-action-button confidence-pin-button" type="button" data-pin-confidence-run="${run.id}" ${run.pinned ? "disabled" : ""}>
-          ${run.pinned ? "Pinned" : "Pin"}
-        </button>
-      </td>
-    </tr>
-  `).join("");
+  confidenceRunsTable.setRows(confidenceRuns);
   updateConfidenceFilterState();
 }
 
@@ -680,49 +725,8 @@ async function loadRuns() {
 }
 
 function renderRunTable(target, runs, emptyMessage) {
-  if (!runs.length) {
-    setRunRows(emptyMessage, target);
-    return;
-  }
-  target.innerHTML = runs
-    .map(
-      (run) => `
-        <tr class="clickable-row" data-run-id="${run.id}">
-          <td>#${run.id}</td>
-          <td><strong>${escapeHtml(run.name || `Run #${run.id}`)}</strong></td>
-          <td><span class="${statusClass(run.status)}">${escapeHtml(run.status)}</span></td>
-          <td>${progress(run)}</td>
-          <td>${formatCost(run.cost)}</td>
-          <td>${formatDate(run.created_at)}</td>
-          <td class="table-action-cell">
-            <button
-              class="table-action-button"
-              type="button"
-              data-star-run="${run.id}"
-              data-starred="${run.starred ? "false" : "true"}"
-              data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
-            >${run.starred ? "Unstar" : "Star"}</button>
-          </td>
-          <td class="table-action-cell">
-            <button
-              class="table-action-button"
-              type="button"
-              data-rename-run="${run.id}"
-              data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
-            >Rename</button>
-          </td>
-          <td class="table-action-cell">
-            <button
-              class="table-action-button table-action-button-danger"
-              type="button"
-              data-delete-run="${run.id}"
-              data-run-name="${escapeHtml(run.name || `Run #${run.id}`)}"
-            >Archive</button>
-          </td>
-        </tr>
-      `
-    )
-    .join("");
+  const controller = target === starredRunRows ? starredRunsTable : savedRunsTable;
+  controller.setRows(runs, { emptyMessage });
 }
 
 async function createRun() {
@@ -899,26 +903,6 @@ companiesSearchInput.addEventListener("input", () => {
     loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
   }, 250);
 });
-companiesPreviousButton.addEventListener("click", () => {
-  if (companyPagination.page <= 1) return;
-  companyPagination.page -= 1;
-  loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
-});
-companiesNextButton.addEventListener("click", () => {
-  if (companyPagination.page >= companyPagination.total_pages) return;
-  companyPagination.page += 1;
-  loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
-});
-document.querySelectorAll("[data-company-sort]").forEach((button) => {
-  button.addEventListener("click", () => {
-    const key = button.dataset.companySort;
-    companySort = companySort.key === key
-      ? { key, direction: companySort.direction === "asc" ? "desc" : "asc" }
-      : { key, direction: ["name", "country"].includes(key) ? "asc" : "desc" };
-    companyPagination.page = 1;
-    loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
-  });
-});
 confidenceRunRows.addEventListener("click", (event) => {
   const pinButton = event.target.closest("[data-pin-confidence-run]");
   if (pinButton) {
@@ -988,7 +972,7 @@ window.addEventListener("pageshow", (event) => {
     });
     loadConfidenceRuns().catch((error) => {
       confidenceRunsStatus.textContent = error.message;
-      confidenceRunRows.innerHTML = '<tr><td colspan="7">Confidence runs could not be loaded.</td></tr>';
+      confidenceRunsTable.setRows([], { emptyMessage: "Confidence runs could not be loaded." });
     });
   }
 });
@@ -1015,5 +999,5 @@ try {
   setRunRows("Saved runs could not be loaded. Refresh the page to try again.");
   setRunRows("Starred runs could not be loaded. Refresh the page to try again.", starredRunRows);
   confidenceRunsStatus.textContent = error.message;
-  confidenceRunRows.innerHTML = '<tr><td colspan="7">Confidence runs could not be loaded.</td></tr>';
+  confidenceRunsTable.setRows([], { emptyMessage: "Confidence runs could not be loaded." });
 }

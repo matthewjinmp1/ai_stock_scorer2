@@ -1,3 +1,5 @@
+import { DataTable, bindTablePagination } from "./data-table.js";
+
 const params = new URLSearchParams(window.location.search);
 const stopButton = document.querySelector("#stopButton");
 const editRunButton = document.querySelector("#editRunButton");
@@ -88,46 +90,6 @@ const SORT_KEYS = new Set([
 ]);
 const SORT_DIRECTIONS = new Set(["asc", "desc"]);
 const RESULT_VIEWS = new Set(["ranking", "failed"]);
-const COLUMN_KEYS = [
-  "rank",
-  "score",
-  "scorePercentile",
-  "confidence",
-  "company",
-  "marketCap",
-  "input",
-  "response",
-  "reasoning",
-  "total",
-  "budget",
-  "time",
-  "cost",
-  "error",
-  "search",
-  "chart",
-  "dashboard",
-  "actions",
-];
-const COLUMN_LABELS = {
-  rank: "Rank",
-  score: "Score",
-  scorePercentile: "Score Percentile",
-  confidence: "Confidence",
-  company: "Company",
-  marketCap: "Market Cap",
-  input: "Input",
-  response: "Response",
-  reasoning: "Reasoning",
-  total: "Total Tokens",
-  budget: "Budget Used",
-  time: "Time",
-  cost: "Cost",
-  error: "Error",
-  search: "Search",
-  chart: "Price Chart",
-  dashboard: "Stock Dashboard",
-  actions: "Details",
-};
 const LEGACY_COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v6";
 const COLUMN_STORAGE_KEYS = {
   ranking: "ai-stock-scorer-visible-ranking-columns-v1",
@@ -137,37 +99,6 @@ const COLUMN_ORDER_STORAGE_KEYS = {
   ranking: "ai-stock-scorer-ranking-column-order-v1",
   failed: "ai-stock-scorer-failed-column-order-v1",
 };
-
-function normalizeColumnOrder(order) {
-  const valid = Array.isArray(order)
-    ? [...new Set(order.filter((column) => COLUMN_KEYS.includes(column)))]
-    : [];
-  return [...valid, ...COLUMN_KEYS.filter((column) => !valid.includes(column))];
-}
-
-function loadColumnOrder(view) {
-  try {
-    return normalizeColumnOrder(JSON.parse(window.localStorage.getItem(COLUMN_ORDER_STORAGE_KEYS[view])));
-  } catch (_error) {
-    return [...COLUMN_KEYS];
-  }
-}
-
-function loadVisibleColumns(view) {
-  try {
-    const stored =
-      window.localStorage.getItem(COLUMN_STORAGE_KEYS[view]) ||
-      window.localStorage.getItem(LEGACY_COLUMN_STORAGE_KEY);
-    const saved = JSON.parse(stored);
-    if (Array.isArray(saved)) {
-      const valid = saved.filter((column) => COLUMN_KEYS.includes(column));
-      if (valid.length) return new Set(valid);
-    }
-  } catch (_error) {
-    // Use the complete default set when browser storage is unavailable or malformed.
-  }
-  return new Set(COLUMN_KEYS);
-}
 
 let currentRunId = params.get("id");
 let pollTimer = null;
@@ -189,210 +120,80 @@ let activeResultView = RESULT_VIEWS.has(params.get("tab")) ? params.get("tab") :
 let currentPage = Math.max(1, Number(params.get("page")) || 1);
 let resultFilterTimer = null;
 let loadSequence = 0;
-const visibleColumnsByView = {
-  ranking: loadVisibleColumns("ranking"),
-  failed: loadVisibleColumns("failed"),
-};
-let visibleColumns = visibleColumnsByView[activeResultView];
-const columnOrderByView = {
-  ranking: loadColumnOrder("ranking"),
-  failed: loadColumnOrder("failed"),
-};
-let columnOrder = columnOrderByView[activeResultView];
-const columnSaveTimers = { ranking: null, failed: null };
-
-function saveVisibleColumnsLocally(view, columns) {
-  try {
-    window.localStorage.setItem(COLUMN_STORAGE_KEYS[view], JSON.stringify([...columns]));
-  } catch (_error) {
-    // The selection still works for this page when browser storage is unavailable.
-  }
-}
-
-function saveColumnOrderLocally(view, order) {
-  try {
-    window.localStorage.setItem(COLUMN_ORDER_STORAGE_KEYS[view], JSON.stringify(order));
-  } catch (_error) {
-    // The order still works for this page when browser storage is unavailable.
-  }
-}
-
-async function persistVisibleColumns(view, columns, order) {
-  const response = await fetch(`/api/preferences/run-table-columns?view=${encodeURIComponent(view)}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ columns: [...columns], order }),
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || "Unable to save table columns.");
-  }
-}
-
-function saveVisibleColumns() {
-  const view = activeResultView;
-  const columns = new Set(visibleColumns);
-  visibleColumnsByView[view] = columns;
-  visibleColumns = columns;
-  columnOrderByView[view] = [...columnOrder];
-  saveVisibleColumnsLocally(view, columns);
-  saveColumnOrderLocally(view, columnOrderByView[view]);
-  if (columnSaveTimers[view]) window.clearTimeout(columnSaveTimers[view]);
-  columnSaveTimers[view] = window.setTimeout(() => {
-    persistVisibleColumns(view, columns, columnOrderByView[view]).catch(() => {
-      // Browser storage remains a usable fallback if the server is unavailable.
-    });
-  }, 200);
-}
-
-async function loadPersistedVisibleColumns() {
-  await Promise.all(
-    [...RESULT_VIEWS].map(async (view) => {
-      try {
-        const response = await fetch(
-          `/api/preferences/run-table-columns?view=${encodeURIComponent(view)}`
-        );
-        if (!response.ok) throw new Error("Unable to load table columns.");
-        const payload = await response.json();
-        if (Array.isArray(payload.columns)) {
-          const valid = payload.columns.filter((column) => COLUMN_KEYS.includes(column));
-          if (valid.length) {
-            visibleColumnsByView[view] = new Set(valid);
-            saveVisibleColumnsLocally(view, visibleColumnsByView[view]);
-          }
-        }
-        if (Array.isArray(payload.order)) {
-          columnOrderByView[view] = normalizeColumnOrder(payload.order);
-          saveColumnOrderLocally(view, columnOrderByView[view]);
-        }
-        await persistVisibleColumns(
-          view,
-          visibleColumnsByView[view],
-          columnOrderByView[view]
-        );
-      } catch (_error) {
-        // Keep the local selection when persistent preferences cannot be reached.
-      }
-    })
-  );
-  visibleColumns = visibleColumnsByView[activeResultView];
-  columnOrder = columnOrderByView[activeResultView];
-  applyColumnVisibility();
-}
-
-function currentMovableColumns() {
-  return columnOrder.filter((column) => activeResultView === "failed" || column !== "error");
-}
-
-function renderColumnSelectorOptions() {
-  const movableColumns = currentMovableColumns();
-  columnSelectorOptions.innerHTML = columnOrder
-    .filter((column) => activeResultView === "failed" || column !== "error")
-    .map((column) => {
-      const index = movableColumns.indexOf(column);
-      const label = COLUMN_LABELS[column];
-      return `<div class="column-selector-row">
-        <label><input type="checkbox" data-column-toggle="${column}" /> ${label}</label>
-        <div class="column-order-controls">
-          <button class="column-order-button" type="button" data-move-column="${column}" data-move-direction="-1" title="Move earlier" aria-label="Move ${label} earlier" ${index === 0 ? "disabled" : ""}>↑</button>
-          <button class="column-order-button" type="button" data-move-column="${column}" data-move-direction="1" title="Move later" aria-label="Move ${label} later" ${index === movableColumns.length - 1 ? "disabled" : ""}>↓</button>
-        </div>
-      </div>`;
-    })
-    .join("");
-}
-
-function applyColumnOrder() {
-  rankingTable.querySelectorAll("tr").forEach((row) => {
-    const children = [...row.children];
-    const position = children.find((cell) =>
-      cell.classList.contains("position-column") || cell.classList.contains("position-cell")
-    );
-    const redrive = children.find((cell) => cell.classList.contains("failed-redrive-column"));
-    if (position) row.append(position);
-    columnOrder.forEach((column) => {
-      const cell = children.find((candidate) => candidate.dataset.column === column);
-      if (cell) row.append(cell);
-    });
-    if (redrive) row.append(redrive);
-  });
-}
-
-function applyColumnVisibility() {
-  applyColumnOrder();
-  renderColumnSelectorOptions();
-  document.querySelectorAll("[data-column]").forEach((element) => {
-    element.classList.toggle("is-column-hidden", !visibleColumns.has(element.dataset.column));
-  });
-  document.querySelectorAll("[data-column-toggle]").forEach((input) => {
-    input.checked = visibleColumns.has(input.dataset.columnToggle);
-  });
-  const emptyCell = resultRows.querySelector("[data-empty-results]");
-  if (emptyCell) emptyCell.colSpan = visibleTableColumnCount();
-}
-
-function moveColumn(column, direction) {
-  const movableColumns = currentMovableColumns();
-  const index = movableColumns.indexOf(column);
-  const neighbor = movableColumns[index + direction];
-  if (index < 0 || !neighbor) return;
-  const columnIndex = columnOrder.indexOf(column);
-  const neighborIndex = columnOrder.indexOf(neighbor);
-  [columnOrder[columnIndex], columnOrder[neighborIndex]] = [
-    columnOrder[neighborIndex],
-    columnOrder[columnIndex],
-  ];
-  columnOrderByView[activeResultView] = [...columnOrder];
-  saveVisibleColumns();
-  applyColumnVisibility();
-}
-
-function visibleTableColumnCount() {
-  const visibleDataColumns = [...visibleColumns].filter(
-    (column) => activeResultView === "failed" || column !== "error"
-  ).length;
-  return 1 + visibleDataColumns + (activeResultView === "failed" ? 1 : 0);
-}
-
 function renderEmptyResults(message) {
-  resultRows.innerHTML = `<tr><td data-empty-results colspan="${visibleTableColumnCount()}">${escapeHtml(message)}</td></tr>`;
+  runResultsTable.setRows([], { emptyMessage: message });
 }
 
-function hasVisibleColumnForCurrentView() {
-  return [...visibleColumns].some(
-    (column) => activeResultView === "failed" || column !== "error"
-  );
+function resultCompanyCell(result) {
+  const logo = result.logo
+    ? `<img class="logo" src="${escapeHtml(result.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
+    : "";
+  return `<div class="company-cell">${logo}<div><strong class="company-name">${escapeHtml(
+    result.company_name
+  )}</strong><span class="ticker">${escapeHtml(result.ticker)}</span></div></div>`;
 }
 
-function updateVisibleColumn(event) {
-  const input = event.target.closest("[data-column-toggle]");
-  if (!input) return;
-  const column = input.dataset.columnToggle;
-  if (input.checked) visibleColumns.add(column);
-  else visibleColumns.delete(column);
-  if (!hasVisibleColumnForCurrentView()) {
-    visibleColumns.add(column);
-    input.checked = true;
-    statusEl.textContent = "Keep at least one table column visible.";
-    return;
-  }
-  saveVisibleColumns();
-  applyColumnVisibility();
-}
+const runResultsTable = new DataTable({
+  table: rankingTable,
+  body: resultRows,
+  selector: columnSelector,
+  selectorOptions: columnSelectorOptions,
+  resetColumnsButton,
+  resetOrderButton: resetColumnOrderButton,
+  storageKey: (view) => COLUMN_STORAGE_KEYS[view] || LEGACY_COLUMN_STORAGE_KEY,
+  orderStorageKey: (view) => COLUMN_ORDER_STORAGE_KEYS[view],
+  statusElement: statusEl,
+  onSort: setSort,
+  loadPreferences: async (view) => {
+    const response = await fetch(`/api/preferences/run-table-columns?view=${encodeURIComponent(view)}`);
+    if (!response.ok) throw new Error("Unable to load table columns.");
+    return response.json();
+  },
+  savePreferences: async (view, preferences) => {
+    const response = await fetch(`/api/preferences/run-table-columns?view=${encodeURIComponent(view)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(preferences),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || "Unable to save table columns.");
+    }
+  },
+  columns: [
+    { key: "position", label: "#", configurable: false, pinned: "start", headerClass: "position-column", cellClass: "position-cell", render: (_result, index, context) => context.offset + index + 1 },
+    { key: "rank", label: "Rank", sortKey: "scoreRank", render: (result) => result.scoreRank },
+    { key: "score", label: "Score", sortKey: "score", render: (result) => `<strong>${formatScore(result.score)}</strong>` },
+    { key: "scorePercentile", label: "Score Percentile", sortKey: "scorePercentile", render: (result) => formatWholePercent(result.score_percentile) },
+    { key: "confidence", label: "Confidence", sortKey: "confidence", render: (result) => formatScore(result.confidence_score) },
+    { key: "company", label: "Company", sortKey: "company", render: resultCompanyCell },
+    { key: "marketCap", label: "Market Cap", sortKey: "marketCap", render: (result) => escapeHtml(formatMarketCap(result.market_cap_value, result.market_cap)) },
+    { key: "input", label: "Input", sortKey: "inputTokens", render: (result) => formatNumber(result.prompt_tokens) },
+    { key: "response", label: "Response", sortKey: "responseTokens", render: (result) => formatNumber(result.response_tokens) },
+    { key: "reasoning", label: "Reasoning", sortKey: "reasoningTokens", render: (result) => formatNumber(result.reasoning_tokens) },
+    { key: "total", label: "Total Tokens", sortKey: "totalTokens", render: (result) => formatNumber(result.total_tokens) },
+    { key: "budget", label: "Budget Used", sortKey: "tokenBudgetPercent", render: (result) => formatPercent(result.token_budget_used_percent) },
+    { key: "time", label: "Time", sortKey: "durationMs", render: (result) => formatCompactSeconds(result.duration_ms) },
+    { key: "cost", label: "Cost", sortKey: "cost", render: (result) => formatCompactCents(result.cost) },
+    { key: "error", label: "Error", sortKey: "error", cellClass: "error-cell", available: (_context, view) => view === "failed", render: (result) => `<span>${result.error ? escapeHtml(result.error) : ""}</span>` },
+    { key: "search", label: "Search", cellClass: "search-cell", render: (result) => `<button class="details-link" type="button" data-navigation-url="${escapeHtml(`https://www.google.com/search?q=${encodeURIComponent(`what does ${result.company_name} (ticker: ${result.ticker}) do`)}`)}">Search</button>` },
+    { key: "chart", label: "Price Chart", cellClass: "search-cell", render: (result) => `<button class="details-link" type="button" data-navigation-url="${escapeHtml(`https://www.google.com/search?q=${encodeURIComponent(`${result.ticker} stock`)}`)}">Chart</button>` },
+    { key: "dashboard", label: "Stock Dashboard", cellClass: "search-cell", render: (result) => `<button class="details-link" type="button" data-navigation-url="${escapeHtml(`http://localhost:3000/?ticker=${encodeURIComponent(result.ticker)}`)}" title="Open stock dashboard">Dashboard</button>` },
+    { key: "actions", label: "Details", cellClass: "details-cell", render: (result) => `<button class="details-link" type="button" data-details-url="${resultUrl(result)}">Details</button>` },
+    { key: "redrive", label: "Redrive", configurable: false, pinned: "end", cellClass: "failed-redrive-column table-action-cell", available: (_context, view) => view === "failed", render: (result) => `<button class="details-link row-redrive-button" type="button" data-redrive-ticker="${escapeHtml(result.ticker)}" ${canStop(currentRun) ? "disabled" : ""}>Redrive</button>` },
+  ],
+});
 
-function resetVisibleColumns() {
-  visibleColumns = new Set(COLUMN_KEYS);
-  visibleColumnsByView[activeResultView] = visibleColumns;
-  saveVisibleColumns();
-  applyColumnVisibility();
-}
-
-function resetColumnOrder() {
-  columnOrder = [...COLUMN_KEYS];
-  columnOrderByView[activeResultView] = columnOrder;
-  saveVisibleColumns();
-  applyColumnVisibility();
-}
+const updateResultsPagination = bindTablePagination({
+  previousButton: resultsPreviousButton,
+  nextButton: resultsNextButton,
+  statusElement: resultsPageStatus,
+  onPageChange: (page) => {
+    currentPage = page;
+    saveRunViewState();
+    loadCurrentRun();
+  },
+});
 
 function ensureHomeLink() {
   let nav = document.querySelector(".page-nav");
@@ -843,10 +644,6 @@ function resultsForView(run, view = activeResultView) {
 }
 
 function updateResultViewTabs(run) {
-  if (!hasVisibleColumnForCurrentView()) {
-    visibleColumns.add("company");
-    saveVisibleColumns();
-  }
   const counts = run.result_page?.counts;
   rankingTabCount.textContent = String(counts?.ranking ?? resultsForView(run, "ranking").length);
   failedTabCount.textContent = String(counts?.failed ?? resultsForView(run, "failed").length);
@@ -871,10 +668,10 @@ function setResultView(view) {
   if (!RESULT_VIEWS.has(view) || view === activeResultView) return;
   activeResultView = view;
   currentPage = 1;
-  visibleColumns = visibleColumnsByView[view];
-  columnOrder = columnOrderByView[view];
   saveRunViewState();
-  if (currentRun) loadCurrentRun();
+  runResultsTable.setScope(view, { ...runResultsTable.context, view }).then(() => {
+    if (currentRun) loadCurrentRun();
+  });
 }
 
 function normalizeScoreFilterValue(value) {
@@ -992,18 +789,7 @@ function clearScoreFilter() {
 }
 
 function updateSortHeaders() {
-  document.querySelectorAll("[data-sort-key]").forEach((button) => {
-    const isActive = button.dataset.sortKey === sortState.key;
-    const th = button.closest("th");
-    if (th) {
-      th.setAttribute(
-        "aria-sort",
-        isActive ? (sortState.direction === "asc" ? "ascending" : "descending") : "none"
-      );
-    }
-    button.classList.toggle("is-active", isActive);
-    button.dataset.direction = isActive ? sortState.direction : "";
-  });
+  runResultsTable.setSortState(sortState);
 }
 
 function setSort(key) {
@@ -1413,9 +1199,7 @@ function renderRun(run) {
   };
   currentPage = page.page;
   runCount.textContent = String((page.counts?.ranking || 0) + (page.counts?.failed || 0));
-  resultsPageStatus.textContent = `Page ${page.page.toLocaleString()} of ${page.total_pages.toLocaleString()}`;
-  resultsPreviousButton.disabled = page.page <= 1;
-  resultsNextButton.disabled = page.page >= page.total_pages;
+  updateResultsPagination({ page: page.page, totalPages: page.total_pages });
   statusEl.textContent = run.error || "";
   renderRunStats(run);
   updateMatchedScore(run);
@@ -1437,7 +1221,6 @@ function renderRun(run) {
         : "No scores match this filter."
       : "Waiting for scores...";
     renderEmptyResults(emptyMessage);
-    applyColumnVisibility();
     filterStatus.textContent = `${scoreFilterLabel()} ${page.total.toLocaleString()} rows match.`;
     updateScoreStepperButtons();
     return;
@@ -1457,82 +1240,16 @@ function renderRun(run) {
           ? "No scores match this filter."
           : "No successful scores yet.";
     renderEmptyResults(emptyMessage);
-    applyColumnVisibility();
     restoreScrollPosition();
     return;
   }
-  resultRows.innerHTML = visibleResults
-    .map((result, displayIndex) => {
-      const error = result.error ? escapeHtml(result.error) : "";
-      const responsePageUrl = responseUrl(result);
-      const detailsUrl = resultUrl(result);
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
-        `what does ${result.company_name} (ticker: ${result.ticker}) do`
-      )}`;
-      const chartUrl = `https://www.google.com/search?q=${encodeURIComponent(
-        `${result.ticker} stock`
-      )}`;
-      const dashboardUrl = `http://localhost:3000/?ticker=${encodeURIComponent(result.ticker)}`;
-      const rowRedrive =
-        activeResultView === "failed"
-          ? `<button class="details-link row-redrive-button" type="button" data-redrive-ticker="${escapeHtml(
-              result.ticker
-            )}" ${canStop(run) ? "disabled" : ""}>Redrive</button>`
-          : "";
-      const logo = result.logo
-        ? `<img class="logo" src="${escapeHtml(result.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />`
-        : "";
-      return `
-        <tr class="clickable-row" data-response-url="${responsePageUrl}">
-          <td class="position-cell">${page.offset + displayIndex + 1}</td>
-          <td data-column="rank">${result.scoreRank}</td>
-          <td data-column="score"><strong>${formatScore(result.score)}</strong></td>
-          <td data-column="scorePercentile">${formatWholePercent(result.score_percentile)}</td>
-          <td data-column="confidence">${formatScore(result.confidence_score)}</td>
-          <td data-column="company">
-            <div class="company-cell">
-              ${logo}
-              <div>
-                <strong class="company-name">${escapeHtml(result.company_name)}</strong>
-                <span class="ticker">${escapeHtml(result.ticker)}</span>
-              </div>
-            </div>
-          </td>
-          <td data-column="marketCap">${escapeHtml(
-            formatMarketCap(result.market_cap_value, result.market_cap)
-          )}</td>
-          <td data-column="input">${formatNumber(result.prompt_tokens)}</td>
-          <td data-column="response">${formatNumber(result.response_tokens)}</td>
-          <td data-column="reasoning">${formatNumber(result.reasoning_tokens)}</td>
-          <td data-column="total">${formatNumber(result.total_tokens)}</td>
-          <td data-column="budget">${formatPercent(result.token_budget_used_percent)}</td>
-          <td data-column="time">${formatCompactSeconds(result.duration_ms)}</td>
-          <td data-column="cost">${formatCompactCents(result.cost)}</td>
-          <td data-column="error" class="error-cell">
-            <span>${error}</span>
-          </td>
-          <td class="failed-redrive-column table-action-cell">
-            ${rowRedrive}
-          </td>
-          <td data-column="search" class="search-cell">
-            <button class="details-link" type="button" data-navigation-url="${escapeHtml(searchUrl)}">Search</button>
-          </td>
-          <td data-column="chart" class="search-cell">
-            <button class="details-link" type="button" data-navigation-url="${escapeHtml(chartUrl)}">Chart</button>
-          </td>
-          <td data-column="dashboard" class="search-cell">
-            <button class="details-link" type="button" data-navigation-url="${escapeHtml(
-              dashboardUrl
-            )}" title="Open stock dashboard">Dashboard</button>
-          </td>
-          <td data-column="actions" class="details-cell">
-            <button class="details-link" type="button" data-details-url="${detailsUrl}">Details</button>
-          </td>
-        </tr>
-      `;
-    })
-    .join("");
-  applyColumnVisibility();
+  runResultsTable.setContext({
+    offset: page.offset,
+    view: activeResultView,
+    rowClass: "clickable-row",
+    rowAttributes: (result) => `data-response-url="${responseUrl(result)}"`,
+  });
+  runResultsTable.setRows(visibleResults);
   restoreScrollPosition();
 }
 
@@ -1625,37 +1342,8 @@ rankingSearchInput.addEventListener("input", updateRankingSearch);
 scoreDownButton.addEventListener("click", () => stepScoreFilter(-1));
 scoreUpButton.addEventListener("click", () => stepScoreFilter(1));
 clearScoreFilterButton.addEventListener("click", clearScoreFilter);
-resultsPreviousButton.addEventListener("click", () => {
-  if (currentPage <= 1) return;
-  currentPage -= 1;
-  saveRunViewState();
-  loadCurrentRun();
-});
-resultsNextButton.addEventListener("click", () => {
-  const totalPages = currentRun?.result_page?.total_pages || 1;
-  if (currentPage >= totalPages) return;
-  currentPage += 1;
-  saveRunViewState();
-  loadCurrentRun();
-});
-document.querySelectorAll("[data-sort-key]").forEach((button) => {
-  button.addEventListener("click", () => setSort(button.dataset.sortKey));
-});
 document.querySelectorAll("[data-result-view]").forEach((button) => {
   button.addEventListener("click", () => setResultView(button.dataset.resultView));
-});
-columnSelector.addEventListener("change", updateVisibleColumn);
-columnSelector.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-move-column]");
-  if (!button) return;
-  moveColumn(button.dataset.moveColumn, Number(button.dataset.moveDirection));
-});
-resetColumnsButton.addEventListener("click", resetVisibleColumns);
-resetColumnOrderButton.addEventListener("click", resetColumnOrder);
-document.addEventListener("click", (event) => {
-  if (columnSelector.open && !columnSelector.contains(event.target)) {
-    columnSelector.open = false;
-  }
 });
 resultRows.addEventListener("click", (event) => {
   const navigationButton = event.target.closest("[data-navigation-url]");
@@ -1695,7 +1383,9 @@ if ("EventSource" in window) {
 
 try {
   ensureHomeLink();
-  await loadPersistedVisibleColumns();
+  await runResultsTable.initialize("ranking", { view: "ranking", offset: 0 });
+  await runResultsTable.initialize("failed", { view: "failed", offset: 0 });
+  await runResultsTable.setScope(activeResultView, { view: activeResultView, offset: 0 });
   syncScoreFilterInputs();
   rankingSearchInput.value = rankingSearchQuery;
   startEtaTimer();
