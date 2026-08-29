@@ -1014,14 +1014,8 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
-.provider-stats-table th:first-child,
-.provider-stats-table td:first-child {
+.provider-stats-table .provider-name-column {
   width: 18%;
-}
-
-.provider-stats-table th:nth-child(6),
-.provider-stats-table td:nth-child(6) {
-  width: 15%;
 }
 
 .provider-name {

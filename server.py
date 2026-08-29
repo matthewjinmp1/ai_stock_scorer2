@@ -175,6 +175,21 @@ RUN_TABLE_COLUMN_ORDER_PREFERENCE_KEYS = {
     "ranking": "run_table_column_order_ranking",
     "failed": "run_table_column_order_failed",
 }
+PROVIDER_TABLE_COLUMN_KEYS = (
+    "provider",
+    "requests",
+    "stocks",
+    "success",
+    "tokens",
+    "reasoning",
+    "cost",
+    "costPerMillion",
+    "latency",
+    "trace",
+    "cache",
+)
+PROVIDER_TABLE_COLUMNS_PREFERENCE_KEY = "provider_table_columns"
+PROVIDER_TABLE_COLUMN_ORDER_PREFERENCE_KEY = "provider_table_column_order"
 PORTFOLIO_TABLE_COLUMN_KEYS = (
     "position",
     "company",
@@ -1042,6 +1057,68 @@ def save_run_table_columns_preference(columns, view="ranking"):
         )
         connection.commit()
     return selected_columns
+
+
+def get_provider_table_columns_preference():
+    with db_connect() as connection:
+        row = connection.execute(
+            "SELECT value FROM app_preferences WHERE key = ?",
+            (PROVIDER_TABLE_COLUMNS_PREFERENCE_KEY,),
+        ).fetchone()
+    if not row:
+        return None
+    try:
+        columns = json.loads(row["value"])
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(columns, list):
+        return None
+    valid_columns = [column for column in columns if column in PROVIDER_TABLE_COLUMN_KEYS]
+    return list(dict.fromkeys(valid_columns)) or None
+
+
+def save_provider_table_columns_preference(columns):
+    if not isinstance(columns, list):
+        raise ValueError("Columns must be a list.")
+    unknown_columns = [column for column in columns if column not in PROVIDER_TABLE_COLUMN_KEYS]
+    if unknown_columns:
+        raise ValueError(f"Unknown provider table column: {unknown_columns[0]}")
+    selected_columns = list(dict.fromkeys(columns))
+    if not selected_columns:
+        raise ValueError("Keep at least one provider table column visible.")
+    with db_connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO app_preferences (key, value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value = excluded.value,
+                updated_at = excluded.updated_at
+            """,
+            (
+                PROVIDER_TABLE_COLUMNS_PREFERENCE_KEY,
+                json.dumps(selected_columns),
+                int(time.time()),
+            ),
+        )
+        connection.commit()
+    return selected_columns
+
+
+def get_provider_table_column_order_preference():
+    return get_column_order_preference(
+        PROVIDER_TABLE_COLUMN_ORDER_PREFERENCE_KEY,
+        PROVIDER_TABLE_COLUMN_KEYS,
+    )
+
+
+def save_provider_table_column_order_preference(columns):
+    return save_column_order_preference(
+        PROVIDER_TABLE_COLUMN_ORDER_PREFERENCE_KEY,
+        columns,
+        PROVIDER_TABLE_COLUMN_KEYS,
+        "provider table",
+    )
 
 
 def get_portfolio_table_columns_preference():
@@ -2749,6 +2826,7 @@ def provider_stats_for_run(run_id):
                 "reasoning_tokens": 0,
                 "total_tokens": 0,
                 "cost": 0,
+                "cost_per_million_tokens": None,
                 "total_latency_ms": 0,
                 "average_latency_ms": None,
                 "reasoning_trace_visible_count": 0,
@@ -2810,6 +2888,11 @@ def provider_stats_for_run(run_id):
             current["reasoning_trace_visible_percent"] = round(
                 current["reasoning_trace_visible_count"] / successful_count * 100,
                 1,
+            )
+        if current["total_tokens"]:
+            current["cost_per_million_tokens"] = round(
+                current["cost"] / current["total_tokens"] * 1_000_000,
+                6,
             )
         rows.append(current)
     return sorted(rows, key=lambda row: (-row["request_count"], row["provider"].lower()))
@@ -3953,6 +4036,16 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, 400)
             return
 
+        if parsed.path == "/api/preferences/provider-table-columns":
+            ensure_scoring_schema()
+            self.send_json(
+                {
+                    "columns": get_provider_table_columns_preference(),
+                    "order": get_provider_table_column_order_preference(),
+                }
+            )
+            return
+
         if parsed.path == "/api/preferences/portfolio-table-columns":
             ensure_scoring_schema()
             self.send_json(
@@ -4295,6 +4388,23 @@ class Handler(SimpleHTTPRequestHandler):
                     save_run_table_column_order_preference(payload["order"], view)
                     if "order" in payload
                     else get_run_table_column_order_preference(view)
+                )
+                self.send_json({"columns": columns, "order": order})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
+        if parsed.path == "/api/preferences/provider-table-columns":
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                columns = save_provider_table_columns_preference(payload.get("columns"))
+                order = (
+                    save_provider_table_column_order_preference(payload["order"])
+                    if "order" in payload
+                    else get_provider_table_column_order_preference()
                 )
                 self.send_json({"columns": columns, "order": order})
             except ValueError as exc:

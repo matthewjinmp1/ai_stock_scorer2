@@ -107,6 +107,27 @@ class ServerTestCase(unittest.TestCase):
 
 
 class AppPreferenceTests(ServerTestCase):
+    def test_provider_table_columns_and_order_persist_in_database(self):
+        columns = server.save_provider_table_columns_preference(
+            ["provider", "costPerMillion", "provider"]
+        )
+        order = server.save_provider_table_column_order_preference(
+            ["costPerMillion", "provider", "costPerMillion"]
+        )
+
+        self.assertEqual(columns, ["provider", "costPerMillion"])
+        self.assertEqual(columns, server.get_provider_table_columns_preference())
+        self.assertEqual(order[:2], ["costPerMillion", "provider"])
+        self.assertEqual(order, server.get_provider_table_column_order_preference())
+        self.assertEqual(set(order), set(server.PROVIDER_TABLE_COLUMN_KEYS))
+
+    def test_provider_table_columns_reject_invalid_selections(self):
+        with self.assertRaisesRegex(ValueError, "Unknown provider table column"):
+            server.save_provider_table_columns_preference(["provider", "not-a-column"])
+
+        with self.assertRaisesRegex(ValueError, "Keep at least one provider table column"):
+            server.save_provider_table_columns_preference([])
+
     def test_portfolio_table_columns_persist_in_database(self):
         saved = server.save_portfolio_table_columns_preference(
             ["company", "weight", "weightUplift", "company"]
@@ -542,6 +563,7 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertEqual(provider["reasoning_tokens"], 40)
         self.assertEqual(provider["total_tokens"], 80)
         self.assertEqual(provider["cost"], 0.001)
+        self.assertEqual(provider["cost_per_million_tokens"], 12.5)
         self.assertEqual(provider["average_latency_ms"], 2000)
         self.assertEqual(provider["reasoning_trace_visible_count"], 1)
         self.assertEqual(provider["reasoning_trace_visible_percent"], 100.0)

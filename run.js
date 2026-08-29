@@ -73,6 +73,11 @@ const tableDisplayTools = document.querySelector(".table-display-tools");
 const providersTableWrap = document.querySelector("#providersTableWrap");
 const providersTableElement = document.querySelector("#providersTable");
 const providerRows = document.querySelector("#providerRows");
+const providerTableDisplayTools = document.querySelector("#providerTableDisplayTools");
+const providerColumnSelector = document.querySelector("#providerColumnSelector");
+const providerColumnSelectorOptions = document.querySelector("#providerColumnSelectorOptions");
+const resetProviderColumnsButton = document.querySelector("#resetProviderColumnsButton");
+const resetProviderColumnOrderButton = document.querySelector("#resetProviderColumnOrderButton");
 const columnSelector = document.querySelector("#columnSelector");
 const columnSelectorOptions = document.querySelector("#columnSelectorOptions");
 const resetColumnsButton = document.querySelector("#resetColumnsButton");
@@ -109,6 +114,8 @@ const COLUMN_ORDER_STORAGE_KEYS = {
   ranking: "ai-stock-scorer-ranking-column-order-v1",
   failed: "ai-stock-scorer-failed-column-order-v1",
 };
+const PROVIDER_COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-provider-columns-v1";
+const PROVIDER_COLUMN_ORDER_STORAGE_KEY = "ai-stock-scorer-provider-column-order-v1";
 
 let currentRunId = params.get("id");
 let pollTimer = null;
@@ -198,8 +205,31 @@ const runResultsTable = new DataTable({
 const providerStatsTable = new DataTable({
   table: providersTableElement,
   body: providerRows,
+  selector: providerColumnSelector,
+  selectorOptions: providerColumnSelectorOptions,
+  resetColumnsButton: resetProviderColumnsButton,
+  resetOrderButton: resetProviderColumnOrderButton,
+  storageKey: PROVIDER_COLUMN_STORAGE_KEY,
+  orderStorageKey: PROVIDER_COLUMN_ORDER_STORAGE_KEY,
+  statusElement: statusEl,
+  loadPreferences: async () => {
+    const response = await fetch("/api/preferences/provider-table-columns");
+    if (!response.ok) throw new Error("Unable to load provider table columns.");
+    return response.json();
+  },
+  savePreferences: async (_view, preferences) => {
+    const response = await fetch("/api/preferences/provider-table-columns", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(preferences),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.error || "Unable to save provider table columns.");
+    }
+  },
   columns: [
-    { key: "provider", label: "Provider", render: (row) => `<span class="provider-name">${escapeHtml(row.provider)}</span>` },
+    { key: "provider", label: "Provider", headerClass: "provider-name-column", cellClass: "provider-name-column", render: (row) => `<span class="provider-name">${escapeHtml(row.provider)}</span>` },
     { key: "requests", label: "Requests", render: (row) => formatNumber(row.request_count) },
     { key: "stocks", label: "Stocks", render: (row) => formatNumber(row.stock_count) },
     {
@@ -210,6 +240,13 @@ const providerStatsTable = new DataTable({
     { key: "tokens", label: "Total Tokens", render: (row) => formatNumber(row.total_tokens) },
     { key: "reasoning", label: "Reasoning Tokens", render: (row) => formatNumber(row.reasoning_tokens) },
     { key: "cost", label: "Cost", render: (row) => formatCompactCents(row.cost) },
+    {
+      key: "costPerMillion",
+      label: "Cost / 1M Tokens",
+      render: (row) => row.cost_per_million_tokens === null || row.cost_per_million_tokens === undefined
+        ? "--"
+        : `$${Number(row.cost_per_million_tokens).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`,
+    },
     { key: "latency", label: "Avg Time", render: (row) => formatCompactSeconds(row.average_latency_ms) },
     {
       key: "trace",
@@ -745,6 +782,7 @@ function updateResultViewTabs(run) {
   failedActions.hidden = activeResultView !== "failed";
   const showingProviders = activeResultView === "providers";
   tableDisplayTools.hidden = showingProviders;
+  providerTableDisplayTools.hidden = !showingProviders;
   resultsTableWrap.hidden = showingProviders;
   resultsPagination.hidden = showingProviders;
   providersTableWrap.hidden = !showingProviders;
