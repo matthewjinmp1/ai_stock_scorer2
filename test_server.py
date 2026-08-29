@@ -1191,6 +1191,41 @@ class StockListTests(ServerTestCase):
         self.assertEqual([company["ticker"] for company in updated["companies"]], ["BBB", "AAA"])
 
 
+class ManualRankingTests(ServerTestCase):
+    def test_manual_ranking_scores_and_compares_percentile_ranks(self):
+        stock_list = server.save_stock_list("Manual universe", ["AAA", "BBB", "CCC"])
+        ranking = server.create_manual_ranking("My ranking", stock_list["id"])
+        self.assertEqual(ranking["company_count"], 3)
+        self.assertEqual(ranking["scored_count"], 0)
+
+        for ticker, score in (("AAA", 90), ("BBB", 50), ("CCC", 10)):
+            ranking = server.update_manual_ranking_score(ranking["id"], ticker, score)
+
+        self.assertEqual(ranking["scored_count"], 3)
+        self.assertEqual(
+            [(company["ticker"], company["manual_rank"]) for company in ranking["companies"]],
+            [("AAA", 1), ("BBB", 2), ("CCC", 3)],
+        )
+
+        run_id = self.create_run(company_count=3)
+        with self.connect() as connection:
+            for company, score in zip(server.scoring_companies(3), (100, 50, 0)):
+                server.save_result(connection, run_id, company, score, str(score), None)
+            server.update_run_counts(connection, run_id)
+            connection.commit()
+
+        run = server.set_run_manual_ranking(run_id, ranking["id"])
+        self.assertEqual(run["manual_ranking_id"], ranking["id"])
+        self.assertEqual(run["manual_comparison"]["sample_size"], 3)
+        self.assertAlmostEqual(run["manual_comparison"]["correlation"], 1.0)
+
+    def test_manual_ranking_rejects_unknown_stock(self):
+        stock_list = server.save_stock_list("Manual universe", ["AAA"])
+        ranking = server.create_manual_ranking("My ranking", stock_list["id"])
+        with self.assertRaisesRegex(ValueError, "not part"):
+            server.update_manual_ranking_score(ranking["id"], "BBB", 50)
+
+
 class PortfolioTests(ServerTestCase):
     def scored_run(self):
         run_id = self.create_run(company_count=3)

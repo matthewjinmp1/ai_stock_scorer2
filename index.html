@@ -29,6 +29,16 @@
           tabindex="-1"
         >Stock Lists</button>
         <button
+          id="manualRankingsTab"
+          class="home-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="manualRankingsPanel"
+          data-home-tab="manual-rankings"
+          tabindex="-1"
+        >Manual Rankings</button>
+        <button
           id="companiesTab"
           class="home-tab"
           type="button"
@@ -119,6 +129,51 @@
           <button id="runButton" type="button">Run score</button>
         </div>
         <p id="status" class="status" role="status"></p>
+      </section>
+
+      <section
+        id="manualRankingsPanel"
+        class="home-tab-panel manual-rankings-panel"
+        role="tabpanel"
+        aria-labelledby="manualRankingsTab manualRankingsTitle"
+        data-home-panel="manual-rankings"
+        hidden
+      >
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Personal scoring</p>
+            <h2 id="manualRankingsTitle">Manual Rankings</h2>
+          </div>
+        </div>
+        <div class="manual-ranking-controls">
+          <label>
+            <span>Saved ranking</span>
+            <select id="manualRankingSelect"><option value="">Create a ranking</option></select>
+          </label>
+          <label>
+            <span>Ranking name</span>
+            <input id="manualRankingName" type="text" maxlength="120" placeholder="Example: My quality ranking" />
+          </label>
+          <label>
+            <span>Stock list</span>
+            <select id="manualRankingStockList"><option value="">Choose a stock list</option></select>
+          </label>
+          <button id="createManualRankingButton" type="button">Create ranking</button>
+          <button id="archiveManualRankingButton" class="danger-button" type="button" disabled>Archive</button>
+        </div>
+        <div class="manual-ranking-toolbar">
+          <label>
+            <span>Search ranking</span>
+            <input id="manualRankingSearch" type="search" placeholder="Company or ticker" autocomplete="off" />
+          </label>
+          <p id="manualRankingStatus" class="status" role="status"></p>
+        </div>
+        <div class="table-wrap" aria-label="Manual stock ranking">
+          <table class="manual-ranking-table">
+            <thead><tr><th>Rank</th><th>Score</th><th>Company</th><th>Market Cap</th></tr></thead>
+            <tbody id="manualRankingRows"><tr><td colspan="4">Create or select a manual ranking.</td></tr></tbody>
+          </table>
+        </div>
       </section>
 
       <section

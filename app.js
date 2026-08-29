@@ -20,6 +20,14 @@ const newListButton = document.querySelector("#newListButton");
 const saveListButton = document.querySelector("#saveListButton");
 const archiveListButton = document.querySelector("#archiveListButton");
 const listStatus = document.querySelector("#listStatus");
+const manualRankingSelect = document.querySelector("#manualRankingSelect");
+const manualRankingName = document.querySelector("#manualRankingName");
+const manualRankingStockList = document.querySelector("#manualRankingStockList");
+const createManualRankingButton = document.querySelector("#createManualRankingButton");
+const archiveManualRankingButton = document.querySelector("#archiveManualRankingButton");
+const manualRankingSearch = document.querySelector("#manualRankingSearch");
+const manualRankingStatus = document.querySelector("#manualRankingStatus");
+const manualRankingRows = document.querySelector("#manualRankingRows");
 const runButton = document.querySelector("#runButton");
 const statusEl = document.querySelector("#status");
 const runsStatusEl = document.querySelector("#runsStatus");
@@ -49,6 +57,10 @@ let companyPagination = { page: 1, page_size: 100, total: 0, total_pages: 1, off
 let companiesSearchTimer = null;
 let stockSearchTimer = null;
 let stockLists = [];
+let manualRankings = [];
+let currentManualRanking = null;
+let manualRankingSort = { key: "rank", direction: "asc" };
+const manualScoreSaveTimers = new Map();
 let editingListId = null;
 let selectedTickers = [];
 let topCompanyCount = Number(companyCountInput.value) || 10;
@@ -145,6 +157,37 @@ const companyTable = new DataTable({
     { key: "marketCap", label: "Market Cap", sortKey: "marketCapValue", render: (company) => escapeHtml(company.marketCap || "--") },
     { key: "price", label: "Price", render: (company) => escapeHtml(company.price || "--") },
     { key: "country", label: "Country", sortKey: "country", render: (company) => escapeHtml(company.country || "--") },
+  ],
+});
+
+const manualRankingTable = new DataTable({
+  table: document.querySelector(".manual-ranking-table"),
+  body: manualRankingRows,
+  onSort: (key) => {
+    manualRankingSort = manualRankingSort.key === key
+      ? { key, direction: manualRankingSort.direction === "asc" ? "desc" : "asc" }
+      : { key, direction: key === "company" ? "asc" : "desc" };
+    renderManualRanking();
+  },
+  columns: [
+    { key: "rank", label: "Rank", sortKey: "rank", render: (company) => company.manual_rank ?? "--" },
+    {
+      key: "score",
+      label: "Score",
+      sortKey: "score",
+      cellClass: "manual-score-cell",
+      render: (company) => `<input class="manual-score-input" type="number" min="0" max="100" step="1" value="${company.score ?? ""}" placeholder="--" aria-label="Score ${escapeHtml(company.name)}" data-manual-score-ticker="${escapeHtml(company.ticker)}" />`,
+    },
+    {
+      key: "company",
+      label: "Company",
+      sortKey: "company",
+      render: (company) => {
+        const logo = company.logo ? `<img class="logo" src="${escapeHtml(company.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />` : "";
+        return `<div class="company-cell">${logo}<div><strong>${escapeHtml(company.name)}</strong><span class="ticker">${escapeHtml(company.ticker)}</span></div></div>`;
+      },
+    },
+    { key: "marketCap", label: "Market Cap", sortKey: "marketCap", render: (company) => escapeHtml(company.marketCap || "--") },
   ],
 });
 
@@ -611,6 +654,167 @@ async function loadStockLists(preferredUniverseValue = universeSelect.value) {
   renderStockListSelectors(preferredUniverseValue);
 }
 
+function renderManualRankingSelectors() {
+  const selectedId = currentManualRanking?.id || Number(manualRankingSelect.value) || null;
+  manualRankingSelect.innerHTML = '<option value="">Create a ranking</option>';
+  for (const ranking of manualRankings) {
+    const option = document.createElement("option");
+    option.value = String(ranking.id);
+    option.textContent = `${ranking.name} (${ranking.scored_count}/${ranking.company_count})`;
+    manualRankingSelect.append(option);
+  }
+  manualRankingStockList.innerHTML = '<option value="">Choose a stock list</option>';
+  for (const stockList of stockLists) {
+    const option = document.createElement("option");
+    option.value = String(stockList.id);
+    option.textContent = `${stockList.name} (${stockList.company_count})`;
+    manualRankingStockList.append(option);
+  }
+  manualRankingSelect.value = selectedId && manualRankings.some((ranking) => ranking.id === selectedId)
+    ? String(selectedId)
+    : "";
+  manualRankingStockList.value = currentManualRanking?.stock_list_id
+    ? String(currentManualRanking.stock_list_id)
+    : "";
+}
+
+function manualSortValue(company, key) {
+  if (key === "rank") return company.manual_rank ?? Number.MAX_SAFE_INTEGER;
+  if (key === "score") return company.score === null ? -Infinity : Number(company.score);
+  if (key === "company") return `${company.name} ${company.ticker}`.toLowerCase();
+  if (key === "marketCap") return Number(company.marketCapValue || 0);
+  return company.position;
+}
+
+function renderManualRanking() {
+  manualRankingTable.setSortState(manualRankingSort);
+  archiveManualRankingButton.disabled = !currentManualRanking;
+  if (!currentManualRanking) {
+    manualRankingTable.setRows([], { emptyMessage: "Create or select a manual ranking." });
+    return;
+  }
+  const query = manualRankingSearch.value.trim().toLowerCase();
+  const direction = manualRankingSort.direction === "desc" ? -1 : 1;
+  const rows = currentManualRanking.companies
+    .filter((company) => !query || `${company.name} ${company.ticker}`.toLowerCase().includes(query))
+    .sort((left, right) => {
+      const leftValue = manualSortValue(left, manualRankingSort.key);
+      const rightValue = manualSortValue(right, manualRankingSort.key);
+      return (leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : left.position - right.position) * direction;
+    });
+  manualRankingTable.setRows(rows, { emptyMessage: "No stocks match this search." });
+  manualRankingStatus.textContent = `${currentManualRanking.scored_count} of ${currentManualRanking.company_count} stocks scored.`;
+}
+
+async function loadManualRankings(preferredId = currentManualRanking?.id) {
+  const payload = await fetchJson("/api/manual-rankings");
+  manualRankings = payload.rankings || [];
+  renderManualRankingSelectors();
+  if (preferredId && manualRankings.some((ranking) => ranking.id === Number(preferredId))) {
+    await openManualRanking(preferredId);
+  } else {
+    currentManualRanking = null;
+    renderManualRanking();
+  }
+}
+
+async function openManualRanking(rankingId) {
+  if (!rankingId) {
+    currentManualRanking = null;
+    manualRankingName.value = "";
+    manualRankingStockList.value = "";
+    renderManualRanking();
+    return;
+  }
+  manualRankingStatus.textContent = "Loading manual ranking...";
+  const payload = await fetchJson(`/api/manual-rankings/${encodeURIComponent(rankingId)}`);
+  currentManualRanking = payload.ranking;
+  manualRankingSelect.value = String(currentManualRanking.id);
+  manualRankingName.value = currentManualRanking.name;
+  manualRankingStockList.value = String(currentManualRanking.stock_list_id);
+  renderManualRanking();
+}
+
+async function createManualRanking() {
+  const name = manualRankingName.value.trim();
+  const stockListId = Number(manualRankingStockList.value);
+  if (!name) {
+    manualRankingStatus.textContent = "Give this manual ranking a name.";
+    manualRankingName.focus();
+    return;
+  }
+  if (!stockListId) {
+    manualRankingStatus.textContent = "Choose a saved stock list.";
+    manualRankingStockList.focus();
+    return;
+  }
+  createManualRankingButton.disabled = true;
+  try {
+    const response = await fetch("/api/manual-rankings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, stockListId }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not create manual ranking");
+    await loadManualRankings(payload.ranking.id);
+    manualRankingStatus.textContent = `Created ${payload.ranking.name}. Enter scores from 0 to 100.`;
+  } catch (error) {
+    manualRankingStatus.textContent = error.message;
+  } finally {
+    createManualRankingButton.disabled = false;
+  }
+}
+
+async function saveManualScore(ticker, score, input) {
+  if (!currentManualRanking) return;
+  input.disabled = true;
+  try {
+    const response = await fetch(
+      `/api/manual-rankings/${currentManualRanking.id}/scores/${encodeURIComponent(ticker)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ score: score === "" ? null : Number(score) }),
+      }
+    );
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not save score");
+    currentManualRanking = payload.ranking;
+    const summary = manualRankings.find((ranking) => ranking.id === currentManualRanking.id);
+    if (summary) {
+      summary.name = currentManualRanking.name;
+      summary.updated_at = currentManualRanking.updated_at;
+      summary.scored_count = currentManualRanking.scored_count;
+      summary.company_count = currentManualRanking.company_count;
+    }
+    renderManualRankingSelectors();
+    renderManualRanking();
+  } catch (error) {
+    manualRankingStatus.textContent = error.message;
+    input.disabled = false;
+  }
+}
+
+async function archiveManualRanking() {
+  if (!currentManualRanking) return;
+  const archivedName = currentManualRanking.name;
+  archiveManualRankingButton.disabled = true;
+  try {
+    const response = await fetch(`/api/manual-rankings/${currentManualRanking.id}`, { method: "DELETE" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not archive manual ranking");
+    currentManualRanking = null;
+    manualRankingName.value = "";
+    manualRankingStockList.value = "";
+    await loadManualRankings();
+    manualRankingStatus.textContent = `Archived ${archivedName}.`;
+  } catch (error) {
+    manualRankingStatus.textContent = error.message;
+    archiveManualRankingButton.disabled = false;
+  }
+}
+
 async function prefillFromRun(runId) {
   if (!runId) return;
   const payload = await fetchJson(`/api/runs/${encodeURIComponent(runId)}`);
@@ -884,6 +1088,32 @@ listEditorSelect.addEventListener("change", () => {
 newListButton.addEventListener("click", resetListEditor);
 saveListButton.addEventListener("click", saveCurrentStockList);
 archiveListButton.addEventListener("click", archiveCurrentStockList);
+manualRankingSelect.addEventListener("change", () => {
+  openManualRanking(manualRankingSelect.value).catch((error) => {
+    manualRankingStatus.textContent = error.message;
+  });
+});
+createManualRankingButton.addEventListener("click", createManualRanking);
+archiveManualRankingButton.addEventListener("click", archiveManualRanking);
+manualRankingSearch.addEventListener("input", renderManualRanking);
+manualRankingRows.addEventListener("input", (event) => {
+  const input = event.target.closest("[data-manual-score-ticker]");
+  if (!input) return;
+  const ticker = input.dataset.manualScoreTicker;
+  window.clearTimeout(manualScoreSaveTimers.get(ticker));
+  manualScoreSaveTimers.set(ticker, window.setTimeout(() => {
+    manualScoreSaveTimers.delete(ticker);
+    saveManualScore(ticker, input.value, input);
+  }, 350));
+});
+manualRankingRows.addEventListener("change", (event) => {
+  const input = event.target.closest("[data-manual-score-ticker]");
+  if (!input) return;
+  const ticker = input.dataset.manualScoreTicker;
+  window.clearTimeout(manualScoreSaveTimers.get(ticker));
+  manualScoreSaveTimers.delete(ticker);
+  saveManualScore(ticker, input.value, input);
+});
 stockSearchInput.addEventListener("input", () => {
   window.clearTimeout(stockSearchTimer);
   stockPickerRequestGeneration += 1;
@@ -990,6 +1220,7 @@ try {
   await loadStockPickerMatches({ reset: true });
   await loadModels();
   await loadStockLists();
+  await loadManualRankings();
   if (editRunId) await prefillFromRun(editRunId);
   await loadConfidenceRuns();
   await loadRuns();

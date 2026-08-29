@@ -636,6 +636,7 @@ def ensure_scoring_schema():
                 run_type TEXT NOT NULL DEFAULT 'scoring',
                 minimum_confidence_score REAL,
                 confidence_run_id INTEGER,
+                manual_ranking_id INTEGER,
                 status TEXT NOT NULL,
                 company_count INTEGER NOT NULL DEFAULT 0,
                 completed_count INTEGER NOT NULL DEFAULT 0,
@@ -699,10 +700,31 @@ def ensure_scoring_schema():
                 updated_at INTEGER NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS manual_rankings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                stock_list_id INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                deleted_at INTEGER,
+                FOREIGN KEY(stock_list_id) REFERENCES stock_lists(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS manual_ranking_scores (
+                manual_ranking_id INTEGER NOT NULL,
+                ticker TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                score REAL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(manual_ranking_id, ticker),
+                FOREIGN KEY(manual_ranking_id) REFERENCES manual_rankings(id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_scoring_runs_created_at ON scoring_runs(created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_scoring_results_run_score ON scoring_results(run_id, score DESC);
             CREATE INDEX IF NOT EXISTS idx_stock_list_members_position ON stock_list_members(list_id, position);
             CREATE INDEX IF NOT EXISTS idx_scoring_run_companies_position ON scoring_run_companies(run_id, position);
+            CREATE INDEX IF NOT EXISTS idx_manual_ranking_scores_position ON manual_ranking_scores(manual_ranking_id, position);
             """
         )
         columns = {
@@ -733,6 +755,8 @@ def ensure_scoring_schema():
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN minimum_confidence_score REAL")
         if "confidence_run_id" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN confidence_run_id INTEGER")
+        if "manual_ranking_id" not in columns:
+            connection.execute("ALTER TABLE scoring_runs ADD COLUMN manual_ranking_id INTEGER")
         connection.execute(
             """
             UPDATE scoring_runs
@@ -1227,6 +1251,215 @@ def archive_stock_list(list_id):
         )
         connection.commit()
     return cursor.rowcount > 0
+
+
+def normalize_manual_ranking_name(name):
+    name = str(name or "").strip()
+    if not name:
+        raise ValueError("Manual ranking name is required.")
+    if len(name) > 120:
+        raise ValueError("Manual ranking name must be 120 characters or fewer.")
+    return name
+
+
+def get_manual_ranking(ranking_id, include_companies=True):
+    try:
+        ranking_id = int(ranking_id)
+    except (TypeError, ValueError):
+        return None
+    with db_connect() as connection:
+        ranking = connection.execute(
+            """
+            SELECT manual_rankings.id, manual_rankings.name, manual_rankings.stock_list_id,
+                   stock_lists.name AS stock_list_name, manual_rankings.created_at,
+                   manual_rankings.updated_at
+            FROM manual_rankings
+            JOIN stock_lists ON stock_lists.id = manual_rankings.stock_list_id
+            WHERE manual_rankings.id = ? AND manual_rankings.deleted_at IS NULL
+            """,
+            (ranking_id,),
+        ).fetchone()
+        if not ranking:
+            return None
+        rows = connection.execute(
+            """
+            SELECT manual_ranking_scores.ticker, manual_ranking_scores.position,
+                   manual_ranking_scores.score, companies.name, companies.rank,
+                   companies.market_cap, companies.market_cap_value, companies.price,
+                   companies.today, companies.country, companies.logo
+            FROM manual_ranking_scores
+            JOIN companies ON companies.ticker = manual_ranking_scores.ticker
+            WHERE manual_ranking_scores.manual_ranking_id = ?
+            ORDER BY manual_ranking_scores.score IS NULL,
+                     manual_ranking_scores.score DESC,
+                     manual_ranking_scores.position
+            """,
+            (ranking_id,),
+        ).fetchall()
+    payload = dict(ranking)
+    companies = []
+    for row in rows:
+        company = row_to_company(row)
+        company["score"] = row["score"]
+        company["position"] = row["position"]
+        companies.append(company)
+    add_score_percentiles(companies)
+    scored = [company for company in companies if company["score"] is not None]
+    scored.sort(key=lambda company: (-float(company["score"]), company["position"]))
+    rank_by_ticker = {company["ticker"]: index for index, company in enumerate(scored, 1)}
+    for company in companies:
+        company["manual_rank"] = rank_by_ticker.get(company["ticker"])
+    payload["company_count"] = len(companies)
+    payload["scored_count"] = len(scored)
+    if include_companies:
+        payload["companies"] = companies
+    return payload
+
+
+def list_manual_rankings():
+    with db_connect() as connection:
+        ids = [
+            row["id"]
+            for row in connection.execute(
+                "SELECT id FROM manual_rankings WHERE deleted_at IS NULL ORDER BY updated_at DESC, id DESC"
+            ).fetchall()
+        ]
+    return [ranking for ranking_id in ids if (ranking := get_manual_ranking(ranking_id, False))]
+
+
+def create_manual_ranking(name, stock_list_id):
+    name = normalize_manual_ranking_name(name)
+    stock_list = get_stock_list(stock_list_id)
+    if not stock_list:
+        raise ValueError("Choose a saved stock list.")
+    now = int(time.time())
+    with db_connect() as connection:
+        cursor = connection.execute(
+            "INSERT INTO manual_rankings (name, stock_list_id, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (name, int(stock_list_id), now, now),
+        )
+        ranking_id = cursor.lastrowid
+        connection.executemany(
+            """
+            INSERT INTO manual_ranking_scores
+                (manual_ranking_id, ticker, position, score, updated_at)
+            VALUES (?, ?, ?, NULL, ?)
+            """,
+            [
+                (ranking_id, company["ticker"], position, now)
+                for position, company in enumerate(stock_list["companies"])
+            ],
+        )
+        connection.commit()
+    return get_manual_ranking(ranking_id)
+
+
+def update_manual_ranking_score(ranking_id, ticker, score):
+    ranking = get_manual_ranking(ranking_id, False)
+    if not ranking:
+        return None
+    ticker = str(ticker or "").strip().upper()
+    if score in (None, ""):
+        normalized_score = None
+    else:
+        try:
+            normalized_score = float(score)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Score must be a number from 0 to 100.") from exc
+        if not math.isfinite(normalized_score) or not 0 <= normalized_score <= 100:
+            raise ValueError("Score must be a number from 0 to 100.")
+    now = int(time.time())
+    with db_connect() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE manual_ranking_scores
+            SET score = ?, updated_at = ?
+            WHERE manual_ranking_id = ? AND ticker = ?
+            """,
+            (normalized_score, now, int(ranking_id), ticker),
+        )
+        if not cursor.rowcount:
+            raise ValueError("Stock is not part of this manual ranking.")
+        connection.execute(
+            "UPDATE manual_rankings SET updated_at = ? WHERE id = ?",
+            (now, int(ranking_id)),
+        )
+        connection.commit()
+    return get_manual_ranking(ranking_id)
+
+
+def archive_manual_ranking(ranking_id):
+    now = int(time.time())
+    with db_connect() as connection:
+        cursor = connection.execute(
+            "UPDATE manual_rankings SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+            (now, now, ranking_id),
+        )
+        if cursor.rowcount:
+            connection.execute(
+                "UPDATE scoring_runs SET manual_ranking_id = NULL WHERE manual_ranking_id = ?",
+                (ranking_id,),
+            )
+        connection.commit()
+    return cursor.rowcount > 0
+
+
+def pearson_correlation(points):
+    if len(points) < 2:
+        return None
+    left_mean = sum(left for left, _ in points) / len(points)
+    right_mean = sum(right for _, right in points) / len(points)
+    covariance = sum(
+        (left - left_mean) * (right - right_mean) for left, right in points
+    )
+    left_variance = sum((left - left_mean) ** 2 for left, _ in points)
+    right_variance = sum((right - right_mean) ** 2 for _, right in points)
+    denominator = math.sqrt(left_variance * right_variance)
+    return covariance / denominator if denominator else None
+
+
+def manual_ranking_comparison(results, ranking_id):
+    if not ranking_id:
+        return None
+    ranking = get_manual_ranking(ranking_id)
+    if not ranking:
+        return None
+    manual_percentiles = {
+        company["ticker"].upper(): company["score_percentile"]
+        for company in ranking["companies"]
+        if company.get("score_percentile") is not None
+    }
+    points = []
+    for result in results:
+        ticker = str(result.get("ticker") or "").upper()
+        if result.get("score_percentile") is None or ticker not in manual_percentiles:
+            continue
+        points.append((float(result["score_percentile"]), float(manual_percentiles[ticker])))
+    return {
+        "manual_ranking_id": ranking["id"],
+        "name": ranking["name"],
+        "correlation": pearson_correlation(points),
+        "sample_size": len(points),
+    }
+
+
+def set_run_manual_ranking(run_id, ranking_id):
+    if ranking_id in (None, ""):
+        normalized_id = None
+    else:
+        try:
+            normalized_id = int(ranking_id)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Manual ranking not found.") from exc
+        if not get_manual_ranking(normalized_id, False):
+            raise ValueError("Manual ranking not found.")
+    with db_connect() as connection:
+        cursor = connection.execute(
+            "UPDATE scoring_runs SET manual_ranking_id = ? WHERE id = ? AND deleted_at IS NULL",
+            (normalized_id, run_id),
+        )
+        connection.commit()
+    return get_run(run_id) if cursor.rowcount else None
 
 
 def snapshot_run_companies(connection, run_id, companies):
@@ -1763,6 +1996,7 @@ def get_run(run_id, include_raw_response=True):
                    scoring_runs.reasoning_mode, scoring_runs.max_tokens, scoring_runs.stock_list_id,
                    scoring_runs.starred, scoring_runs.run_type,
                    scoring_runs.minimum_confidence_score, scoring_runs.confidence_run_id,
+                   scoring_runs.manual_ranking_id,
                    stock_lists.name AS stock_list_name,
                    scoring_runs.status, scoring_runs.company_count, scoring_runs.completed_count,
                    scoring_runs.failed_count, scoring_runs.queue_count,
@@ -1819,6 +2053,9 @@ def get_run(run_id, include_raw_response=True):
         result["confidence_score"] = current_confidence_scores.get((result["ticker"] or "").upper())
         payload["results"].append(result)
     add_score_percentiles(payload["results"])
+    payload["manual_comparison"] = manual_ranking_comparison(
+        payload["results"], payload.get("manual_ranking_id")
+    )
     payload["model_details"] = model_details(run["model"], run["reasoning_mode"])
     payload["stats"] = ai_request_stats_for_run(run_id, run["max_tokens"])
     payload["stats"]["recent_average_latency_ms"] = recent_average_latency_ms(run["model"])
@@ -3554,6 +3791,21 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"lists": list_stock_lists()})
             return
 
+        if parsed.path == "/api/manual-rankings":
+            ensure_scoring_schema()
+            self.send_json({"rankings": list_manual_rankings()})
+            return
+
+        manual_ranking_match = re.fullmatch(r"/api/manual-rankings/(\d+)", parsed.path)
+        if manual_ranking_match:
+            ensure_scoring_schema()
+            ranking = get_manual_ranking(int(manual_ranking_match.group(1)))
+            if not ranking:
+                self.send_json({"error": "Manual ranking not found"}, 404)
+                return
+            self.send_json({"ranking": ranking})
+            return
+
         if parsed.path == "/api/confidence-scores":
             ensure_scoring_schema()
             self.send_json(latest_confidence_scores())
@@ -3688,6 +3940,36 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, 500)
             return
 
+        if parsed.path == "/api/manual-rankings":
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                ranking = create_manual_ranking(payload.get("name"), payload.get("stockListId"))
+                self.send_json({"ranking": ranking}, 201)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
+        manual_comparison_match = re.fullmatch(r"/api/runs/(\d+)/manual-ranking", parsed.path)
+        if manual_comparison_match:
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                run = set_run_manual_ranking(
+                    int(manual_comparison_match.group(1)), payload.get("manualRankingId")
+                )
+                if not run:
+                    self.send_json({"error": "Run not found"}, 404)
+                    return
+                self.send_json({"run": run})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
         if parsed.path == "/api/portfolios/preview":
             ensure_scoring_schema()
             try:
@@ -3804,6 +4086,28 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_PATCH(self):
         parsed = urlparse(self.path)
+        manual_score_match = re.fullmatch(
+            r"/api/manual-rankings/(\d+)/scores/([^/]+)", parsed.path
+        )
+        if manual_score_match:
+            ensure_scoring_schema()
+            try:
+                payload = self.read_json()
+                ranking = update_manual_ranking_score(
+                    int(manual_score_match.group(1)),
+                    unquote(manual_score_match.group(2)),
+                    payload.get("score"),
+                )
+                if not ranking:
+                    self.send_json({"error": "Manual ranking not found"}, 404)
+                    return
+                self.send_json({"ranking": ranking})
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, 500)
+            return
+
         if parsed.path == "/api/preferences/run-table-columns":
             ensure_scoring_schema()
             try:
@@ -3887,6 +4191,16 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         parsed = urlparse(self.path)
+        manual_ranking_match = re.fullmatch(r"/api/manual-rankings/(\d+)", parsed.path)
+        if manual_ranking_match:
+            ensure_scoring_schema()
+            archived = archive_manual_ranking(int(manual_ranking_match.group(1)))
+            if not archived:
+                self.send_json({"error": "Manual ranking not found"}, 404)
+                return
+            self.send_json({"archived": True})
+            return
+
         stock_list_match = re.fullmatch(r"/api/stock-lists/(\d+)", parsed.path)
         if stock_list_match:
             ensure_scoring_schema()

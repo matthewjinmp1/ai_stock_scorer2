@@ -97,6 +97,16 @@
 
       <p id="status" class="status" role="status"></p>
 
+      <section class="prompt-editor run-comparison-panel" aria-label="Manual ranking comparison">
+        <label>
+          <span>Compare to manual ranking</span>
+          <select id="manualComparisonSelect">
+            <option value="">No manual comparison</option>
+          </select>
+        </label>
+        <p id="manualComparisonStatus" class="status" role="status"></p>
+      </section>
+
       <section class="metric-grid run-metric-grid" aria-label="Run summary">
         <article class="metric-card">
           <span>Model</span>
@@ -155,6 +165,11 @@
         <article class="metric-card">
           <span>Median Score</span>
           <strong id="statMedianScore">--</strong>
+        </article>
+        <article class="metric-card">
+          <span>Manual Rank Correlation</span>
+          <strong id="statManualCorrelation">--</strong>
+          <small id="statManualCorrelationNote" class="metric-note">Select a manual ranking</small>
         </article>
         <article class="metric-card">
           <span>Score Variance Explained by Size</span>

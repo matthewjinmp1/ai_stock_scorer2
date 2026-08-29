@@ -49,6 +49,10 @@ const statLatency = document.querySelector("#statLatency");
 const statScoreRange = document.querySelector("#statScoreRange");
 const statAverageScore = document.querySelector("#statAverageScore");
 const statMedianScore = document.querySelector("#statMedianScore");
+const statManualCorrelation = document.querySelector("#statManualCorrelation");
+const statManualCorrelationNote = document.querySelector("#statManualCorrelationNote");
+const manualComparisonSelect = document.querySelector("#manualComparisonSelect");
+const manualComparisonStatus = document.querySelector("#manualComparisonStatus");
 const statSizeScoreCorrelation = document.querySelector("#statSizeScoreCorrelation");
 const statSizeScoreCorrelationNote = document.querySelector("#statSizeScoreCorrelationNote");
 const statRequests = document.querySelector("#statRequests");
@@ -104,6 +108,7 @@ let currentRunId = params.get("id");
 let pollTimer = null;
 let etaTimer = null;
 let currentRun = null;
+let manualRankings = [];
 let initialRunEditorUniverse = "top";
 let etaState = null;
 const requestedSortKey = params.get("sort") === "outputTokens" ? "responseTokens" : params.get("sort");
@@ -489,6 +494,46 @@ function numericScores(run) {
     .filter((score) => Number.isFinite(score));
 }
 
+async function loadManualComparisonOptions() {
+  const response = await fetch("/api/manual-rankings", { cache: "no-store" });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "Could not load manual rankings");
+  manualRankings = payload.rankings || [];
+  manualComparisonSelect.innerHTML = '<option value="">No manual comparison</option>';
+  for (const ranking of manualRankings) {
+    const option = document.createElement("option");
+    option.value = String(ranking.id);
+    option.textContent = `${ranking.name} (${ranking.scored_count}/${ranking.company_count} scored)`;
+    manualComparisonSelect.append(option);
+  }
+}
+
+async function saveManualComparison() {
+  if (!currentRun) return;
+  manualComparisonSelect.disabled = true;
+  manualComparisonStatus.textContent = "Updating comparison...";
+  try {
+    const response = await fetch(`/api/runs/${currentRun.id}/manual-ranking`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ manualRankingId: manualComparisonSelect.value || null }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "Could not update manual comparison");
+    currentRun.manual_ranking_id = payload.run.manual_ranking_id;
+    currentRun.manual_comparison = payload.run.manual_comparison;
+    renderRunStats(currentRun);
+    manualComparisonStatus.textContent = currentRun.manual_comparison
+      ? `Comparing ${currentRun.manual_comparison.sample_size} overlapping stocks.`
+      : "Manual comparison cleared.";
+  } catch (error) {
+    manualComparisonStatus.textContent = error.message;
+    manualComparisonSelect.value = currentRun.manual_ranking_id || "";
+  } finally {
+    manualComparisonSelect.disabled = false;
+  }
+}
+
 function renderRunStats(run) {
   const stats = run.stats || {};
   const model = run.model_details || {};
@@ -551,6 +596,14 @@ function renderRunStats(run) {
     minScore === null ? "--" : `${formatScore(minScore)}-${formatScore(maxScore)}`;
   statAverageScore.textContent = averageScore === null ? "--" : formatScore(averageScore);
   statMedianScore.textContent = medianScore === null ? "--" : formatScore(medianScore);
+  const manualComparison = run.manual_comparison;
+  const manualCorrelation = Number(manualComparison?.correlation);
+  statManualCorrelation.textContent = Number.isFinite(manualCorrelation)
+    ? manualCorrelation.toFixed(3)
+    : "--";
+  statManualCorrelationNote.textContent = manualComparison
+    ? `${manualComparison.name} · ${formatNumber(manualComparison.sample_size)} overlapping stocks`
+    : "Select a manual ranking";
   const rawSizeScoreCorrelation = scoreStats.size_score_correlation;
   const sizeScoreCorrelation = rawSizeScoreCorrelation === null || rawSizeScoreCorrelation === undefined
     ? NaN
@@ -1184,6 +1237,10 @@ async function redriveFailedStock(ticker, button) {
 
 function renderRun(run) {
   currentRun = run;
+  manualComparisonSelect.value = run.manual_ranking_id ? String(run.manual_ranking_id) : "";
+  manualComparisonStatus.textContent = run.manual_comparison
+    ? `Comparing ${run.manual_comparison.sample_size} overlapping stocks.`
+    : "";
   runTitle.textContent = run.name || `Run #${run.id}`;
   runPrompt.textContent = run.prompt;
   runStatus.textContent = `${run.status} ${progress(run)}`;
@@ -1326,6 +1383,7 @@ async function stopCurrentRun() {
 }
 
 stopButton.addEventListener("click", stopCurrentRun);
+manualComparisonSelect.addEventListener("change", saveManualComparison);
 editRunButton.addEventListener("click", showRunEditor);
 copyRunButton.addEventListener("click", copyCurrentRun);
 extendButton.addEventListener("click", extendCurrentRun);
@@ -1389,6 +1447,7 @@ try {
   syncScoreFilterInputs();
   rankingSearchInput.value = rankingSearchQuery;
   startEtaTimer();
+  await loadManualComparisonOptions();
   await loadCurrentRun();
 } catch (error) {
   statusEl.textContent = error.message;
