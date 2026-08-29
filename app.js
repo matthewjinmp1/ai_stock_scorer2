@@ -68,6 +68,7 @@ let runSnapshotUniverse = null;
 let confidenceRuns = [];
 let pinnedConfidenceRunId = null;
 let companySort = { key: "rank", direction: "asc" };
+let availableModels = [];
 
 function resizePromptInput() {
   promptInput.style.height = "auto";
@@ -626,23 +627,34 @@ function loadNextStockPickerPageIfNeeded() {
 
 async function loadModels() {
   const payload = await fetchJson("/api/models");
+  availableModels = payload.models || [];
   modelSelect.innerHTML = "";
-  reasoningSelect.innerHTML = "";
-  for (const model of payload.models) {
+  for (const model of availableModels) {
     const option = document.createElement("option");
     option.value = model.id;
     option.textContent = model.label;
     modelSelect.append(option);
   }
-  for (const mode of payload.reasoning_modes || []) {
+  modelSelect.value = payload.default;
+  renderReasoningModes(payload.default_reasoning_mode);
+  maxTokensInput.value = String(payload.default_max_tokens || 200);
+}
+
+function renderReasoningModes(preferredMode = null) {
+  const model = availableModels.find((option) => option.id === modelSelect.value);
+  const modes = model?.reasoning_modes || [];
+  reasoningSelect.innerHTML = "";
+  for (const mode of modes) {
     const option = document.createElement("option");
     option.value = mode.id;
     option.textContent = mode.label;
     reasoningSelect.append(option);
   }
-  modelSelect.value = payload.default;
-  reasoningSelect.value = payload.default_reasoning_mode || "none";
-  maxTokensInput.value = String(payload.default_max_tokens || 200);
+  const validPreferredMode = modes.some((mode) => mode.id === preferredMode);
+  reasoningSelect.value = validPreferredMode
+    ? preferredMode
+    : (model?.default_reasoning_mode || modes[0]?.id || "");
+  reasoningSelect.disabled = modes.length <= 1;
 }
 
 async function loadStockLists(preferredUniverseValue = universeSelect.value) {
@@ -833,9 +845,15 @@ async function prefillFromRun(runId) {
     option.value = run.model;
     option.textContent = run.model_details?.label || run.model;
     modelSelect.append(option);
+    availableModels.push({
+      id: run.model,
+      label: run.model_details?.label || run.model,
+      reasoning_modes: run.model_details?.reasoning_modes || [],
+      default_reasoning_mode: run.model_details?.default_reasoning_mode,
+    });
   }
   modelSelect.value = run.model;
-  reasoningSelect.value = run.reasoning_mode || "none";
+  renderReasoningModes(run.model_details?.reasoning_mode || run.reasoning_mode);
 
   if (run.stock_list_id) {
     runSnapshotUniverse = {
@@ -1078,6 +1096,7 @@ for (const tab of homeTabs) {
 }
 window.addEventListener("hashchange", () => selectHomeTab(activeTabFromHash(), false));
 universeSelect.addEventListener("change", updateUniverseControls);
+modelSelect.addEventListener("change", () => renderReasoningModes());
 companyCountInput.addEventListener("input", () => {
   if (!selectedUniverse()) topCompanyCount = Number(companyCountInput.value) || topCompanyCount;
 });

@@ -346,8 +346,44 @@ class PromptAndParsingTests(ServerTestCase):
     def test_luna_xhigh_model_and_reasoning_settings(self):
         self.assertEqual(server.normalize_model("openai/gpt-5.6-luna"), "openai/gpt-5.6-luna")
         self.assertEqual(
-            server.reasoning_config("xhigh")["reasoning"],
+            server.reasoning_config("xhigh", "openai/gpt-5.6-luna")["reasoning"],
             {"effort": "xhigh", "exclude": False},
+        )
+
+    def test_reasoning_modes_are_specific_to_each_model(self):
+        expected_modes = {
+            "deepseek/deepseek-v4-flash-0731": ["none", "low", "high", "max"],
+            "z-ai/glm-5.3-flash": ["low", "high", "max"],
+            "openai/gpt-5.6-luna": ["none", "low", "medium", "high", "xhigh", "max"],
+            "xiaomi/mimo-v2.5": ["none", "default"],
+            "nvidia/nemotron-3-ultra-550b-a55b:free": ["none", "medium", "high"],
+        }
+        for model, expected in expected_modes.items():
+            with self.subTest(model=model):
+                self.assertEqual(
+                    [mode["id"] for mode in server.reasoning_options(model)],
+                    expected,
+                )
+
+    def test_reasoning_defaults_follow_model_metadata(self):
+        self.assertEqual(server.default_reasoning_mode("deepseek/deepseek-v4-flash-0731"), "high")
+        self.assertEqual(server.default_reasoning_mode("z-ai/glm-5.3-flash"), "max")
+        self.assertEqual(server.default_reasoning_mode("openai/gpt-5.6-luna"), "medium")
+        self.assertEqual(server.default_reasoning_mode("xiaomi/mimo-v2.5"), "none")
+        self.assertEqual(server.default_reasoning_mode("nvidia/nemotron-3-ultra-550b-a55b:free"), "high")
+
+    def test_mandatory_reasoning_model_rejects_non_reasoning(self):
+        with self.assertRaisesRegex(ValueError, "not available for this model"):
+            server.normalize_reasoning_mode("none", "z-ai/glm-5.3-flash")
+
+    def test_mimo_uses_enabled_flag_instead_of_unsupported_effort(self):
+        self.assertEqual(
+            server.reasoning_config("default", "xiaomi/mimo-v2.5")["reasoning"],
+            {"enabled": True, "exclude": False},
+        )
+        self.assertEqual(
+            server.reasoning_config("none", "xiaomi/mimo-v2.5")["reasoning"],
+            {"enabled": False, "exclude": False},
         )
 
     def test_luna_xhigh_request_payload(self):

@@ -45,6 +45,12 @@ MODEL_OPTIONS = [
     {
         "id": "deepseek/deepseek-v4-flash-0731",
         "label": "DeepSeek V4 Flash 0731",
+        "reasoning": {
+            "mandatory": False,
+            "default_enabled": True,
+            "supported_efforts": ["max", "high", "low"],
+            "default_effort": "high",
+        },
         "provider": {
             "require_parameters": True,
         },
@@ -52,6 +58,12 @@ MODEL_OPTIONS = [
     {
         "id": "z-ai/glm-5.3-flash",
         "label": "GLM 5.3 Flash",
+        "reasoning": {
+            "mandatory": True,
+            "default_enabled": True,
+            "supported_efforts": ["max", "high", "low"],
+            "default_effort": "max",
+        },
         "provider": {
             "require_parameters": True,
         },
@@ -60,6 +72,12 @@ MODEL_OPTIONS = [
         "id": "openai/gpt-5.6-luna",
         "label": "GPT-5.6 Luna",
         "supports_temperature": False,
+        "reasoning": {
+            "mandatory": False,
+            "default_enabled": True,
+            "supported_efforts": ["max", "xhigh", "high", "medium", "low", "none"],
+            "default_effort": "medium",
+        },
         "provider": {
             "require_parameters": True,
         },
@@ -67,6 +85,10 @@ MODEL_OPTIONS = [
     {
         "id": "xiaomi/mimo-v2.5",
         "label": "Xiaomi MiMo V2.5",
+        "reasoning": {
+            "mandatory": False,
+            "default_enabled": False,
+        },
         "provider": {
             "require_parameters": True,
         },
@@ -74,6 +96,12 @@ MODEL_OPTIONS = [
     {
         "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
         "label": "NVIDIA Nemotron 3 Ultra (free)",
+        "reasoning": {
+            "mandatory": False,
+            "default_enabled": True,
+            "supported_efforts": ["high", "medium"],
+            "default_effort": "high",
+        },
         "provider": {
             "require_parameters": True,
         },
@@ -83,31 +111,28 @@ LEGACY_MODEL_OPTIONS = [
     {
         "id": "deepseek/deepseek-v4-flash",
         "label": "DeepSeek V4 Flash (legacy)",
+        "reasoning": {
+            "mandatory": False,
+            "default_enabled": True,
+            "supported_efforts": ["xhigh", "high"],
+            "default_effort": "high",
+        },
         "provider": {
             "require_parameters": True,
         },
     },
 ]
 ALL_MODEL_OPTIONS = MODEL_OPTIONS + LEGACY_MODEL_OPTIONS
-REASONING_OPTIONS = [
-    {
-        "id": "none",
-        "label": "Non-reasoning",
-        "reasoning": {"effort": "none", "exclude": False},
-    },
-    {
-        "id": "medium",
-        "label": "Reasoning",
-        "reasoning": {"effort": "medium", "exclude": False},
-    },
-    {
-        "id": "xhigh",
-        "label": "XHigh reasoning",
-        "reasoning": {"effort": "xhigh", "exclude": False},
-    },
-]
+REASONING_EFFORT_ORDER = ("none", "low", "medium", "high", "xhigh", "max")
+REASONING_EFFORT_LABELS = {
+    "none": "Non-reasoning",
+    "low": "Low reasoning",
+    "medium": "Medium reasoning",
+    "high": "High reasoning",
+    "xhigh": "XHigh reasoning",
+    "max": "Max reasoning",
+}
 DEFAULT_OPENROUTER_MODEL = MODEL_OPTIONS[0]["id"]
-DEFAULT_REASONING_MODE = REASONING_OPTIONS[0]["id"]
 DEFAULT_SCORING_COMPANY_COUNT = 10
 DEFAULT_SCORING_CONCURRENCY = 20
 OPENROUTER_MAX_TOKENS = int(os.environ.get("OPENROUTER_MAX_TOKENS", "200"))
@@ -186,19 +211,62 @@ load_env_file()
 
 
 def openrouter_model_options():
-    return MODEL_OPTIONS
+    return [
+        {
+            **option,
+            "reasoning_modes": reasoning_options(option["id"]),
+            "default_reasoning_mode": default_reasoning_mode(option["id"]),
+        }
+        for option in MODEL_OPTIONS
+    ]
 
 
 def openrouter_model():
     return DEFAULT_OPENROUTER_MODEL
 
 
-def reasoning_options():
-    return REASONING_OPTIONS
+def reasoning_options(model=None):
+    config = model_config(model or DEFAULT_OPENROUTER_MODEL)
+    capability = config.get("reasoning") or {}
+    mandatory = bool(capability.get("mandatory"))
+    supported_efforts = capability.get("supported_efforts")
+    options = []
+    if not mandatory:
+        options.append(
+            {
+                "id": "none",
+                "label": REASONING_EFFORT_LABELS["none"],
+                "reasoning": {"enabled": False, "exclude": False},
+            }
+        )
+    if supported_efforts:
+        for effort in REASONING_EFFORT_ORDER:
+            if effort == "none" or effort not in supported_efforts:
+                continue
+            options.append(
+                {
+                    "id": effort,
+                    "label": REASONING_EFFORT_LABELS[effort],
+                    "reasoning": {"effort": effort, "exclude": False},
+                }
+            )
+    else:
+        options.append(
+            {
+                "id": "default",
+                "label": "Reasoning",
+                "reasoning": {"enabled": True, "exclude": False},
+            }
+        )
+    return options
 
 
-def default_reasoning_mode():
-    return DEFAULT_REASONING_MODE
+def default_reasoning_mode(model=None):
+    config = model_config(model or DEFAULT_OPENROUTER_MODEL)
+    capability = config.get("reasoning") or {}
+    if capability.get("mandatory") or capability.get("default_enabled"):
+        return capability.get("default_effort") or "default"
+    return "none"
 
 
 def normalize_model(model):
@@ -214,17 +282,30 @@ def model_config(model):
     return next(option for option in ALL_MODEL_OPTIONS if option["id"] == normalized)
 
 
-def normalize_reasoning_mode(reasoning_mode):
-    requested = (reasoning_mode or DEFAULT_REASONING_MODE).strip()
-    allowed = {option["id"] for option in REASONING_OPTIONS}
+def normalize_reasoning_mode(reasoning_mode, model=None):
+    normalized_model = normalize_model(model)
+    requested = (reasoning_mode or default_reasoning_mode(normalized_model)).strip()
+    allowed = {option["id"] for option in reasoning_options(normalized_model)}
     if requested not in allowed:
-        raise ValueError("Selected reasoning mode is not available.")
+        raise ValueError("Selected reasoning mode is not available for this model.")
     return requested
 
 
-def reasoning_config(reasoning_mode):
-    normalized = normalize_reasoning_mode(reasoning_mode)
-    return next(option for option in REASONING_OPTIONS if option["id"] == normalized)
+def compatible_reasoning_mode(reasoning_mode, model=None):
+    try:
+        return normalize_reasoning_mode(reasoning_mode, model)
+    except ValueError:
+        return default_reasoning_mode(model)
+
+
+def reasoning_config(reasoning_mode, model=None, allow_fallback=False):
+    normalized_model = normalize_model(model)
+    normalized = (
+        compatible_reasoning_mode(reasoning_mode, normalized_model)
+        if allow_fallback
+        else normalize_reasoning_mode(reasoning_mode, normalized_model)
+    )
+    return next(option for option in reasoning_options(normalized_model) if option["id"] == normalized)
 
 
 def provider_slug(provider):
@@ -306,13 +387,15 @@ def provider_preferences(config):
 
 def model_details(model, reasoning_mode=None):
     config = model_config(model)
-    reasoning = reasoning_config(reasoning_mode)
+    reasoning = reasoning_config(reasoning_mode, config["id"], allow_fallback=True)
     return {
         "id": config["id"],
         "label": config["label"],
         "reasoning_mode": reasoning["id"],
         "reasoning_label": reasoning["label"],
         "reasoning": reasoning["reasoning"],
+        "reasoning_modes": reasoning_options(config["id"]),
+        "default_reasoning_mode": default_reasoning_mode(config["id"]),
         "provider": provider_preferences(config),
     }
 
@@ -1771,7 +1854,7 @@ def create_scoring_run(
     name = normalize_run_name(name)
     prompt = normalize_scoring_prompt(prompt)
     model = normalize_model(model)
-    reasoning_mode = normalize_reasoning_mode(reasoning_mode)
+    reasoning_mode = normalize_reasoning_mode(reasoning_mode, model)
     max_tokens = normalize_max_tokens(max_tokens)
     run_type = str(run_type or "scoring").strip().lower()
     if run_type not in ("scoring", "confidence"):
@@ -2447,8 +2530,8 @@ def ai_request_costs_by_run():
 
 def cost_estimate(model, company_count, reasoning_mode=None):
     model = normalize_model(model)
-    reasoning_mode = normalize_reasoning_mode(reasoning_mode)
-    selected_reasoning = reasoning_config(reasoning_mode)["reasoning"]
+    reasoning_mode = normalize_reasoning_mode(reasoning_mode, model)
+    selected_reasoning = reasoning_config(reasoning_mode, model)["reasoning"]
     company_count = normalize_company_count(company_count)
     costs = []
     for entry in ai_request_entries():
@@ -2457,7 +2540,11 @@ def cost_estimate(model, company_count, reasoning_mode=None):
             continue
         if (entry.get("response", {}).get("cache") or {}).get("status") == "HIT":
             continue
-        if (request.get("reasoning") or reasoning_config(DEFAULT_REASONING_MODE)["reasoning"]) != selected_reasoning:
+        fallback_reasoning = reasoning_config(
+            default_reasoning_mode(model),
+            model,
+        )["reasoning"]
+        if (request.get("reasoning") or fallback_reasoning) != selected_reasoning:
             continue
         token_stats = entry.get("token_stats") or {}
         try:
@@ -3349,7 +3436,8 @@ def response_provider(response_payload):
 
 def maybe_block_reasoning_provider(run_id, company, request_payload, response_payload):
     reasoning = request_payload.get("reasoning") or {}
-    if reasoning.get("effort") != "none":
+    reasoning_disabled = reasoning.get("enabled") is False or reasoning.get("effort") == "none"
+    if not reasoning_disabled:
         return
     tokens = reasoning_token_count(response_payload)
     if tokens <= 0:
@@ -3403,7 +3491,7 @@ def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, ma
         raise RuntimeError("OPENROUTER_KEY is not set")
 
     config = model_config(model)
-    reasoning = reasoning_config(reasoning_mode)["reasoning"]
+    reasoning = reasoning_config(reasoning_mode, config["id"], allow_fallback=True)["reasoning"]
     request_payload = {
         "model": config["id"],
         "messages": [
@@ -3844,8 +3932,8 @@ class Handler(SimpleHTTPRequestHandler):
                 {
                     "models": openrouter_model_options(),
                     "default": openrouter_model(),
-                    "reasoning_modes": reasoning_options(),
-                    "default_reasoning_mode": default_reasoning_mode(),
+                    "reasoning_modes": reasoning_options(openrouter_model()),
+                    "default_reasoning_mode": default_reasoning_mode(openrouter_model()),
                     "default_max_tokens": openrouter_max_tokens(),
                 }
             )
@@ -4103,7 +4191,7 @@ class Handler(SimpleHTTPRequestHandler):
                     return
                 prompt = normalize_scoring_prompt(payload.get("prompt"))
                 model = normalize_model(payload.get("model"))
-                reasoning_mode = normalize_reasoning_mode(payload.get("reasoningMode"))
+                reasoning_mode = normalize_reasoning_mode(payload.get("reasoningMode"), model)
                 run_id = create_scoring_run(
                     name,
                     prompt,
