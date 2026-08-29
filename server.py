@@ -50,6 +50,13 @@ MODEL_OPTIONS = [
         },
     },
     {
+        "id": "z-ai/glm-5.3-flash",
+        "label": "GLM 5.3 Flash",
+        "provider": {
+            "require_parameters": True,
+        },
+    },
+    {
         "id": "openai/gpt-5.6-luna",
         "label": "GPT-5.6 Luna",
         "supports_temperature": False,

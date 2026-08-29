@@ -340,6 +340,9 @@ class ConfidenceScoreTests(ServerTestCase):
 
 
 class PromptAndParsingTests(ServerTestCase):
+    def test_glm_5_3_flash_model(self):
+        self.assertEqual(server.normalize_model("z-ai/glm-5.3-flash"), "z-ai/glm-5.3-flash")
+
     def test_luna_xhigh_model_and_reasoning_settings(self):
         self.assertEqual(server.normalize_model("openai/gpt-5.6-luna"), "openai/gpt-5.6-luna")
         self.assertEqual(
