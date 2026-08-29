@@ -994,6 +994,48 @@ button:disabled {
   display: none;
 }
 
+.providers-table-wrap[hidden] {
+  display: none;
+}
+
+.table-display-tools[hidden],
+.pagination[hidden] {
+  display: none;
+}
+
+.provider-stats-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.provider-stats-table th,
+.provider-stats-table td {
+  padding: 17px 12px;
+  overflow-wrap: anywhere;
+}
+
+.provider-stats-table th:first-child,
+.provider-stats-table td:first-child {
+  width: 18%;
+}
+
+.provider-stats-table th:nth-child(6),
+.provider-stats-table td:nth-child(6) {
+  width: 15%;
+}
+
+.provider-name {
+  font-weight: 850;
+}
+
+.provider-stats-note {
+  margin: 0;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
 .score-stepper {
   display: flex;
   gap: 8px;

@@ -200,6 +200,15 @@
           data-result-view="failed"
           tabindex="-1"
         >Failed <span id="failedTabCount">0</span></button>
+        <button
+          id="providersTab"
+          class="result-view-tab"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          data-result-view="providers"
+          tabindex="-1"
+        >Providers <span id="providersTabCount">0</span></button>
       </nav>
 
       <section id="failedActions" class="failed-actions" hidden aria-label="Failed response actions">
@@ -290,6 +299,15 @@
           </thead>
           <tbody id="resultRows"></tbody>
         </table>
+      </section>
+      <section id="providersTableWrap" class="table-wrap providers-table-wrap" aria-label="Provider statistics" hidden>
+        <table id="providersTable" class="provider-stats-table">
+          <thead><tr></tr></thead>
+          <tbody id="providerRows"></tbody>
+        </table>
+        <p class="provider-stats-note">
+          Not reported means the request ended before OpenRouter returned a provider name. Trace visibility only counts reasoning text exposed by the model API.
+        </p>
       </section>
       <nav id="resultsPagination" class="pagination" aria-label="Run result pages">
         <button id="resultsPreviousButton" class="secondary-button" type="button">Previous</button>

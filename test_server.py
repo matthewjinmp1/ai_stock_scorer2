@@ -451,6 +451,66 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertEqual(stats["average_reasoning_tokens"], 10.0)
         self.assertEqual(stats["average_total_tokens"], 125.0)
 
+    def test_provider_stats_group_requests_and_trace_visibility(self):
+        entries = [
+            {
+                "run_id": 7,
+                "company": {"ticker": "AAA"},
+                "response": {
+                    "success": True,
+                    "provider": "Provider One",
+                    "reasoning": "Visible trace",
+                    "cache": {"status": "MISS"},
+                },
+                "timing": {"duration_ms": 1000},
+                "token_stats": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 30,
+                    "total_tokens": 40,
+                    "cost": 0.001,
+                    "completion_tokens_details": {"reasoning_tokens": 20},
+                },
+            },
+            {
+                "run_id": 7,
+                "company": {"ticker": "BBB"},
+                "response": {
+                    "success": False,
+                    "provider": "Provider One",
+                    "cache": {"status": "HIT"},
+                },
+                "timing": {"duration_ms": 3000},
+                "token_stats": {},
+            },
+            {
+                "run_id": 7,
+                "company": {"ticker": "CCC"},
+                "response": {"success": False},
+                "timing": {"duration_ms": 500},
+                "token_stats": {},
+            },
+            {"run_id": 8, "response": {"success": True, "provider": "Other"}},
+        ]
+
+        with mock.patch.object(server, "ai_request_entries", return_value=entries):
+            stats = server.provider_stats_for_run(7)
+
+        self.assertEqual([row["provider"] for row in stats], ["Provider One", "Not reported"])
+        provider = stats[0]
+        self.assertEqual(provider["request_count"], 2)
+        self.assertEqual(provider["stock_count"], 2)
+        self.assertEqual(provider["successful_request_count"], 1)
+        self.assertEqual(provider["failed_request_count"], 1)
+        self.assertEqual(provider["success_rate_percent"], 50.0)
+        self.assertEqual(provider["response_tokens"], 20)
+        self.assertEqual(provider["reasoning_tokens"], 40)
+        self.assertEqual(provider["total_tokens"], 80)
+        self.assertEqual(provider["cost"], 0.001)
+        self.assertEqual(provider["average_latency_ms"], 2000)
+        self.assertEqual(provider["reasoning_trace_visible_count"], 1)
+        self.assertEqual(provider["reasoning_trace_visible_percent"], 100.0)
+        self.assertEqual(provider["cache_hit_count"], 1)
+
     def test_token_limit_risk_uses_successful_completion_distribution(self):
         risk = server.estimate_token_limit_failure_risk(
             [180, 220, 250, 290, 330, 380, 450, 540, 680, 850],

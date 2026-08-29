@@ -67,7 +67,12 @@ const resultsTableWrap = document.querySelector("#resultsTableWrap");
 const rankingTable = document.querySelector(".ranking-table");
 const rankingTabCount = document.querySelector("#rankingTabCount");
 const failedTabCount = document.querySelector("#failedTabCount");
+const providersTabCount = document.querySelector("#providersTabCount");
 const failedActions = document.querySelector("#failedActions");
+const tableDisplayTools = document.querySelector(".table-display-tools");
+const providersTableWrap = document.querySelector("#providersTableWrap");
+const providersTableElement = document.querySelector("#providersTable");
+const providerRows = document.querySelector("#providerRows");
 const columnSelector = document.querySelector("#columnSelector");
 const columnSelectorOptions = document.querySelector("#columnSelectorOptions");
 const resetColumnsButton = document.querySelector("#resetColumnsButton");
@@ -75,6 +80,7 @@ const resetColumnOrderButton = document.querySelector("#resetColumnOrderButton")
 const resultsPreviousButton = document.querySelector("#resultsPreviousButton");
 const resultsNextButton = document.querySelector("#resultsNextButton");
 const resultsPageStatus = document.querySelector("#resultsPageStatus");
+const resultsPagination = document.querySelector("#resultsPagination");
 
 const SORT_KEYS = new Set([
   "scoreRank",
@@ -93,7 +99,7 @@ const SORT_KEYS = new Set([
   "error",
 ]);
 const SORT_DIRECTIONS = new Set(["asc", "desc"]);
-const RESULT_VIEWS = new Set(["ranking", "failed"]);
+const RESULT_VIEWS = new Set(["ranking", "failed", "providers"]);
 const LEGACY_COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v6";
 const COLUMN_STORAGE_KEYS = {
   ranking: "ai-stock-scorer-visible-ranking-columns-v1",
@@ -186,6 +192,33 @@ const runResultsTable = new DataTable({
     { key: "dashboard", label: "Stock Dashboard", cellClass: "search-cell", render: (result) => `<button class="details-link" type="button" data-navigation-url="${escapeHtml(`http://localhost:3000/?ticker=${encodeURIComponent(result.ticker)}`)}" title="Open stock dashboard">Dashboard</button>` },
     { key: "actions", label: "Details", cellClass: "details-cell", render: (result) => `<button class="details-link" type="button" data-details-url="${resultUrl(result)}">Details</button>` },
     { key: "redrive", label: "Redrive", configurable: false, pinned: "end", cellClass: "failed-redrive-column table-action-cell", available: (_context, view) => view === "failed", render: (result) => `<button class="details-link row-redrive-button" type="button" data-redrive-ticker="${escapeHtml(result.ticker)}" ${canStop(currentRun) ? "disabled" : ""}>Redrive</button>` },
+  ],
+});
+
+const providerStatsTable = new DataTable({
+  table: providersTableElement,
+  body: providerRows,
+  columns: [
+    { key: "provider", label: "Provider", render: (row) => `<span class="provider-name">${escapeHtml(row.provider)}</span>` },
+    { key: "requests", label: "Requests", render: (row) => formatNumber(row.request_count) },
+    { key: "stocks", label: "Stocks", render: (row) => formatNumber(row.stock_count) },
+    {
+      key: "success",
+      label: "Success",
+      render: (row) => `${formatNumber(row.successful_request_count)}/${formatNumber(row.request_count)} (${formatPercent(row.success_rate_percent)})`,
+    },
+    { key: "tokens", label: "Total Tokens", render: (row) => formatNumber(row.total_tokens) },
+    { key: "reasoning", label: "Reasoning Tokens", render: (row) => formatNumber(row.reasoning_tokens) },
+    { key: "cost", label: "Cost", render: (row) => formatCompactCents(row.cost) },
+    { key: "latency", label: "Avg Time", render: (row) => formatCompactSeconds(row.average_latency_ms) },
+    {
+      key: "trace",
+      label: "Trace Visible",
+      render: (row) => row.successful_request_count
+        ? `${formatNumber(row.reasoning_trace_visible_count)}/${formatNumber(row.successful_request_count)} (${formatPercent(row.reasoning_trace_visible_percent)})`
+        : "--",
+    },
+    { key: "cache", label: "Cache Hits", render: (row) => formatNumber(row.cache_hit_count) },
   ],
 });
 
@@ -700,6 +733,7 @@ function updateResultViewTabs(run) {
   const counts = run.result_page?.counts;
   rankingTabCount.textContent = String(counts?.ranking ?? resultsForView(run, "ranking").length);
   failedTabCount.textContent = String(counts?.failed ?? resultsForView(run, "failed").length);
+  providersTabCount.textContent = String((run.provider_stats || []).length);
 
   document.querySelectorAll("[data-result-view]").forEach((button) => {
     const isActive = button.dataset.resultView === activeResultView;
@@ -709,6 +743,11 @@ function updateResultViewTabs(run) {
   });
   scoreFilterToolbar.hidden = activeResultView !== "ranking";
   failedActions.hidden = activeResultView !== "failed";
+  const showingProviders = activeResultView === "providers";
+  tableDisplayTools.hidden = showingProviders;
+  resultsTableWrap.hidden = showingProviders;
+  resultsPagination.hidden = showingProviders;
+  providersTableWrap.hidden = !showingProviders;
   rankingTable.classList.toggle("ranking-view", activeResultView === "ranking");
   rankingTable.classList.toggle("failed-view", activeResultView === "failed");
   resultsTableWrap.setAttribute(
@@ -722,6 +761,10 @@ function setResultView(view) {
   activeResultView = view;
   currentPage = 1;
   saveRunViewState();
+  if (view === "providers") {
+    if (currentRun) loadCurrentRun();
+    return;
+  }
   runResultsTable.setScope(view, { ...runResultsTable.context, view }).then(() => {
     if (currentRun) loadCurrentRun();
   });
@@ -1270,6 +1313,14 @@ function renderRun(run) {
   redriveFailedButton.disabled = canStop(run) || !(page.counts?.failed || 0);
   deleteButton.disabled = false;
 
+  if (activeResultView === "providers") {
+    providerStatsTable.setRows(run.provider_stats || [], {
+      emptyMessage: "No provider information has been recorded for this run yet.",
+    });
+    restoreScrollPosition();
+    return;
+  }
+
   if (!run.results.length) {
     const hasAnyResults = (page.counts?.ranking || 0) + (page.counts?.failed || 0) > 0;
     const emptyMessage = hasAnyResults
@@ -1329,12 +1380,14 @@ async function loadCurrentRun() {
   const query = new URLSearchParams({
     page: String(currentPage),
     pageSize: "100",
-    view: activeResultView,
+    view: activeResultView === "failed" ? "failed" : "ranking",
     sort: sortState.key,
     dir: sortState.direction,
   });
-  if (scoreFilterTarget !== null) query.set("score", String(scoreFilterTarget));
-  if (rankingSearchQuery) query.set("q", rankingSearchQuery);
+  if (activeResultView === "ranking" && scoreFilterTarget !== null) {
+    query.set("score", String(scoreFilterTarget));
+  }
+  if (activeResultView === "ranking" && rankingSearchQuery) query.set("q", rankingSearchQuery);
   const response = await fetch(`/api/runs/${currentRunId}?${query.toString()}`, { cache: "no-store" });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || "Could not load run");
@@ -1443,7 +1496,10 @@ try {
   ensureHomeLink();
   await runResultsTable.initialize("ranking", { view: "ranking", offset: 0 });
   await runResultsTable.initialize("failed", { view: "failed", offset: 0 });
-  await runResultsTable.setScope(activeResultView, { view: activeResultView, offset: 0 });
+  await providerStatsTable.initialize("providers");
+  if (activeResultView !== "providers") {
+    await runResultsTable.setScope(activeResultView, { view: activeResultView, offset: 0 });
+  }
   syncScoreFilterInputs();
   rankingSearchInput.value = rankingSearchQuery;
   startEtaTimer();

@@ -2058,6 +2058,7 @@ def get_run(run_id, include_raw_response=True):
     )
     payload["model_details"] = model_details(run["model"], run["reasoning_mode"])
     payload["stats"] = ai_request_stats_for_run(run_id, run["max_tokens"])
+    payload["provider_stats"] = provider_stats_for_run(run_id)
     payload["stats"]["recent_average_latency_ms"] = recent_average_latency_ms(run["model"])
     payload["scoring_concurrency"] = scoring_concurrency()
     payload["incomplete_count"] = incomplete_company_count(run_id)
@@ -2637,6 +2638,94 @@ def ai_request_stats_for_run(run_id, token_limit=None):
     stats["token_limit_risk_method"] = risk["method"]
     stats["token_limit_risk_capped"] = risk["capped"]
     return stats
+
+
+def provider_stats_for_run(run_id):
+    providers = {}
+    for entry in effective_ai_request_entries():
+        if entry.get("run_id") != run_id:
+            continue
+
+        response = entry.get("response") or {}
+        provider = str(response.get("provider") or "").strip() or "Not reported"
+        current = providers.setdefault(
+            provider,
+            {
+                "provider": provider,
+                "request_count": 0,
+                "stock_count": 0,
+                "successful_request_count": 0,
+                "failed_request_count": 0,
+                "success_rate_percent": 0,
+                "prompt_tokens": 0,
+                "response_tokens": 0,
+                "reasoning_tokens": 0,
+                "total_tokens": 0,
+                "cost": 0,
+                "total_latency_ms": 0,
+                "average_latency_ms": None,
+                "reasoning_trace_visible_count": 0,
+                "reasoning_trace_visible_percent": 0,
+                "cache_hit_count": 0,
+                "_tickers": set(),
+            },
+        )
+        current["request_count"] += 1
+        success = bool(response.get("success"))
+        if success:
+            current["successful_request_count"] += 1
+        else:
+            current["failed_request_count"] += 1
+
+        ticker = str((entry.get("company") or {}).get("ticker") or "").strip().upper()
+        if ticker:
+            current["_tickers"].add(ticker)
+
+        token_stats = entry.get("token_stats") or {}
+        completion_details = token_stats.get("completion_tokens_details") or {}
+        try:
+            prompt_tokens = float(token_stats.get("prompt_tokens") or 0)
+            completion_tokens = float(token_stats.get("completion_tokens") or 0)
+            reasoning_tokens = float(completion_details.get("reasoning_tokens") or 0)
+            current["prompt_tokens"] += prompt_tokens
+            current["response_tokens"] += max(0, completion_tokens - reasoning_tokens)
+            current["reasoning_tokens"] += reasoning_tokens
+            current["total_tokens"] += float(token_stats.get("total_tokens") or 0)
+            current["cost"] += float(token_stats.get("cost") or 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            current["total_latency_ms"] += int((entry.get("timing") or {}).get("duration_ms") or 0)
+        except (TypeError, ValueError):
+            pass
+
+        reasoning_trace = entry.get("chain_of_thought")
+        if not reasoning_trace:
+            reasoning_trace = (
+                response.get("reasoning")
+                or response.get("reasoning_content")
+                or response.get("reasoning_details")
+            )
+        if reasoning_trace:
+            current["reasoning_trace_visible_count"] += 1
+        if str((response.get("cache") or {}).get("status") or "").upper() == "HIT":
+            current["cache_hit_count"] += 1
+
+    rows = []
+    for current in providers.values():
+        current["stock_count"] = len(current.pop("_tickers"))
+        request_count = current["request_count"]
+        successful_count = current["successful_request_count"]
+        if request_count:
+            current["success_rate_percent"] = round(successful_count / request_count * 100, 1)
+            current["average_latency_ms"] = round(current["total_latency_ms"] / request_count)
+        if successful_count:
+            current["reasoning_trace_visible_percent"] = round(
+                current["reasoning_trace_visible_count"] / successful_count * 100,
+                1,
+            )
+        rows.append(current)
+    return sorted(rows, key=lambda row: (-row["request_count"], row["provider"].lower()))
 
 
 def ai_request_stats_by_ticker(run_id):
