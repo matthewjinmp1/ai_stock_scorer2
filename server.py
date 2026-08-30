@@ -16,7 +16,7 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import parse_qsl, unquote, urlparse
+from urllib.parse import parse_qsl, quote, unquote, urlparse
 
 
 ROOT = Path(__file__).resolve().parent
@@ -30,6 +30,8 @@ PROVIDER_BLOCKLIST_PATH = ROOT / "provider_blocklist.json"
 SCORING_WORKER_PATH = ROOT / "scoring_worker.py"
 SCORING_WORKER_LOG_PATH = ROOT / "scoring_worker.log"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_MODEL_ENDPOINTS_URL = "https://openrouter.ai/api/v1/models/{model}/endpoints"
+OPENROUTER_ENDPOINT_CACHE_SECONDS = 60 * 5
 DEFAULT_PROVIDER_BLOCKLIST = ["siliconflow", "gmicloud"]
 RUN_FIELD_UNSET = object()
 PROVIDER_SLUGS = {
@@ -210,6 +212,8 @@ _cache = {"companies": None, "fetched_at": 0, "error": None}
 _cache_lock = threading.Lock()
 _ai_request_log_lock = threading.Lock()
 _provider_blocklist_lock = threading.Lock()
+_provider_endpoint_cache_lock = threading.Lock()
+_provider_endpoint_cache = {}
 
 
 def load_env_file():
@@ -394,12 +398,118 @@ def block_reasoning_provider(provider, run_id=None, ticker=None, reasoning_token
     return not already_blocked
 
 
-def provider_preferences(config):
+def normalize_low_cost_mode(value):
+    if value in (None, False, 0):
+        return False
+    if value in (True, 1):
+        return True
+    raise ValueError("Low cost mode must be true or false.")
+
+
+def provider_preferences(config, low_cost_provider=None):
     provider = dict(config.get("provider") or {})
     blocked = provider_blocklist()
     if blocked:
         provider["ignore"] = blocked
+    if low_cost_provider:
+        provider["only"] = [low_cost_provider["tag"]]
+        provider["allow_fallbacks"] = False
     return provider
+
+
+def openrouter_model_endpoints(model, force=False):
+    model = normalize_model(model)
+    now = time.time()
+    with _provider_endpoint_cache_lock:
+        cached = _provider_endpoint_cache.get(model)
+        if cached and not force and now - cached["fetched_at"] < OPENROUTER_ENDPOINT_CACHE_SECONDS:
+            return copy.deepcopy(cached["endpoints"])
+
+    request = urllib.request.Request(
+        OPENROUTER_MODEL_ENDPOINTS_URL.format(model=quote(model, safe="/:")),
+        headers={
+            "Accept": "application/json",
+            **(
+                {"Authorization": f"Bearer {os.environ['OPENROUTER_KEY']}"}
+                if os.environ.get("OPENROUTER_KEY")
+                else {}
+            ),
+        },
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    endpoints = payload.get("data", {}).get("endpoints")
+    if not isinstance(endpoints, list):
+        raise RuntimeError("OpenRouter did not return provider pricing for this model.")
+    with _provider_endpoint_cache_lock:
+        _provider_endpoint_cache[model] = {
+            "fetched_at": now,
+            "endpoints": copy.deepcopy(endpoints),
+        }
+    return endpoints
+
+
+def lowest_cost_provider(model, reasoning_mode=None, max_tokens=None, endpoints=None):
+    config = model_config(model)
+    reasoning = reasoning_config(reasoning_mode, config["id"], allow_fallback=True)["reasoning"]
+    token_limit = normalize_max_tokens(max_tokens)
+    required_parameters = {"max_tokens", "reasoning"}
+    if "effort" in reasoning:
+        required_parameters.add("reasoning_effort")
+    if config.get("supports_temperature", True):
+        required_parameters.add("temperature")
+    blocked = set(provider_blocklist())
+    candidates = []
+
+    for endpoint in endpoints if endpoints is not None else openrouter_model_endpoints(config["id"]):
+        provider_name = str(endpoint.get("provider_name") or "").strip()
+        tag = str(endpoint.get("tag") or "").strip()
+        endpoint_slugs = {provider_slug(provider_name), provider_slug(tag.split("/", 1)[0])}
+        if not provider_name or not tag or blocked.intersection(endpoint_slugs):
+            continue
+        if endpoint.get("status") not in (None, 0, "0"):
+            continue
+        try:
+            endpoint_limit = int(endpoint.get("max_completion_tokens") or 0)
+        except (TypeError, ValueError):
+            endpoint_limit = 0
+        if endpoint_limit and endpoint_limit < token_limit:
+            continue
+        supported = set(endpoint.get("supported_parameters") or [])
+        if not required_parameters.issubset(supported):
+            continue
+        pricing = endpoint.get("pricing") or {}
+        try:
+            prompt_price = float(pricing["prompt"])
+            completion_price = float(pricing["completion"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not math.isfinite(prompt_price) or not math.isfinite(completion_price):
+            continue
+        if prompt_price < 0 or completion_price < 0:
+            continue
+        candidates.append(
+            {
+                "provider_name": provider_name,
+                "tag": tag,
+                "prompt_price": prompt_price,
+                "completion_price": completion_price,
+            }
+        )
+
+    if not candidates:
+        raise RuntimeError(
+            "No eligible OpenRouter provider has pricing and supports this run's settings."
+        )
+    return min(
+        candidates,
+        key=lambda item: (
+            item["completion_price"],
+            item["prompt_price"],
+            item["provider_name"].lower(),
+            item["tag"].lower(),
+        ),
+    )
 
 
 def model_details(model, reasoning_mode=None):
@@ -732,6 +842,7 @@ def ensure_scoring_schema():
                 model TEXT NOT NULL,
                 reasoning_mode TEXT NOT NULL DEFAULT 'none',
                 max_tokens INTEGER NOT NULL DEFAULT 200,
+                low_cost_mode INTEGER NOT NULL DEFAULT 0,
                 stock_list_id INTEGER,
                 run_type TEXT NOT NULL DEFAULT 'scoring',
                 minimum_confidence_score REAL,
@@ -843,6 +954,10 @@ def ensure_scoring_schema():
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN reasoning_mode TEXT NOT NULL DEFAULT 'none'")
         if "max_tokens" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN max_tokens INTEGER NOT NULL DEFAULT 200")
+        if "low_cost_mode" not in columns:
+            connection.execute(
+                "ALTER TABLE scoring_runs ADD COLUMN low_cost_mode INTEGER NOT NULL DEFAULT 0"
+            )
         if "stock_list_id" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN stock_list_id INTEGER")
         if "starred" not in columns:
@@ -1948,6 +2063,7 @@ def create_scoring_run(
     max_tokens=None,
     run_type="scoring",
     minimum_confidence_score=None,
+    low_cost_mode=False,
 ):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
@@ -1957,6 +2073,7 @@ def create_scoring_run(
     model = normalize_model(model)
     reasoning_mode = normalize_reasoning_mode(reasoning_mode, model)
     max_tokens = normalize_max_tokens(max_tokens)
+    low_cost_mode = normalize_low_cost_mode(low_cost_mode)
     run_type = str(run_type or "scoring").strip().lower()
     if run_type not in ("scoring", "confidence"):
         raise ValueError("Unknown scoring run type.")
@@ -2001,11 +2118,11 @@ def create_scoring_run(
         cursor = connection.execute(
             """
             INSERT INTO scoring_runs (
-                name, prompt, model, reasoning_mode, max_tokens, stock_list_id, run_type,
+                name, prompt, model, reasoning_mode, max_tokens, low_cost_mode, stock_list_id, run_type,
                 minimum_confidence_score, confidence_run_id, status,
                 company_count, queue_count, created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name,
@@ -2013,6 +2130,7 @@ def create_scoring_run(
                 model,
                 reasoning_mode,
                 max_tokens,
+                1 if low_cost_mode else 0,
                 stock_list_id,
                 run_type,
                 minimum_confidence_score,
@@ -2177,7 +2295,8 @@ def get_run(run_id, include_raw_response=True):
         run = connection.execute(
             """
             SELECT scoring_runs.id, scoring_runs.name, scoring_runs.prompt, scoring_runs.model,
-                   scoring_runs.reasoning_mode, scoring_runs.max_tokens, scoring_runs.stock_list_id,
+                   scoring_runs.reasoning_mode, scoring_runs.max_tokens, scoring_runs.low_cost_mode,
+                   scoring_runs.stock_list_id,
                    scoring_runs.starred, scoring_runs.run_type,
                    scoring_runs.minimum_confidence_score, scoring_runs.confidence_run_id,
                    scoring_runs.manual_ranking_id,
@@ -2220,6 +2339,7 @@ def get_run(run_id, include_raw_response=True):
     current_confidence_run_id = pinned_confidence_run_id()
     current_confidence_scores = confidence_scores_for_run(current_confidence_run_id)
     payload = dict(run)
+    payload["low_cost_mode"] = bool(payload.get("low_cost_mode"))
     payload["results"] = []
     for row in results:
         result = dict(row)
@@ -3085,7 +3205,8 @@ def list_runs(run_type="scoring"):
     with db_connect() as connection:
         rows = connection.execute(
             """
-            SELECT id, name, prompt, model, reasoning_mode, max_tokens, starred, run_type,
+            SELECT id, name, prompt, model, reasoning_mode, max_tokens, low_cost_mode,
+                   starred, run_type,
                    status, company_count, completed_count, failed_count,
                    created_at, started_at, finished_at, error
             FROM scoring_runs
@@ -3165,6 +3286,7 @@ def update_scoring_run(
     prompt=None,
     starred=None,
     max_tokens=None,
+    low_cost_mode=None,
     stock_list_id=RUN_FIELD_UNSET,
 ):
     updates = []
@@ -3178,6 +3300,9 @@ def update_scoring_run(
     if max_tokens is not None:
         updates.append("max_tokens = ?")
         values.append(normalize_max_tokens(max_tokens))
+    if low_cost_mode is not None:
+        updates.append("low_cost_mode = ?")
+        values.append(1 if normalize_low_cost_mode(low_cost_mode) else 0)
     if starred is not None:
         if not isinstance(starred, bool):
             raise ValueError("Starred must be true or false.")
@@ -3628,7 +3753,15 @@ def sanitized_ai_request_entry(entry):
     return sanitized
 
 
-def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, max_tokens=None):
+def call_openrouter(
+    prompt,
+    company,
+    model,
+    reasoning_mode=None,
+    run_id=None,
+    max_tokens=None,
+    low_cost_provider=None,
+):
     api_key = os.environ.get("OPENROUTER_KEY")
     if not api_key:
         raise RuntimeError("OPENROUTER_KEY is not set")
@@ -3642,7 +3775,7 @@ def call_openrouter(prompt, company, model, reasoning_mode=None, run_id=None, ma
         ],
         "max_tokens": normalize_max_tokens(max_tokens),
         "reasoning": reasoning,
-        "provider": provider_preferences(config),
+        "provider": provider_preferences(config, low_cost_provider),
     }
     if config.get("supports_temperature", True):
         request_payload["temperature"] = 0
@@ -3810,19 +3943,23 @@ def save_result(connection, run_id, company, score, raw_response, error):
     )
 
 
-def score_company_request(run_id, prompt, model, reasoning_mode, company, max_tokens):
+def score_company_request(
+    run_id,
+    prompt,
+    model,
+    reasoning_mode,
+    company,
+    max_tokens,
+    low_cost_provider=None,
+):
     raw_response = None
     score = None
     error = None
     try:
-        raw_response = call_openrouter(
-            prompt,
-            company,
-            model,
-            reasoning_mode,
-            run_id=run_id,
-            max_tokens=max_tokens,
-        )
+        call_options = {"run_id": run_id, "max_tokens": max_tokens}
+        if low_cost_provider:
+            call_options["low_cost_provider"] = low_cost_provider
+        raw_response = call_openrouter(prompt, company, model, reasoning_mode, **call_options)
         score = parse_numeric_score(raw_response)
     except FatalScoringError:
         raise
@@ -3851,7 +3988,7 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
     ensure_scoring_schema()
     with db_connect() as connection:
         run = connection.execute(
-            "SELECT name, prompt, model, reasoning_mode, max_tokens, company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
+            "SELECT name, prompt, model, reasoning_mode, max_tokens, low_cost_mode, company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
             (run_id,),
         ).fetchone()
         if not run:
@@ -3865,6 +4002,11 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
     fatal_error = None
     stopped = False
     try:
+        low_cost_provider = None
+        if run["low_cost_mode"]:
+            low_cost_provider = lowest_cost_provider(
+                run["model"], run["reasoning_mode"], run["max_tokens"]
+            )
         companies = scoring_companies_for_run(run_id)
         if start_index:
             companies = companies[start_index:]
@@ -3915,6 +4057,7 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
                 run["reasoning_mode"],
                 company,
                 run["max_tokens"],
+                low_cost_provider,
             )
             futures[future] = company
             return True
@@ -4355,6 +4498,7 @@ class Handler(SimpleHTTPRequestHandler):
                     tickers=payload.get("tickers") if "tickers" in payload else None,
                     max_tokens=payload.get("maxTokens"),
                     minimum_confidence_score=payload.get("minimumConfidenceScore"),
+                    low_cost_mode=payload.get("lowCostMode", False),
                 )
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
             except ValueError as exc:
@@ -4521,6 +4665,9 @@ class Handler(SimpleHTTPRequestHandler):
                     prompt=payload.get("prompt") if "prompt" in payload else None,
                     starred=payload.get("starred") if "starred" in payload else None,
                     max_tokens=payload.get("maxTokens") if "maxTokens" in payload else None,
+                    low_cost_mode=(
+                        payload.get("lowCostMode") if "lowCostMode" in payload else None
+                    ),
                     stock_list_id=(
                         payload.get("stockListId")
                         if "stockListId" in payload

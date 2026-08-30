@@ -361,6 +361,112 @@ class ConfidenceScoreTests(ServerTestCase):
 
 
 class PromptAndParsingTests(ServerTestCase):
+    def test_low_cost_provider_prioritizes_output_then_input_price(self):
+        supported = ["max_tokens", "reasoning", "temperature"]
+        endpoints = [
+            {
+                "provider_name": "Cheap Input",
+                "tag": "cheap-input/fp8",
+                "status": 0,
+                "max_completion_tokens": 4096,
+                "supported_parameters": supported,
+                "pricing": {"prompt": "0.00000001", "completion": "0.00000020"},
+            },
+            {
+                "provider_name": "Cheap Output",
+                "tag": "cheap-output/fp8",
+                "status": 0,
+                "max_completion_tokens": 4096,
+                "supported_parameters": supported,
+                "pricing": {"prompt": "0.00000009", "completion": "0.00000010"},
+            },
+            {
+                "provider_name": "Tie Winner",
+                "tag": "tie-winner/fp8",
+                "status": 0,
+                "max_completion_tokens": 4096,
+                "supported_parameters": supported,
+                "pricing": {"prompt": "0.00000008", "completion": "0.00000010"},
+            },
+        ]
+
+        selected = server.lowest_cost_provider(MODEL, "none", 200, endpoints=endpoints)
+
+        self.assertEqual(selected["provider_name"], "Tie Winner")
+        self.assertEqual(selected["tag"], "tie-winner/fp8")
+
+    def test_low_cost_provider_skips_incompatible_and_blocked_endpoints(self):
+        endpoints = [
+            {
+                "provider_name": "SiliconFlow",
+                "tag": "siliconflow/fp8",
+                "status": 0,
+                "max_completion_tokens": 4096,
+                "supported_parameters": ["max_tokens", "reasoning", "temperature"],
+                "pricing": {"prompt": "0", "completion": "0"},
+            },
+            {
+                "provider_name": "Too Small",
+                "tag": "too-small/fp8",
+                "status": 0,
+                "max_completion_tokens": 100,
+                "supported_parameters": ["max_tokens", "reasoning", "temperature"],
+                "pricing": {"prompt": "0.00000001", "completion": "0.00000001"},
+            },
+            {
+                "provider_name": "Eligible",
+                "tag": "eligible/fp8",
+                "status": 0,
+                "max_completion_tokens": 4096,
+                "supported_parameters": ["max_tokens", "reasoning", "temperature"],
+                "pricing": {"prompt": "0.00000002", "completion": "0.00000002"},
+            },
+        ]
+
+        selected = server.lowest_cost_provider(MODEL, "none", 200, endpoints=endpoints)
+
+        self.assertEqual(selected["provider_name"], "Eligible")
+
+    def test_low_cost_request_pins_one_provider_without_fallbacks(self):
+        payload = {
+            "choices": [{"message": {"content": "88"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 1, "total_tokens": 6},
+        }
+
+        class FakeResponse:
+            status = 200
+            headers = {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        company = server.scoring_companies(1)[0]
+        selected = {
+            "provider_name": "Selected Provider",
+            "tag": "selected-provider/fp8",
+            "prompt_price": 0.1,
+            "completion_price": 0.2,
+        }
+        with mock.patch.object(server.urllib.request, "urlopen", return_value=FakeResponse()) as urlopen:
+            server.call_openrouter(
+                "Score COMPANY",
+                company,
+                MODEL,
+                reasoning_mode="none",
+                run_id=1,
+                low_cost_provider=selected,
+            )
+
+        request_payload = json.loads(urlopen.call_args.args[0].data.decode("utf-8"))
+        self.assertEqual(request_payload["provider"]["only"], ["selected-provider/fp8"])
+        self.assertFalse(request_payload["provider"]["allow_fallbacks"])
+
     def test_glm_5_3_flash_model(self):
         self.assertEqual(server.normalize_model("z-ai/glm-5.3-flash"), "z-ai/glm-5.3-flash")
 
@@ -999,6 +1105,44 @@ class RunWorkerTests(ServerTestCase):
         server.score_run_worker(run_id)
 
         self.assertEqual(calls, [("CCC", 777), ("AAA", 777)])
+
+    def test_low_cost_mode_is_saved_and_used_by_the_worker(self):
+        server.start_scoring_worker_process = lambda run_id, start_index=0: 12345
+        run_id = server.create_scoring_run(
+            "Low Cost Run",
+            "Score COMPANY",
+            MODEL,
+            company_count=1,
+            reasoning_mode="none",
+            low_cost_mode=True,
+        )
+        selected = {
+            "provider_name": "Selected Provider",
+            "tag": "selected-provider/fp8",
+            "prompt_price": 0.1,
+            "completion_price": 0.2,
+        }
+        calls = []
+
+        def fake_call_openrouter(
+            prompt,
+            company,
+            model,
+            reasoning_mode=None,
+            run_id=None,
+            max_tokens=None,
+            low_cost_provider=None,
+        ):
+            calls.append(low_cost_provider)
+            return "50"
+
+        server.call_openrouter = fake_call_openrouter
+        server.scoring_concurrency = lambda: 1
+        with mock.patch.object(server, "lowest_cost_provider", return_value=selected):
+            server.score_run_worker(run_id)
+
+        self.assertTrue(server.get_run(run_id)["low_cost_mode"])
+        self.assertEqual(calls, [selected])
 
     def test_custom_stock_list_run_can_limit_members(self):
         stock_list = server.save_stock_list("Focused", ["CCC", "AAA", "BBB"])

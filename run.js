@@ -12,6 +12,7 @@ const runEditor = document.querySelector("#runEditor");
 const runEditorName = document.querySelector("#runEditorName");
 const runEditorPrompt = document.querySelector("#runEditorPrompt");
 const runEditorMaxTokens = document.querySelector("#runEditorMaxTokens");
+const runEditorLowCostMode = document.querySelector("#runEditorLowCostMode");
 const runEditorUniverse = document.querySelector("#runEditorUniverse");
 const runEditorUniverseHelp = document.querySelector("#runEditorUniverseHelp");
 const saveRunButton = document.querySelector("#saveRunButton");
@@ -651,7 +652,9 @@ function renderRunStats(run) {
     reasoning.exclude === undefined ? "true" : String(reasoning.exclude)
   )}</span>
     <span class="model-id">response limit: ${escapeHtml(formatNumber(run.max_tokens))} tokens</span>
-    <span class="model-id">provider routing: all except blocked</span>
+    <span class="model-id">provider routing: ${run.low_cost_mode
+      ? "lowest output price, then lowest input price"
+      : "all except blocked"}</span>
     <span class="model-id">blocked: ${escapeHtml((provider.ignore || []).join(", ") || "none")}</span>
   `;
   statProgress.textContent = progress(run);
@@ -978,6 +981,7 @@ async function showRunEditor() {
   runEditorName.value = currentRun.name || `Run #${currentRun.id}`;
   runEditorPrompt.value = currentRun.prompt || "";
   runEditorMaxTokens.value = String(currentRun.max_tokens || 200);
+  runEditorLowCostMode.checked = Boolean(currentRun.low_cost_mode);
   runEditorUniverse.disabled = true;
   runEditorUniverse.innerHTML = '<option value="">Loading universes...</option>';
   runEditorUniverseHelp.textContent =
@@ -1109,6 +1113,7 @@ async function saveCurrentRun() {
   const name = runEditorName.value.trim();
   const prompt = runEditorPrompt.value.trim();
   const maxTokens = Number(runEditorMaxTokens.value);
+  const lowCostMode = runEditorLowCostMode.checked;
   const universeValue = runEditorUniverse.value;
   if (!name) {
     statusEl.textContent = "Run name is required.";
@@ -1146,6 +1151,7 @@ async function saveCurrentRun() {
         name,
         prompt,
         maxTokens,
+        lowCostMode,
         ...(universeValue !== initialRunEditorUniverse
           ? {
               stockListId:

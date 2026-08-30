@@ -8,6 +8,7 @@ const universeSelect = document.querySelector("#universeSelect");
 const companyCountInput = document.querySelector("#companyCountInput");
 const maxTokensInput = document.querySelector("#maxTokensInput");
 const minimumConfidenceInput = document.querySelector("#minimumConfidenceInput");
+const lowCostModeInput = document.querySelector("#lowCostModeInput");
 const confidenceFilterHelp = document.querySelector("#confidenceFilterHelp");
 const companyCountHelp = document.querySelector("#companyCountHelp");
 const listEditorSelect = document.querySelector("#listEditorSelect");
@@ -839,6 +840,7 @@ async function prefillFromRun(runId) {
   companyCountInput.value = String(topCompanyCount);
   maxTokensInput.value = String(run.max_tokens || 200);
   minimumConfidenceInput.value = run.minimum_confidence_score ?? "";
+  lowCostModeInput.checked = Boolean(run.low_cost_mode);
 
   if (![...modelSelect.options].some((option) => option.value === run.model)) {
     const option = document.createElement("option");
@@ -975,6 +977,7 @@ async function createRun() {
   const model = modelSelect.value;
   const reasoningMode = reasoningSelect.value;
   const maxTokens = Number(maxTokensInput.value);
+  const lowCostMode = lowCostModeInput.checked;
   const minimumConfidenceScore = minimumConfidenceInput.value.trim() === ""
     ? null
     : Number(minimumConfidenceInput.value);
@@ -1036,8 +1039,8 @@ async function createRun() {
       reasoningMode,
       companyCount: preview.eligible_count,
       actionLabel: preview.excluded_count
-        ? `Start this scoring run? ${preview.excluded_count} stocks will be excluded by the confidence filter.`
-        : "Start this scoring run?",
+        ? `Start this scoring run${lowCostMode ? " in low cost mode" : ""}? ${preview.excluded_count} stocks will be excluded by the confidence filter.`
+        : `Start this scoring run${lowCostMode ? " in low cost mode" : ""}?`,
     });
     if (!confirmed) {
       statusEl.textContent = "Run canceled before any AI requests were sent.";
@@ -1055,6 +1058,7 @@ async function createRun() {
         model,
         reasoningMode,
         maxTokens,
+        lowCostMode,
         minimumConfidenceScore,
         stockListId: stockList
           ? stockList.kind === "snapshot"
