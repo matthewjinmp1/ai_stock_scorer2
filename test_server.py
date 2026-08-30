@@ -525,6 +525,10 @@ class PromptAndParsingTests(ServerTestCase):
                     "completion_tokens": 30,
                     "total_tokens": 40,
                     "cost": 0.001,
+                    "cost_details": {
+                        "upstream_inference_prompt_cost": 0.000002,
+                        "upstream_inference_completions_cost": 0.000009,
+                    },
                     "completion_tokens_details": {"reasoning_tokens": 20},
                 },
             },
@@ -564,6 +568,8 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertEqual(provider["total_tokens"], 80)
         self.assertEqual(provider["cost"], 0.001)
         self.assertEqual(provider["cost_per_million_tokens"], 12.5)
+        self.assertEqual(provider["input_cost_per_million_tokens"], 0.2)
+        self.assertEqual(provider["output_cost_per_million_tokens"], 0.3)
         self.assertEqual(provider["average_latency_ms"], 2000)
         self.assertEqual(provider["reasoning_trace_visible_count"], 1)
         self.assertEqual(provider["reasoning_trace_visible_percent"], 100.0)

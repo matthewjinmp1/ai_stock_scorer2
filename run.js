@@ -114,8 +114,8 @@ const COLUMN_ORDER_STORAGE_KEYS = {
   ranking: "ai-stock-scorer-ranking-column-order-v1",
   failed: "ai-stock-scorer-failed-column-order-v1",
 };
-const PROVIDER_COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-provider-columns-v1";
-const PROVIDER_COLUMN_ORDER_STORAGE_KEY = "ai-stock-scorer-provider-column-order-v1";
+const PROVIDER_COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-provider-columns-v2";
+const PROVIDER_COLUMN_ORDER_STORAGE_KEY = "ai-stock-scorer-provider-column-order-v2";
 
 let currentRunId = params.get("id");
 let pollTimer = null;
@@ -247,6 +247,16 @@ const providerStatsTable = new DataTable({
         ? "--"
         : `$${Number(row.cost_per_million_tokens).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`,
     },
+    {
+      key: "inputCostPerMillion",
+      label: "Input Cost / 1M",
+      render: (row) => formatCostPerMillion(row.input_cost_per_million_tokens),
+    },
+    {
+      key: "outputCostPerMillion",
+      label: "Output Cost / 1M",
+      render: (row) => formatCostPerMillion(row.output_cost_per_million_tokens),
+    },
     { key: "latency", label: "Avg Time", render: (row) => formatCompactSeconds(row.average_latency_ms) },
     {
       key: "trace",
@@ -337,6 +347,15 @@ function formatCompactCents(value) {
     minimumFractionDigits: 4,
     maximumFractionDigits: 4,
   })}¢`;
+}
+
+function formatCostPerMillion(value) {
+  const number = Number(value);
+  if (value === null || value === undefined || !Number.isFinite(number)) return "--";
+  return `$${number.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  })}`;
 }
 
 function formatPercent(value) {

@@ -184,6 +184,8 @@ PROVIDER_TABLE_COLUMN_KEYS = (
     "reasoning",
     "cost",
     "costPerMillion",
+    "inputCostPerMillion",
+    "outputCostPerMillion",
     "latency",
     "trace",
     "cache",
@@ -1068,12 +1070,34 @@ def get_provider_table_columns_preference():
     if not row:
         return None
     try:
-        columns = json.loads(row["value"])
+        stored_value = json.loads(row["value"])
     except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if isinstance(stored_value, list):
+        columns = stored_value
+        stored_version = 1
+    elif isinstance(stored_value, dict):
+        columns = stored_value.get("columns")
+        try:
+            stored_version = int(stored_value.get("version") or 1)
+        except (TypeError, ValueError):
+            stored_version = 1
+    else:
         return None
     if not isinstance(columns, list):
         return None
     valid_columns = [column for column in columns if column in PROVIDER_TABLE_COLUMN_KEYS]
+    if stored_version < 2:
+        insert_at = (
+            valid_columns.index("latency")
+            if "latency" in valid_columns
+            else len(valid_columns)
+        )
+        for column in ("inputCostPerMillion", "outputCostPerMillion"):
+            if column not in valid_columns:
+                valid_columns.insert(insert_at, column)
+                insert_at += 1
+        save_provider_table_columns_preference(valid_columns)
     return list(dict.fromkeys(valid_columns)) or None
 
 
@@ -1097,7 +1121,7 @@ def save_provider_table_columns_preference(columns):
             """,
             (
                 PROVIDER_TABLE_COLUMNS_PREFERENCE_KEY,
-                json.dumps(selected_columns),
+                json.dumps({"version": 2, "columns": selected_columns}),
                 int(time.time()),
             ),
         )
@@ -2827,11 +2851,17 @@ def provider_stats_for_run(run_id):
                 "total_tokens": 0,
                 "cost": 0,
                 "cost_per_million_tokens": None,
+                "input_cost_per_million_tokens": None,
+                "output_cost_per_million_tokens": None,
                 "total_latency_ms": 0,
                 "average_latency_ms": None,
                 "reasoning_trace_visible_count": 0,
                 "reasoning_trace_visible_percent": 0,
                 "cache_hit_count": 0,
+                "_prompt_cost": 0,
+                "_completion_cost": 0,
+                "_priced_prompt_tokens": 0,
+                "_priced_completion_tokens": 0,
                 "_tickers": set(),
             },
         )
@@ -2848,6 +2878,9 @@ def provider_stats_for_run(run_id):
 
         token_stats = entry.get("token_stats") or {}
         completion_details = token_stats.get("completion_tokens_details") or {}
+        cache_hit = str((response.get("cache") or {}).get("status") or "").upper() == "HIT"
+        prompt_tokens = 0
+        completion_tokens = 0
         try:
             prompt_tokens = float(token_stats.get("prompt_tokens") or 0)
             completion_tokens = float(token_stats.get("completion_tokens") or 0)
@@ -2859,6 +2892,19 @@ def provider_stats_for_run(run_id):
             current["cost"] += float(token_stats.get("cost") or 0)
         except (TypeError, ValueError):
             pass
+        cost_details = token_stats.get("cost_details") or {}
+        if not cache_hit and isinstance(cost_details, dict):
+            try:
+                prompt_cost = cost_details.get("upstream_inference_prompt_cost")
+                if prompt_cost is not None:
+                    current["_prompt_cost"] += float(prompt_cost)
+                    current["_priced_prompt_tokens"] += prompt_tokens
+                completion_cost = cost_details.get("upstream_inference_completions_cost")
+                if completion_cost is not None:
+                    current["_completion_cost"] += float(completion_cost)
+                    current["_priced_completion_tokens"] += completion_tokens
+            except (TypeError, ValueError):
+                pass
         try:
             current["total_latency_ms"] += int((entry.get("timing") or {}).get("duration_ms") or 0)
         except (TypeError, ValueError):
@@ -2873,7 +2919,7 @@ def provider_stats_for_run(run_id):
             )
         if reasoning_trace:
             current["reasoning_trace_visible_count"] += 1
-        if str((response.get("cache") or {}).get("status") or "").upper() == "HIT":
+        if cache_hit:
             current["cache_hit_count"] += 1
 
     rows = []
@@ -2892,6 +2938,20 @@ def provider_stats_for_run(run_id):
         if current["total_tokens"]:
             current["cost_per_million_tokens"] = round(
                 current["cost"] / current["total_tokens"] * 1_000_000,
+                6,
+            )
+        priced_prompt_tokens = current.pop("_priced_prompt_tokens")
+        priced_completion_tokens = current.pop("_priced_completion_tokens")
+        prompt_cost = current.pop("_prompt_cost")
+        completion_cost = current.pop("_completion_cost")
+        if priced_prompt_tokens:
+            current["input_cost_per_million_tokens"] = round(
+                prompt_cost / priced_prompt_tokens * 1_000_000,
+                6,
+            )
+        if priced_completion_tokens:
+            current["output_cost_per_million_tokens"] = round(
+                completion_cost / priced_completion_tokens * 1_000_000,
                 6,
             )
         rows.append(current)
