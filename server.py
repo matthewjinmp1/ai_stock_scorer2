@@ -2682,8 +2682,9 @@ def export_ibkr_basket(payload):
         symbol = str(order.get("symbol", "")).strip().upper()
         if not re.fullmatch(r"[A-Z][A-Z0-9]*(?:[ .-][A-Z0-9]+)*", symbol) or len(symbol) > 24:
             raise ValueError(f"Order {index}: enter a valid IBKR stock symbol.")
-        if re.fullmatch(r"BRK[-.][AB]", symbol):
-            symbol = symbol.replace("-", " ").replace(".", " ")
+        symbol = symbol.replace("-", " ")
+        if re.fullmatch(r"BRK\.[AB]", symbol):
+            symbol = symbol.replace(".", " ")
         if symbol in seen:
             raise ValueError(f"Duplicate stock symbol: {symbol}.")
         seen.add(symbol)

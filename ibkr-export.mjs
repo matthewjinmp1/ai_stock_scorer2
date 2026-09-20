@@ -2,7 +2,7 @@ export function draftOrders(holdings) {
   return holdings.map((holding) => {
     const supported = ["USA", "United States"].includes(holding.country);
     return {
-      symbol: /^BRK[-.][AB]$/.test(holding.ticker) ? holding.ticker.replace(/[-.]/, " ") : holding.ticker,
+      symbol: /^BRK[-.][AB]$/.test(holding.ticker) ? holding.ticker.replace(/[-.]/g, " ") : holding.ticker.replaceAll("-", " "),
       sourceSymbol: holding.ticker,
       weight: Number(holding.portfolio_weight),
       supported,

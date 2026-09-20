@@ -1822,6 +1822,20 @@ class PortfolioTests(ServerTestCase):
                     self.assertEqual(list(csv.DictReader(handle))[0]["Symbol"], "BRK B")
                 self.fresh_prices.assert_called_with(["BRK-B"])
 
+    def test_ibkr_export_normalizes_all_hyphens_and_detects_duplicates(self):
+        self.fresh_prices.return_value = {"prices": {"BF-B": "40.00", "HEI-A": "200.00", "AAA-B-C": "10.00"}}
+        with mock.patch.object(server, "IBKR_EXPORT_DIR", self.root / "symbols"):
+            for source, price in self.fresh_prices.return_value["prices"].items():
+                result = server.export_ibkr_basket({"orders": [{"symbol": source, "sourceSymbol": source, "quantity": 1, "limitPrice": price}]})
+                with open(result["path"], newline="") as handle:
+                    self.assertEqual(list(csv.DictReader(handle))[0]["Symbol"], source.replace("-", " "))
+                self.fresh_prices.assert_called_with([source])
+            with self.assertRaisesRegex(ValueError, "Duplicate stock symbol"):
+                server.export_ibkr_basket({"orders": [
+                    {"symbol": symbol, "quantity": 1, "limitPrice": "40.00"}
+                    for symbol in ("BF-B", "BF B")
+                ]})
+
     def test_ibkr_export_preserves_fractional_quantity(self):
         with mock.patch.object(server, "IBKR_EXPORT_DIR", self.root / "fractional"):
             result = server.export_ibkr_basket({"orders": [

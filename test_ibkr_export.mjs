@@ -42,3 +42,10 @@ test('Berkshire uses IBKR spaces while retaining source tickers', () => {
   assert.deepEqual(orders.map(order => order.symbol), ['BRK B', 'BRK A', 'AAPL']);
   assert.deepEqual(orders.map(order => order.sourceSymbol), ['BRK-B', 'BRK.A', 'AAPL']);
 });
+
+test('all hyphens become spaces without changing price-source tickers', () => {
+  const tickers = ['BF-B', 'HEI-A', 'AAA-B-C', 'AAPL'];
+  const orders = draftOrders(tickers.map(ticker => ({ticker, country:'USA', portfolio_weight:25})));
+  assert.deepEqual(orders.map(order => order.symbol), ['BF B', 'HEI A', 'AAA B C', 'AAPL']);
+  assert.deepEqual(orders.map(order => order.sourceSymbol), tickers);
+});
