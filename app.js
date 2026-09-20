@@ -38,6 +38,7 @@ const runRows = document.querySelector("#runRows");
 const starredRunRows = document.querySelector("#starredRunRows");
 const confidenceRunsStatus = document.querySelector("#confidenceRunsStatus");
 const confidenceRunRows = document.querySelector("#confidenceRunRows");
+const companiesUsFilter = document.querySelector("#companiesUsFilter");
 const companiesSearchInput = document.querySelector("#companiesSearchInput");
 const companiesStatus = document.querySelector("#companiesStatus");
 const companyRows = document.querySelector("#companyRows");
@@ -559,13 +560,14 @@ async function loadCompanies() {
     page: String(companyPagination.page),
     pageSize: "100",
     q: companiesSearchInput.value.trim(),
+    country: companiesUsFilter.getAttribute("aria-pressed") === "true" ? "US" : "",
     sort: companySort.key,
     dir: companySort.direction,
   });
   const payload = await fetchJson(`/api/companies?${query.toString()}`);
   allCompanies = payload.companies;
   companyPagination = payload.pagination;
-  companiesAvailable = companyPagination.total;
+  companiesAvailable = companyPagination.universe_total;
   for (const company of allCompanies) companyCache.set(company.ticker, company);
   companyCountInput.max = String(companiesAvailable);
   companyCountHelp.textContent = `Choose 1-${companiesAvailable}. Scoring starts from the largest companies by market cap.`;
@@ -1152,6 +1154,13 @@ stockSearchInput.addEventListener("input", () => {
   }), 250);
 });
 stockSearchResults.addEventListener("scroll", loadNextStockPickerPageIfNeeded);
+companiesUsFilter.addEventListener("click", () => {
+  const enabled = companiesUsFilter.getAttribute("aria-pressed") !== "true";
+  companiesUsFilter.setAttribute("aria-pressed", String(enabled));
+  companyPagination.page = 1;
+  loadCompanies().catch((error) => { companiesStatus.textContent = error.message; });
+});
+
 companiesSearchInput.addEventListener("input", () => {
   window.clearTimeout(companiesSearchTimer);
   companiesSearchTimer = window.setTimeout(() => {

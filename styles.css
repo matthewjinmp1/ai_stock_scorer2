@@ -1622,3 +1622,9 @@ tbody tr:hover {
 .ibkr-table-wrap input:not([type="checkbox"]) { width: 140px; }
 .ibkr-table-wrap input[type="checkbox"] { width: auto; }
 #ibkrStatus { overflow-wrap: anywhere; }
+
+#companiesUsFilter[aria-pressed="true"] {
+  background: #0969c9;
+  color: white;
+  border-color: #0969c9;
+}

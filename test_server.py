@@ -1677,6 +1677,17 @@ class RunWorkerTests(ServerTestCase):
         run = server.get_run(run_id)
         self.assertEqual(run["results"][0]["logo"], "https://logos/aaa.png")
 
+    def test_company_us_filter_combines_with_search_and_pagination(self):
+        with self.connect() as connection:
+            connection.execute("UPDATE companies SET country = CASE ticker WHEN 'AAA' THEN 'USA' WHEN 'BBB' THEN 'Canada' ELSE 'United States' END")
+            connection.commit()
+        filtered = server.paginated_companies(country="US", page=2, page_size=1)
+        self.assertEqual(filtered["pagination"]["total"], 2)
+        self.assertEqual(filtered["pagination"]["universe_total"], 3)
+        self.assertEqual([row["ticker"] for row in filtered["companies"]], ["CCC"])
+        self.assertEqual(server.paginated_companies(country="US", query="BBB")["companies"], [])
+        self.assertEqual(server.paginated_companies()["pagination"]["total"], 3)
+
     def test_companies_are_paginated_and_searched_on_the_server(self):
         first_page = server.paginated_companies(page=1, page_size=2)
         second_page = server.paginated_companies(page=2, page_size=2)

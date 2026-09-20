@@ -1449,7 +1449,7 @@ def db_companies(active_only=True):
     return [row_to_company(row) for row in rows]
 
 
-def paginated_companies(page=1, page_size=100, query="", sort_key="rank", direction="asc"):
+def paginated_companies(page=1, page_size=100, query="", sort_key="rank", direction="asc", country=""):
     page = max(1, int(page or 1))
     page_size = max(1, min(100, int(page_size or 100)))
     query = str(query or "").strip()
@@ -1467,9 +1467,13 @@ def paginated_companies(page=1, page_size=100, query="", sort_key="rank", direct
         where_parts.append("(name LIKE ? COLLATE NOCASE OR ticker LIKE ? COLLATE NOCASE)")
         match = f"%{query}%"
         parameters.extend([match, match])
+    if country == "US":
+        where_parts.append("country IN (?, ?)")
+        parameters.extend(["USA", "United States"])
     where_clause = " AND ".join(where_parts)
 
     with db_connect() as connection:
+        universe_total = connection.execute("SELECT COUNT(*) FROM companies WHERE fetched_at = (SELECT MAX(fetched_at) FROM companies)").fetchone()[0]
         total = connection.execute(
             f"SELECT COUNT(*) FROM companies WHERE {where_clause}", parameters
         ).fetchone()[0]
@@ -1489,6 +1493,7 @@ def paginated_companies(page=1, page_size=100, query="", sort_key="rank", direct
     return {
         "companies": [row_to_company(row) for row in rows],
         "pagination": {
+            "universe_total": universe_total,
             "page": page,
             "page_size": page_size,
             "total": total,
@@ -4551,7 +4556,7 @@ class Handler(SimpleHTTPRequestHandler):
                 if query:
                     page_payload = paginated_companies(
                         query.get("page", 1), query.get("pageSize", 100),
-                        query.get("q", ""), query.get("sort", "rank"), query.get("dir", "asc")
+                        query.get("q", ""), query.get("sort", "rank"), query.get("dir", "asc"), query.get("country", "")
                     )
                     companies = page_payload["companies"]
                 else:
