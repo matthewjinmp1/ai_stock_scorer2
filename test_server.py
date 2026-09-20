@@ -1796,7 +1796,7 @@ class PortfolioTests(ServerTestCase):
                 server.export_ibkr_basket(payload)
             self.assertFalse((self.root / "exports").exists())
 
-    def test_ibkr_export_matches_basket_format_and_preserves_existing_files(self):
+    def test_ibkr_export_matches_basket_format_and_replaces_previous_file(self):
         destination = self.root / "Jts"
         payload = {"name": "../../My portfolio", "orders": [
             {"symbol": "AAPL", "quantity": 2, "limitPrice": "150.25"},
@@ -1805,7 +1805,8 @@ class PortfolioTests(ServerTestCase):
         with mock.patch.object(server, "IBKR_EXPORT_DIR", destination):
             first = server.export_ibkr_basket(payload)
             second = server.export_ibkr_basket(payload)
-        self.assertNotEqual(first["path"], second["path"])
+        self.assertEqual(first["path"], second["path"])
+        self.assertEqual(first["filename"], "ibkr_basket.csv")
         self.assertEqual(Path(first["path"]).parent, destination)
         with open(first["path"], newline="") as handle:
             rows = list(csv.DictReader(handle))
@@ -1835,6 +1836,25 @@ class PortfolioTests(ServerTestCase):
                     {"symbol": symbol, "quantity": 1, "limitPrice": "40.00"}
                     for symbol in ("BF-B", "BF B")
                 ]})
+
+    def test_ibkr_export_cleans_legacy_baskets_and_preserves_last_on_failure(self):
+        destination = self.root / "Jts"
+        destination.mkdir()
+        for name in ("ibkr_basket_example.csv", "ibkr_test_20260920_195016_e08306b3.csv", "unrelated.csv"):
+            (destination / name).write_text("old")
+        payload = {"orders": [{"symbol": "AAPL", "quantity": 1, "limitPrice": "150.25"}]}
+        with mock.patch.object(server, "IBKR_EXPORT_DIR", destination):
+            server.export_ibkr_basket(payload)
+            self.assertEqual(sorted(path.name for path in destination.iterdir()), ["ibkr_basket.csv", "unrelated.csv"])
+            original = (destination / "ibkr_basket.csv").read_text()
+            payload["orders"][0]["quantity"] = 2
+            with mock.patch.object(Path, "replace", side_effect=OSError("write failed")):
+                with self.assertRaises(OSError):
+                    server.export_ibkr_basket(payload)
+            self.assertEqual((destination / "ibkr_basket.csv").read_text(), original)
+            self.assertFalse(list(destination.glob("*.tmp")))
+            server.export_ibkr_basket(payload)
+            self.assertNotEqual((destination / "ibkr_basket.csv").read_text(), original)
 
     def test_ibkr_export_preserves_fractional_quantity(self):
         with mock.patch.object(server, "IBKR_EXPORT_DIR", self.root / "fractional"):

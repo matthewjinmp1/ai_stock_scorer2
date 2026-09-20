@@ -2712,18 +2712,20 @@ def export_ibkr_basket(payload):
     writer = csv.writer(output)
     writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "LmtPrice"])
     writer.writerows(rows)
-    name = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(payload.get("name") or "portfolio")).strip("_")[:60] or "portfolio"
-    filename = f"ibkr_{name}_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.csv"
+    filename = "ibkr_basket.csv"
     IBKR_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     path = IBKR_EXPORT_DIR / filename
+    temporary = IBKR_EXPORT_DIR / f".ibkr_basket_{uuid.uuid4().hex}.tmp"
     try:
-        with path.open("x", encoding="utf-8", newline="") as handle:
+        with temporary.open("x", encoding="utf-8", newline="") as handle:
             handle.write(output.getvalue())
-    except OSError:
-        # Do not leave a partially written basket available for import.
-        if path.exists() and not isinstance(sys.exc_info()[1], FileExistsError):
-            path.unlink(missing_ok=True)
-        raise
+        # Replace only after a complete write; failures preserve the previous basket.
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    for old_path in IBKR_EXPORT_DIR.glob("ibkr_*.csv"):
+        if old_path.name == "ibkr_basket_example.csv" or re.fullmatch(r"ibkr_.+_\d{8}_\d{6}_[0-9a-f]{8}\.csv", old_path.name):
+            old_path.unlink()
     return {"path": str(path), "filename": filename, "orderCount": len(rows), "limitValue": str(total)}
 
 
