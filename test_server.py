@@ -18,6 +18,9 @@ MODEL = "deepseek/deepseek-v4-flash"
 
 class ServerTestCase(unittest.TestCase):
     def setUp(self):
+        cutoff_patch = mock.patch.object(server, "openrouter_knowledge_cutoff", return_value=None)
+        cutoff_patch.start()
+        self.addCleanup(cutoff_patch.stop)
         provider_patch = mock.patch.object(server, "connection_providers", return_value=[None])
         self.connection_providers_mock = provider_patch.start()
         self.addCleanup(provider_patch.stop)
@@ -1902,3 +1905,21 @@ class CostEstimateTests(ServerTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModelCutoffTests(unittest.TestCase):
+    def test_catalog_dates_cached_and_unknown_preserved(self):
+        with mock.patch.object(server, "_model_cutoffs", {}), mock.patch.object(server, "_model_cutoffs_refresh_at", 0):
+            response = mock.MagicMock()
+            response.__enter__.return_value.read.return_value = b'{"data":[{"id":"known","knowledge_cutoff":"2025-01-01"},{"id":"unknown","knowledge_cutoff":null}]}'
+            with mock.patch.object(server.urllib.request, "urlopen", return_value=response) as fetch:
+                self.assertEqual(server.openrouter_knowledge_cutoff("known"), "2025-01-01")
+                self.assertIsNone(server.openrouter_knowledge_cutoff("unknown"))
+                self.assertIsNone(server.openrouter_knowledge_cutoff("missing"))
+                self.assertEqual(fetch.call_count, 1)
+
+    def test_catalog_failure_does_not_break_run(self):
+        with mock.patch.object(server, "_model_cutoffs", {}), mock.patch.object(server, "_model_cutoffs_refresh_at", 0), mock.patch.object(server.urllib.request, "urlopen", side_effect=OSError("offline")) as fetch:
+            self.assertIsNone(server.openrouter_knowledge_cutoff("missing"))
+            self.assertIsNone(server.openrouter_knowledge_cutoff("missing"))
+            self.assertEqual(fetch.call_count, 1)

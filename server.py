@@ -518,12 +518,43 @@ def lowest_cost_provider(model, reasoning_mode=None, max_tokens=None, endpoints=
     )
 
 
+_model_cutoffs = {}
+_model_cutoffs_refresh_at = 0
+_model_cutoffs_lock = threading.Lock()
+
+
+def openrouter_knowledge_cutoff(model):
+    global _model_cutoffs_refresh_at
+    with _model_cutoffs_lock:
+        if time.time() >= _model_cutoffs_refresh_at:
+            try:
+                request = urllib.request.Request(
+                    "https://openrouter.ai/api/v1/models", headers={"Accept": "application/json"}
+                )
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    rows = json.loads(response.read().decode("utf-8"))["data"]
+                if not isinstance(rows, list):
+                    raise ValueError("Invalid model catalog")
+                cutoffs = {}
+                for row in rows:
+                    value = row.get("knowledge_cutoff")
+                    cutoffs[row["id"]] = value if isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) else None
+                _model_cutoffs.clear()
+                _model_cutoffs.update(cutoffs)
+                _model_cutoffs_refresh_at = time.time() + 3600
+            except (OSError, ValueError, KeyError, TypeError):
+                # Catalog availability must not prevent loading a run.
+                _model_cutoffs_refresh_at = time.time() + 60
+        return _model_cutoffs.get(model)
+
+
 def model_details(model, reasoning_mode=None):
     config = model_config(model)
     reasoning = reasoning_config(reasoning_mode, config["id"], allow_fallback=True)
     return {
         "id": config["id"],
         "label": config["label"],
+        "knowledge_cutoff": openrouter_knowledge_cutoff(config["id"]),
         "reasoning_mode": reasoning["id"],
         "reasoning_label": reasoning["label"],
         "reasoning": reasoning["reasoning"],

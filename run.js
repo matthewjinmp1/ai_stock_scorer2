@@ -648,6 +648,7 @@ function renderRunStats(run) {
   statModel.innerHTML = `
     <span class="model-label">${escapeHtml(model.label || run.model)}</span>
     <span class="model-id">${escapeHtml(model.id || run.model)}</span>
+    <span class="model-id">knowledge cutoff: ${escapeHtml(model.knowledge_cutoff || "Not provided")}</span>
     <span class="model-id">mode: ${escapeHtml(model.reasoning_label || run.reasoning_mode || "Non-reasoning")}</span>
     <span class="model-id">reasoning: ${escapeHtml(reasoning.effort || "none")}, exclude: ${escapeHtml(
     reasoning.exclude === undefined ? "true" : String(reasoning.exclude)
