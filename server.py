@@ -2648,12 +2648,12 @@ def export_ibkr_basket(payload):
             quantity = Decimal(str(order.get("quantity", "")))
             price = Decimal(str(order.get("limitPrice", "")))
         except InvalidOperation:
-            raise ValueError(f"{symbol}: enter a whole-share quantity and positive limit price.")
-        if not quantity.is_finite() or not 1 <= quantity <= 1_000_000_000 or quantity != quantity.to_integral_value():
-            raise ValueError(f"{symbol}: quantity must be a positive whole number (at most 1 billion).")
+            raise ValueError(f"{symbol}: enter a share quantity and positive limit price.")
+        if not quantity.is_finite() or not Decimal("0.0001") <= quantity <= 1_000_000_000 or quantity != quantity.quantize(Decimal("0.0001")):
+            raise ValueError(f"{symbol}: quantity must be positive with at most four decimal places (at most 1 billion).")
         if not price.is_finite() or not Decimal("0.01") <= price <= Decimal("1000000000") or price != price.quantize(Decimal("0.01")):
             raise ValueError(f"{symbol}: limit price must be positive with at most two decimal places.")
-        rows.append(["BUY", int(quantity), symbol, "STK", "SMART", "USD", "DAY", "LMT", f"{price:.2f}"])
+        rows.append(["BUY", format(quantity.normalize(), "f"), symbol, "STK", "SMART", "USD", "DAY", "LMT", f"{price:.2f}"])
         total += quantity * price
     output = io.StringIO(newline="")
     writer = csv.writer(output)

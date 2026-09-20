@@ -1785,12 +1785,21 @@ class PortfolioTests(ServerTestCase):
         self.assertEqual(first["limitValue"], "700.50")
         self.assertEqual(first["orderCount"], 2)
 
+    def test_ibkr_export_preserves_fractional_quantity(self):
+        with mock.patch.object(server, "IBKR_EXPORT_DIR", self.root / "fractional"):
+            result = server.export_ibkr_basket({"orders": [
+                {"symbol": "GOOG", "quantity": 0.064, "limitPrice": "341.76"}
+            ]})
+            files = list((self.root / "fractional").glob("*.csv"))
+            self.assertEqual(len(files), 1)
+            self.assertIn("BUY,0.064,GOOG", files[0].read_text())
+
     def test_ibkr_invalid_orders_never_create_a_file(self):
         destination = self.root / "Jts"
         valid = {"symbol": "AAPL", "quantity": 1, "limitPrice": "10.25"}
         invalid_orders = [
             [], [valid, valid], [None],
-            *[[{**valid, "quantity": value}] for value in (0, -1, 1.5, "NaN", "Infinity", True)],
+            *[[{**valid, "quantity": value}] for value in (0, -1, 0.00001, 1.23456, "NaN", "Infinity", True)],
             *[[{**valid, "limitPrice": value}] for value in (0, -1, "NaN", "Infinity", "1.001", "")],
             *[[{**valid, "symbol": value}] for value in ("=BAD", "AAPL\nBUY", "AAPL,MSFT", "")],
         ]

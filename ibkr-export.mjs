@@ -24,6 +24,6 @@ export function allocateOrders(orders, budget) {
       throw new Error(`${order.symbol}: enter a positive limit price with at most two decimal places.`);
     }
     if (!Number.isFinite(order.weight) || order.weight <= 0 || order.weight > 100) throw new Error(`${order.symbol}: invalid portfolio weight. Rebuild the portfolio.`);
-    return { ...order, quantity: Math.floor((cents * order.weight / 100) / Math.round(price * 100)) };
+    return { ...order, quantity: Math.floor((cents * order.weight / 100) / Math.round(price * 100) * 10000) / 10000 };
   });
 }

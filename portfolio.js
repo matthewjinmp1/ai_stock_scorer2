@@ -14,7 +14,7 @@ function renderIbkrOrders() {
       <td><input type="checkbox" data-field="included" aria-label="Include ${escapeHtml(order.symbol)}" ${order.included ? "checked" : ""} ${!order.supported ? "disabled" : ""} />${!order.supported ? "Non-US: excluded" : ""}</td>
       <td><input data-field="symbol" aria-label="IBKR symbol for holding ${index + 1}" value="${escapeHtml(order.symbol)}" ${!order.supported ? "disabled" : ""} /></td>
       <td>${formatNumber(order.weight, 4)}%</td>
-      <td><input data-field="quantity" aria-label="Shares for holding ${index + 1}" type="number" min="0" max="1000000000" step="1" value="${order.quantity}" ${!order.supported ? "disabled" : ""} /></td>
+      <td><input data-field="quantity" aria-label="Shares for holding ${index + 1}" type="number" min="0" max="1000000000" step="0.0001" value="${order.quantity}" ${!order.supported ? "disabled" : ""} /></td>
       <td><input data-field="limitPrice" aria-label="Limit price for holding ${index + 1}" type="number" min="0.01" max="1000000000" step="0.01" value="${escapeHtml(order.limitPrice)}" ${!order.supported ? "disabled" : ""} /></td>
     </tr>`).join("");
   updateIbkrSummary();
@@ -23,7 +23,7 @@ function renderIbkrOrders() {
 function reviewedIbkrOrders() {
   const selected = exportOrders.filter(order => order.included);
   for (const order of selected) {
-    if (!Number.isInteger(Number(order.quantity)) || Number(order.quantity) < 0 || Number(order.quantity) > 1e9) throw new Error(`${order.symbol}: enter a nonnegative whole-share quantity.`);
+    if (!Number.isFinite(Number(order.quantity)) || Math.abs(Number(order.quantity) * 10000 - Math.round(Number(order.quantity) * 10000)) > 1e-6 || Number(order.quantity) < 0 || Number(order.quantity) > 1e9) throw new Error(`${order.symbol}: enter a nonnegative share quantity with at most four decimal places.`);
   }
   return selected.filter(order => Number(order.quantity) > 0).map(order => {
     const price = Number(order.limitPrice);

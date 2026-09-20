@@ -55,7 +55,7 @@
           <label>Budget (USD)<input id="ibkrBudget" type="number" min="0.01" max="1000000000000" step="0.01" placeholder="Enter amount" /></label>
           <button id="calculateIbkr" class="secondary-button" type="button">Calculate shares</button>
         </div>
-        <p>Shares are rounded down using each holding’s portfolio weight and the limit price you enter. Excluded holdings and rounding leave cash unallocated. You can also edit quantities directly.</p>
+        <p>Fractional shares are rounded down to four decimal places using each holding’s portfolio weight and the limit price you enter. Excluded holdings and rounding leave cash unallocated. You can also edit quantities directly. Fractional trading requires eligible stocks and IBKR account permissions.</p>
         <div class="table-wrap ibkr-table-wrap">
           <table>
             <thead><tr><th>Include</th><th>IBKR symbol</th><th>Target weight</th><th>Shares</th><th>Limit price (USD)</th></tr></thead>
