@@ -16,6 +16,7 @@ function renderIbkrOrders() {
       <td>${formatNumber(order.weight, 4)}%</td>
       <td><input data-field="quantity" aria-label="Shares for holding ${index + 1}" type="number" min="0" max="1000000000" step="0.0001" value="${order.quantity}" ${!order.supported ? "disabled" : ""} /></td>
       <td><input data-field="limitPrice" aria-label="Limit price for holding ${index + 1}" type="number" min="0.01" max="1000000000" step="0.01" readonly value="${escapeHtml(order.limitPrice)}" ${!order.supported ? "disabled" : ""} /></td>
+      <td data-purchase-value></td>
     </tr>`).join("");
   updateIbkrSummary();
 }
@@ -33,6 +34,15 @@ function reviewedIbkrOrders() {
 }
 
 function updateIbkrSummary() {
+  ibkrRows.querySelectorAll("[data-purchase-value]").forEach(cell => {
+    const order = exportOrders[Number(cell.closest("tr").dataset.order)];
+    const quantity = Number(order.quantity);
+    const price = Number(order.limitPrice);
+    const value = quantity * price;
+    cell.textContent = !order.included ? "$0.00"
+      : order.limitPrice !== "" && Number.isFinite(value) && quantity >= 0 && price > 0
+        ? value.toLocaleString("en-US", { style: "currency", currency: "USD" }) : "—";
+  });
   const summary = document.querySelector("#ibkrSummary");
   try {
     const orders = reviewedIbkrOrders();
