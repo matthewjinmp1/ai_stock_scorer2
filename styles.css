@@ -1202,7 +1202,9 @@ button:disabled {
 }
 
 .table-wrap {
-  overflow-x: hidden;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--panel);
@@ -1236,104 +1238,46 @@ table {
 }
 
 .ranking-table {
-  table-layout: fixed;
-  min-width: 0;
+  table-layout: auto;
+  min-width: 100%;
 }
 
-.ranking-table .position-column,
-.ranking-table .position-cell {
-  width: 3%;
-}
-
-.ranking-table [data-table-column="rank"],
-.ranking-table [data-table-column="score"] {
-  width: 4%;
-}
-
-.ranking-table [data-table-column="scorePercentile"] {
-  width: 7%;
-}
-
-.ranking-table [data-table-column="confidence"] {
-  width: 6%;
+.ranking-table th,
+.ranking-table td {
+  width: auto;
 }
 
 .ranking-table [data-table-column="company"] {
-  width: 15%;
+  min-width: 180px;
+  max-width: 320px;
+  white-space: normal;
 }
 
-.ranking-table [data-table-column="marketCap"] {
-  width: 7%;
+.ranking-table .company-cell > div {
+  min-width: 0;
 }
 
-.ranking-table [data-table-column="input"],
-.ranking-table [data-table-column="response"],
-.ranking-table [data-table-column="reasoning"],
-.ranking-table [data-table-column="total"],
-.ranking-table [data-table-column="time"],
-.ranking-table [data-table-column="search"] {
-  width: 5%;
-}
-
-.ranking-table [data-table-column="budget"] {
-  width: 6%;
-}
-
-.ranking-table [data-table-column="cost"],
-.ranking-table [data-table-column="chart"],
-.ranking-table [data-table-column="actions"] {
-  width: 5.5%;
+.ranking-table .company-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ranking-table [data-table-column="error"] {
-  width: 8%;
-}
-
-.ranking-table [data-table-column="dashboard"] {
-  width: 6.5%;
-}
-
-.ranking-table .failed-redrive-column {
-  width: 5.5%;
-}
-
-.ranking-table.ranking-view [data-table-column="error"],
-.ranking-table.ranking-view .failed-redrive-column {
-  display: none;
-}
-
-.ranking-table.failed-view {
-  width: 100%;
-  min-width: 0;
-  table-layout: fixed;
-}
-
-.ranking-table.failed-view [data-table-column="error"] {
-  width: 14%;
+  min-width: 240px;
+  max-width: 400px;
   white-space: normal;
-  overflow: hidden;
-  text-overflow: clip;
+  overflow-wrap: anywhere;
 }
 
-.ranking-table.failed-view .failed-redrive-column,
-.ranking-table.failed-view [data-table-column="search"],
-.ranking-table.failed-view [data-table-column="chart"],
-.ranking-table.failed-view [data-table-column="dashboard"],
-.ranking-table.failed-view [data-table-column="actions"] {
-  width: 7%;
-  padding-right: 4px;
-  padding-left: 4px;
-  overflow: hidden;
+.ranking-table .table-action-cell {
+  width: 1%;
+  white-space: nowrap;
 }
 
-.ranking-table.failed-view .details-link {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  padding-right: 4px;
-  padding-left: 4px;
-  box-sizing: border-box;
-  font-size: 0.76rem;
+.ranking-table .details-link {
+  width: auto;
+  min-width: max-content;
+  white-space: nowrap;
 }
 
 th,
@@ -1673,3 +1617,8 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 }
+/* Basket review keeps large portfolios scrollable and numeric fields readable. */
+.ibkr-table-wrap { max-height: 420px; overflow: auto; }
+.ibkr-table-wrap input:not([type="checkbox"]) { width: 140px; }
+.ibkr-table-wrap input[type="checkbox"] { width: auto; }
+#ibkrStatus { overflow-wrap: anywhere; }

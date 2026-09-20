@@ -9,6 +9,7 @@ const companyCountInput = document.querySelector("#companyCountInput");
 const maxTokensInput = document.querySelector("#maxTokensInput");
 const minimumConfidenceInput = document.querySelector("#minimumConfidenceInput");
 const lowCostModeInput = document.querySelector("#lowCostModeInput");
+const responseCacheInput = document.querySelector("#responseCacheInput");
 const confidenceFilterHelp = document.querySelector("#confidenceFilterHelp");
 const companyCountHelp = document.querySelector("#companyCountHelp");
 const listEditorSelect = document.querySelector("#listEditorSelect");
@@ -841,6 +842,7 @@ async function prefillFromRun(runId) {
   maxTokensInput.value = String(run.max_tokens || 200);
   minimumConfidenceInput.value = run.minimum_confidence_score ?? "";
   lowCostModeInput.checked = Boolean(run.low_cost_mode);
+  responseCacheInput.checked = run.response_cache_enabled !== false;
 
   if (![...modelSelect.options].some((option) => option.value === run.model)) {
     const option = document.createElement("option");
@@ -1059,6 +1061,7 @@ async function createRun() {
         reasoningMode,
         maxTokens,
         lowCostMode,
+        responseCacheEnabled: responseCacheInput.checked,
         minimumConfidenceScore,
         stockListId: stockList
           ? stockList.kind === "snapshot"

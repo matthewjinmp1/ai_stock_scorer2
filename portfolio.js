@@ -1,4 +1,85 @@
 import { DataTable } from "./data-table.js";
+import { draftOrders, allocateOrders } from "./ibkr-export.mjs";
+
+let exportPortfolio;
+let exportOrders = [];
+let savingBasket = false;
+const ibkrRows = document.querySelector("#ibkrOrders");
+const ibkrStatus = document.querySelector("#ibkrStatus");
+const saveIbkrButton = document.querySelector("#saveIbkr");
+
+function renderIbkrOrders() {
+  ibkrRows.innerHTML = exportOrders.map((order, index) => `
+    <tr data-order="${index}">
+      <td><input type="checkbox" data-field="included" aria-label="Include ${escapeHtml(order.symbol)}" ${order.included ? "checked" : ""} ${!order.supported ? "disabled" : ""} />${!order.supported ? "Non-US: excluded" : ""}</td>
+      <td><input data-field="symbol" aria-label="IBKR symbol for holding ${index + 1}" value="${escapeHtml(order.symbol)}" ${!order.supported ? "disabled" : ""} /></td>
+      <td>${formatNumber(order.weight, 4)}%</td>
+      <td><input data-field="quantity" aria-label="Shares for holding ${index + 1}" type="number" min="0" max="1000000000" step="1" value="${order.quantity}" ${!order.supported ? "disabled" : ""} /></td>
+      <td><input data-field="limitPrice" aria-label="Limit price for holding ${index + 1}" type="number" min="0.01" max="1000000000" step="0.01" value="${escapeHtml(order.limitPrice)}" ${!order.supported ? "disabled" : ""} /></td>
+    </tr>`).join("");
+  updateIbkrSummary();
+}
+
+function reviewedIbkrOrders() {
+  const selected = exportOrders.filter(order => order.included);
+  for (const order of selected) {
+    if (!Number.isInteger(Number(order.quantity)) || Number(order.quantity) < 0 || Number(order.quantity) > 1e9) throw new Error(`${order.symbol}: enter a nonnegative whole-share quantity.`);
+  }
+  return selected.filter(order => Number(order.quantity) > 0).map(order => {
+    const price = Number(order.limitPrice);
+    if (!Number.isFinite(price) || price < 0.01 || price > 1e9 || Math.abs(price * 100 - Math.round(price * 100)) > 1e-6) throw new Error(`${order.symbol}: enter a positive limit price with at most two decimal places.`);
+    return { symbol: order.symbol, quantity: Number(order.quantity), limitPrice: price.toFixed(2) };
+  });
+}
+
+function updateIbkrSummary() {
+  const summary = document.querySelector("#ibkrSummary");
+  try {
+    const orders = reviewedIbkrOrders();
+    const total = orders.reduce((sum, order) => sum + order.quantity * Number(order.limitPrice), 0);
+    const budget = Number(document.querySelector("#ibkrBudget").value);
+    const remaining = budget > 0 ? ` ${total > budget ? "Over budget by" : "Unallocated budget:"} $${formatNumber(Math.abs(budget - total))}.` : "";
+    const omitted = exportOrders.length - orders.length;
+    summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} at limit prices, excluding fees.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
+    saveIbkrButton.disabled = savingBasket || !orders.length;
+  } catch (error) {
+    summary.textContent = error.message;
+    saveIbkrButton.disabled = true;
+  }
+}
+
+ibkrRows.addEventListener("input", event => {
+  const field = event.target.dataset.field;
+  if (!field) return;
+  const order = exportOrders[Number(event.target.closest("tr").dataset.order)];
+  order[field] = field === "included" ? event.target.checked : event.target.value;
+  ibkrStatus.textContent = "";
+  updateIbkrSummary();
+});
+document.querySelector("#ibkrBudget").addEventListener("input", updateIbkrSummary);
+document.querySelector("#calculateIbkr").addEventListener("click", () => {
+  try {
+    exportOrders = allocateOrders(exportOrders, Number(document.querySelector("#ibkrBudget").value));
+    ibkrStatus.textContent = "";
+    renderIbkrOrders();
+  } catch (error) { ibkrStatus.textContent = error.message; }
+});
+saveIbkrButton.addEventListener("click", async () => {
+  savingBasket = true;
+  saveIbkrButton.disabled = true;
+  ibkrStatus.textContent = "Saving CSV…";
+  try {
+    const response = await fetch("/api/portfolios/export-ibkr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: exportPortfolio.name, orders: reviewedIbkrOrders() }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Could not save IBKR CSV.");
+    ibkrStatus.textContent = `Saved ${result.orderCount} ${result.orderCount === 1 ? "order" : "orders"} to ${result.path}. In BasketTrader, click Browse, select this file, then Load.`;
+  } catch (error) { ibkrStatus.textContent = error.message; }
+  finally { savingBasket = false; updateIbkrSummary(); }
+});
 
 const PORTFOLIO_PREVIEW_STORAGE_KEY = "ai-stock-scorer-portfolio-preview-v1";
 const statusEl = document.querySelector("#portfolioStatus");
@@ -97,6 +178,10 @@ function ensureHomeButton() {
 }
 
 function renderPortfolio(portfolio) {
+  exportPortfolio = portfolio;
+  exportOrders = draftOrders(portfolio.holdings);
+  renderIbkrOrders();
+  document.querySelector("#ibkrExport").hidden = false;
   const baseWeighting = portfolio.base_weighting === "equal" ? "equal" : "market_cap";
   document.title = `${portfolio.name} - Portfolio`;
   document.querySelector("#portfolioTitle").textContent = portfolio.name;

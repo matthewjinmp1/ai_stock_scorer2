@@ -1,6 +1,34 @@
 # ai_stock_scorer2
 
+## Export a portfolio to IBKR
+
+In Runs, select **Build Portfolio**, choose the rules, and click **Create portfolio**.
+On the composition page, use **Export to IBKR**: enter a USD budget, review or edit
+the saved-run limit prices, and click **Calculate shares**. Quantities round down
+at the portfolio weights; excluded holdings and rounding leave cash unallocated.
+Review the IBKR symbols and quantities, then click **Save IBKR CSV to Jts**.
+Each export creates a unique CSV in `~/Jts` without overwriting earlier exports.
+The confirmation shows the exact path to load using BasketTrader's **Browse** button.
+
+Exports contain US stock BUY / LMT / DAY orders in USD routed through SMART.
+Non-US holdings are excluded; zero-share rows are omitted. Saved prices are not
+live quotes. Symbol mappings (including share classes) should be checked in IBKR.
+Saving a CSV does not submit orders or rebalance existing positions.
+
+Order sizing tests: `node --test test_ibkr_export.mjs`.
+
 ## US company confidence run
+
+Requests wait up to 10 seconds for response headers (including the connection
+handshake), then track generation time separately. Streaming allows these phases
+to be distinguished. A connection timeout tries a different eligible provider of
+the same model, up to the configured attempt limit (three by default), without
+reusing a timed-out provider. Low-cost mode starts with its selected provider and
+may fall back to another provider. If no alternative is available, the stock fails.
+The existing generation timeout remains in effect after connection.
+Request Details shows separate connection and response durations; the request log
+records these for each attempt. This applies to new requests, not workers that
+were already running when the application was updated.
 
 Run the saved DeepSeek confidence prompt against every current US company:
 

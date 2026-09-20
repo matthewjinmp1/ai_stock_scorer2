@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import concurrent.futures
 import copy
+import csv
+import io
 import html
 import json
 import math
@@ -14,12 +16,16 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import uuid
+from decimal import Decimal, InvalidOperation
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, unquote, urlparse
+from openrouter_transport import ConnectionDeadline, fetch_completion
 
 
 ROOT = Path(__file__).resolve().parent
+IBKR_EXPORT_DIR = Path.home() / "Jts"
 SOURCE_URL = "https://companiesmarketcap.com/"
 COMPANY_UNIVERSE_LIMIT = 2000
 COMPANIESMARKETCAP_PAGE_SIZE = 100
@@ -551,6 +557,30 @@ def openrouter_max_attempts():
     return max(1, min(5, value))
 
 
+def connection_providers(model, reasoning_mode, max_tokens, low_cost_provider=None):
+    endpoints = openrouter_model_endpoints(model)
+    candidates = []
+    for endpoint in endpoints:
+        try:
+            candidate = lowest_cost_provider(model, reasoning_mode, max_tokens, [endpoint])
+        except RuntimeError:
+            continue
+        candidates.append(candidate)
+    candidates.sort(key=lambda item: (item["completion_price"], item["prompt_price"], item["tag"]))
+    if low_cost_provider:
+        candidates = [low_cost_provider] + candidates
+    unique = []
+    seen = set()
+    for candidate in candidates:
+        provider = provider_slug(candidate["provider_name"])
+        if provider not in seen:
+            seen.add(provider)
+            unique.append(candidate)
+    if not unique:
+        raise RuntimeError("No eligible providers available for this run's settings.")
+    return unique
+
+
 def openrouter_attempt_timeout_seconds(max_tokens=None):
     configured_value = os.environ.get("OPENROUTER_ATTEMPT_TIMEOUT_SECONDS")
     if configured_value is None:
@@ -833,6 +863,10 @@ def db_connect():
 
 def ensure_scoring_schema():
     with db_connect() as connection:
+        connection.execute("""CREATE TABLE IF NOT EXISTS scoring_progress (
+            run_id INTEGER NOT NULL, ticker TEXT NOT NULL, payload TEXT NOT NULL,
+            PRIMARY KEY(run_id, ticker))""")
+        connection.execute("CREATE TABLE IF NOT EXISTS scoring_pending (run_id INTEGER NOT NULL, ticker TEXT NOT NULL, PRIMARY KEY(run_id, ticker))")
         connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS scoring_runs (
@@ -954,6 +988,10 @@ def ensure_scoring_schema():
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN reasoning_mode TEXT NOT NULL DEFAULT 'none'")
         if "max_tokens" not in columns:
             connection.execute("ALTER TABLE scoring_runs ADD COLUMN max_tokens INTEGER NOT NULL DEFAULT 200")
+        if "response_cache_enabled" not in columns:
+            connection.execute(
+                "ALTER TABLE scoring_runs ADD COLUMN response_cache_enabled INTEGER NOT NULL DEFAULT 1"
+            )
         if "low_cost_mode" not in columns:
             connection.execute(
                 "ALTER TABLE scoring_runs ADD COLUMN low_cost_mode INTEGER NOT NULL DEFAULT 0"
@@ -2064,6 +2102,7 @@ def create_scoring_run(
     run_type="scoring",
     minimum_confidence_score=None,
     low_cost_mode=False,
+    response_cache_enabled=True,
 ):
     if not os.environ.get("OPENROUTER_KEY"):
         raise RuntimeError("OPENROUTER_KEY is not set")
@@ -2074,6 +2113,8 @@ def create_scoring_run(
     reasoning_mode = normalize_reasoning_mode(reasoning_mode, model)
     max_tokens = normalize_max_tokens(max_tokens)
     low_cost_mode = normalize_low_cost_mode(low_cost_mode)
+    if not isinstance(response_cache_enabled, bool):
+        raise ValueError("Response cache must be true or false.")
     run_type = str(run_type or "scoring").strip().lower()
     if run_type not in ("scoring", "confidence"):
         raise ValueError("Unknown scoring run type.")
@@ -2120,9 +2161,9 @@ def create_scoring_run(
             INSERT INTO scoring_runs (
                 name, prompt, model, reasoning_mode, max_tokens, low_cost_mode, stock_list_id, run_type,
                 minimum_confidence_score, confidence_run_id, status,
-                company_count, queue_count, created_at
+                company_count, queue_count, created_at, response_cache_enabled
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name,
@@ -2139,6 +2180,7 @@ def create_scoring_run(
                 len(companies),
                 len(companies),
                 now,
+                int(response_cache_enabled),
             ),
         )
         run_id = cursor.lastrowid
@@ -2245,8 +2287,23 @@ def failed_tickers_for_run(run_id):
     return [row["ticker"] for row in rows]
 
 
+def write_stock_progress(run_id, ticker, progress):
+    if run_id is None:
+        return
+    try:
+        with db_connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO scoring_progress VALUES (?, ?, ?)",
+                (run_id, ticker, json.dumps(progress)),
+            )
+    except sqlite3.Error:
+        # Observability must never fail a scoring request.
+        pass
+
+
 def redrive_failed_scoring_run(run_id, requested_tickers=None):
     with db_connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         run = connection.execute(
             """
             SELECT id, status
@@ -2257,9 +2314,16 @@ def redrive_failed_scoring_run(run_id, requested_tickers=None):
         ).fetchone()
         if not run:
             return None
-        if run["status"] in ("queued", "running", "stop_requested"):
+        if run["status"] == "stop_requested":
             raise ValueError("Wait for the current run to finish before redriving failed stocks.")
-        failed_tickers = failed_tickers_for_run(run_id)
+        active = run["status"] in ("queued", "running")
+        failed_tickers = [row["ticker"] for row in connection.execute(
+            """SELECT ticker FROM scoring_results
+               WHERE run_id = ? AND error IS NOT NULL
+               AND (? = 0 OR ticker NOT IN
+                   (SELECT ticker FROM scoring_pending WHERE run_id = ?))
+               ORDER BY rank""", (run_id, int(active), run_id)
+        )]
         if not failed_tickers:
             raise ValueError("This run has no failed stocks to redrive.")
         if requested_tickers is None:
@@ -2276,17 +2340,26 @@ def redrive_failed_scoring_run(run_id, requested_tickers=None):
             if not requested or len(target_tickers) != len(requested):
                 raise ValueError("Only currently failed stocks can be redriven.")
 
-        connection.execute(
-            """
-            UPDATE scoring_runs
-            SET status = ?, queue_count = ?, started_at = ?, finished_at = NULL, error = NULL
-            WHERE id = ?
-            """,
-            ("queued", len(target_tickers), int(time.time()), run_id),
-        )
+        if active:
+            connection.execute(
+                "UPDATE scoring_runs SET queue_count = queue_count + ? WHERE id = ?",
+                (len(target_tickers), run_id),
+            )
+        else:
+            connection.execute(
+                """UPDATE scoring_runs SET status = 'queued', queue_count = ?,
+                   started_at = ?, finished_at = NULL, error = NULL WHERE id = ?""",
+                (len(target_tickers), int(time.time()), run_id),
+            )
+            connection.execute("DELETE FROM scoring_pending WHERE run_id = ?", (run_id,))
+        connection.executemany("DELETE FROM scoring_progress WHERE run_id = ? AND ticker = ?",
+                               [(run_id, ticker) for ticker in target_tickers])
+        connection.executemany("INSERT INTO scoring_pending VALUES (?, ?)",
+                               [(run_id, ticker) for ticker in target_tickers])
         connection.commit()
 
-    start_scoring_worker_process(run_id, target_tickers=target_tickers)
+    if not active:
+        start_scoring_worker_process(run_id, target_tickers=target_tickers)
     return get_run(run_id)
 
 
@@ -2296,6 +2369,7 @@ def get_run(run_id, include_raw_response=True):
             """
             SELECT scoring_runs.id, scoring_runs.name, scoring_runs.prompt, scoring_runs.model,
                    scoring_runs.reasoning_mode, scoring_runs.max_tokens, scoring_runs.low_cost_mode,
+                   scoring_runs.response_cache_enabled,
                    scoring_runs.stock_list_id,
                    scoring_runs.starred, scoring_runs.run_type,
                    scoring_runs.minimum_confidence_score, scoring_runs.confidence_run_id,
@@ -2340,6 +2414,7 @@ def get_run(run_id, include_raw_response=True):
     current_confidence_scores = confidence_scores_for_run(current_confidence_run_id)
     payload = dict(run)
     payload["low_cost_mode"] = bool(payload.get("low_cost_mode"))
+    payload["response_cache_enabled"] = bool(payload["response_cache_enabled"])
     payload["results"] = []
     for row in results:
         result = dict(row)
@@ -2420,6 +2495,7 @@ def calculate_portfolio(
             SELECT scoring_results.ticker, scoring_results.company_name,
                    scoring_results.rank, scoring_results.market_cap,
                    scoring_results.market_cap_value, scoring_results.score,
+                   scoring_results.price, scoring_results.country,
                    companies.logo
             FROM scoring_results
             LEFT JOIN companies ON companies.ticker = scoring_results.ticker
@@ -2518,6 +2594,55 @@ def calculate_portfolio(
     }
 
 
+def export_ibkr_basket(payload):
+    """Save reviewed stock orders locally; this does not contact a broker."""
+    if not isinstance(payload, dict):
+        raise ValueError("Expected an order basket.")
+    orders = payload.get("orders")
+    if not isinstance(orders, list) or not 1 <= len(orders) <= 10000:
+        raise ValueError("Include between 1 and 10,000 orders.")
+    rows = []
+    seen = set()
+    total = Decimal(0)
+    for index, order in enumerate(orders, 1):
+        if not isinstance(order, dict):
+            raise ValueError(f"Order {index} is invalid.")
+        symbol = str(order.get("symbol", "")).strip().upper()
+        if not re.fullmatch(r"[A-Z][A-Z0-9]*(?:[ .-][A-Z0-9]+)*", symbol) or len(symbol) > 24:
+            raise ValueError(f"Order {index}: enter a valid IBKR stock symbol.")
+        if symbol in seen:
+            raise ValueError(f"Duplicate stock symbol: {symbol}.")
+        seen.add(symbol)
+        try:
+            quantity = Decimal(str(order.get("quantity", "")))
+            price = Decimal(str(order.get("limitPrice", "")))
+        except InvalidOperation:
+            raise ValueError(f"{symbol}: enter a whole-share quantity and positive limit price.")
+        if not quantity.is_finite() or not 1 <= quantity <= 1_000_000_000 or quantity != quantity.to_integral_value():
+            raise ValueError(f"{symbol}: quantity must be a positive whole number (at most 1 billion).")
+        if not price.is_finite() or not Decimal("0.01") <= price <= Decimal("1000000000") or price != price.quantize(Decimal("0.01")):
+            raise ValueError(f"{symbol}: limit price must be positive with at most two decimal places.")
+        rows.append(["BUY", int(quantity), symbol, "STK", "SMART", "USD", "DAY", "LMT", f"{price:.2f}"])
+        total += quantity * price
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "LmtPrice"])
+    writer.writerows(rows)
+    name = re.sub(r"[^a-zA-Z0-9_-]+", "_", str(payload.get("name") or "portfolio")).strip("_")[:60] or "portfolio"
+    filename = f"ibkr_{name}_{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.csv"
+    IBKR_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    path = IBKR_EXPORT_DIR / filename
+    try:
+        with path.open("x", encoding="utf-8", newline="") as handle:
+            handle.write(output.getvalue())
+    except OSError:
+        # Do not leave a partially written basket available for import.
+        if path.exists() and not isinstance(sys.exc_info()[1], FileExistsError):
+            path.unlink(missing_ok=True)
+        raise
+    return {"path": str(path), "filename": filename, "orderCount": len(rows), "limitValue": str(total)}
+
+
 def _run_result_sort_value(result, key):
     values = {
         "scoreRank": result.get("scoreRank"),
@@ -2571,13 +2696,41 @@ def paginated_run(run_id, page=1, page_size=100, view="ranking", sort_key="score
     if not payload:
         return None
 
+    queued = []
+    if payload["status"] in ("queued", "running", "stop_requested"):
+        completed = {result["ticker"] for result in payload["results"]}
+        with db_connect() as connection:
+            pending = {row[0] for row in connection.execute(
+                "SELECT ticker FROM scoring_pending WHERE run_id = ?", (run_id,)
+            )}
+            progress = {row["ticker"]: json.loads(row["payload"]) for row in connection.execute(
+                "SELECT ticker, payload FROM scoring_progress WHERE run_id = ?", (run_id,)
+            )}
+        # Older workers predate the pending table. Reconcile only an exact match
+        # between outstanding work and failed results older than this attempt.
+        companies = scoring_companies_for_run(run_id)
+        if not pending and payload.get("queue_count", 0):
+            old_failures = {result["ticker"] for result in payload["results"]
+                            if (result.get("score") is None or result.get("error"))
+                            and result.get("created_at", 0) < (payload.get("started_at") or 0)}
+            missing = {company["ticker"] for company in companies} - completed
+            if len(old_failures | missing) == payload["queue_count"]:
+                pending = old_failures
+        for company in companies:
+            if company["ticker"] not in completed or company["ticker"] in pending:
+                queued.append({**company, "company_name": company["name"], "scoreRank": len(queued) + 1, "progress": progress.get(company["ticker"])})
+
+    running = [row for row in queued if (row.get("progress") or {}).get("phase") in
+               ("preparing", "connecting", "generating", "retrying")]
+    queued = [row for row in queued if row not in running]
+    queued_tickers = {row["ticker"] for row in queued + running}
     successful = [
         result for result in payload["results"]
-        if result.get("score") is not None and not result.get("error")
+        if result.get("score") is not None and not result.get("error") and result["ticker"] not in queued_tickers
     ]
     failed = [
         result for result in payload["results"]
-        if result.get("score") is None or result.get("error")
+        if (result.get("score") is None or result.get("error")) and result["ticker"] not in queued_tickers
     ]
     for index, result in enumerate(successful, 1):
         result["scoreRank"] = index
@@ -2590,8 +2743,8 @@ def paginated_run(run_id, page=1, page_size=100, view="ranking", sort_key="score
         target = float(score_target)
         matched_score = min(scores, key=lambda score: (abs(score - target), -score))
 
-    rows = failed if view == "failed" else successful
-    if matched_score is not None and view != "failed":
+    rows = running if view == "running" else queued if view == "queued" else failed if view == "failed" else successful
+    if matched_score is not None and view == "ranking":
         rows = [result for result in rows if float(result["score"]) == matched_score]
     query = str(query or "").strip().lower()
     if query:
@@ -2635,7 +2788,7 @@ def paginated_run(run_id, page=1, page_size=100, view="ranking", sort_key="score
         "total": total,
         "total_pages": total_pages,
         "offset": offset,
-        "counts": {"ranking": len(successful), "failed": len(failed)},
+        "counts": {"ranking": len(successful), "failed": len(failed), "queued": len(queued), "running": len(running)},
         "score_values": scores,
         "matched_score": matched_score,
     }
@@ -2667,6 +2820,7 @@ def ai_request_cache_key(entry):
         provider = request.get("provider")
     signature = {
         "model": request.get("model"),
+        "stream": request.get("stream", False),
         "messages": request.get("messages"),
         "temperature": request.get("temperature"),
         "max_tokens": request.get("max_tokens"),
@@ -2864,6 +3018,8 @@ def estimate_token_limit_failure_risk(completion_tokens, token_limit, minimum_sa
 def ai_request_stats_for_run(run_id, token_limit=None):
     stats = {
         "cost": 0,
+        "wasted_cost": 0,
+        "failed_cost_unknown_count": 0,
         "total_tokens": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,
@@ -2884,11 +3040,30 @@ def ai_request_stats_for_run(run_id, token_limit=None):
         "token_limit_risk_method": "lognormal_tail",
         "token_limit_risk_capped": False,
     }
+    with db_connect() as connection:
+        successful_tickers = {row["ticker"].upper() for row in connection.execute(
+            """SELECT ticker FROM scoring_results WHERE run_id = ?
+               AND score IS NOT NULL AND error IS NULL""", (run_id,)
+        )}
+    timing_samples = {"connection": [], "response": [], "attempt": []}
+    latest_entries = {}
     successful_completion_tokens = {}
     for entry_index, entry in enumerate(effective_ai_request_entries()):
         if entry.get("run_id") != run_id:
             continue
 
+        ticker = (entry.get("company", {}).get("ticker") or "").upper()
+        if ticker:
+            latest_entries[ticker] = entry
+        for phase, field in (("connection", "connection_ms"), ("response", "response_ms"), ("attempt", "duration_ms")):
+            value = (entry.get("timing") or {}).get(field)
+            if value is not None:
+                try:
+                    value = float(value)
+                    if math.isfinite(value) and value >= 0:
+                        timing_samples[phase].append(value)
+                except (TypeError, ValueError):
+                    pass
         stats["request_count"] += 1
         if entry.get("response", {}).get("success"):
             stats["successful_request_count"] += 1
@@ -2896,6 +3071,15 @@ def ai_request_stats_for_run(run_id, token_limit=None):
             stats["failed_request_count"] += 1
 
         token_stats = entry.get("token_stats") or {}
+        if not (entry.get("response") or {}).get("success"):
+            try:
+                failed_cost = float(token_stats.get("cost"))
+                if not math.isfinite(failed_cost) or failed_cost < 0:
+                    raise ValueError("Invalid cost")
+                stats["wasted_cost"] += failed_cost
+            except (TypeError, ValueError):
+                stats["failed_cost_unknown_count"] += 1
+
         completion_details = token_stats.get("completion_tokens_details") or {}
         for key in ("cost", "total_tokens", "prompt_tokens", "completion_tokens"):
             try:
@@ -2924,19 +3108,29 @@ def ai_request_stats_for_run(run_id, token_limit=None):
             pass
 
     if stats["request_count"]:
-        stats["average_prompt_tokens"] = round(
-            stats["prompt_tokens"] / stats["request_count"], 1
-        )
-        stats["average_response_tokens"] = round(
-            stats["response_tokens"] / stats["request_count"], 1
-        )
-        stats["average_reasoning_tokens"] = round(
-            stats["reasoning_tokens"] / stats["request_count"], 1
-        )
-        stats["average_total_tokens"] = round(
-            stats["total_tokens"] / stats["request_count"], 1
-        )
         stats["average_latency_ms"] = round(stats["total_latency_ms"] / stats["request_count"])
+    for phase, values in timing_samples.items():
+        stats[f"average_{phase}_ms"] = round(sum(values) / len(values)) if values else None
+        stats[f"{phase}_timing_sample_size"] = len(values)
+    samples = []
+    for ticker, entry in latest_entries.items():
+        if ticker not in successful_tickers or not (entry.get("response") or {}).get("success"):
+            continue
+        usage = entry.get("token_stats") or {}
+        # Unknown usage is not a zero-token result.
+        if any(usage.get(key) is None for key in ("prompt_tokens", "completion_tokens", "total_tokens")):
+            continue
+        try:
+            reasoning = float((usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0)
+            samples.append((float(usage["prompt_tokens"]),
+                            max(0, float(usage["completion_tokens"]) - reasoning),
+                            reasoning, float(usage["total_tokens"])))
+        except (TypeError, ValueError):
+            continue
+    stats["average_token_sample_size"] = len(samples)
+    if samples:
+        for index, key in enumerate(("prompt", "response", "reasoning", "total")):
+            stats[f"average_{key}_tokens"] = round(sum(sample[index] for sample in samples) / len(samples), 1)
     risk = estimate_token_limit_failure_risk(
         successful_completion_tokens.values(), token_limit
     )
@@ -3288,9 +3482,15 @@ def update_scoring_run(
     max_tokens=None,
     low_cost_mode=None,
     stock_list_id=RUN_FIELD_UNSET,
+    response_cache_enabled=None,
 ):
     updates = []
     values = []
+    if response_cache_enabled is not None:
+        if not isinstance(response_cache_enabled, bool):
+            raise ValueError("Response cache must be true or false.")
+        updates.append("response_cache_enabled = ?")
+        values.append(int(response_cache_enabled))
     if name is not None:
         updates.append("name = ?")
         values.append(normalize_run_name(name))
@@ -3612,6 +3812,8 @@ def ai_log_entry(
     error=None,
     http_status=None,
     cache_metadata=None,
+    bypass_cache=False,
+    request_timing=None,
 ):
     choice = None
     message = {}
@@ -3631,17 +3833,18 @@ def ai_log_entry(
             "provider": "openrouter",
             "url": OPENROUTER_API_URL,
             "model": request_payload.get("model"),
+            "stream": request_payload.get("stream", False),
             "messages": request_payload.get("messages"),
             "temperature": request_payload.get("temperature"),
             "max_tokens": request_payload.get("max_tokens"),
-            "attempt_timeout_seconds": openrouter_attempt_timeout_seconds(
+            "response_inactivity_timeout_seconds": openrouter_attempt_timeout_seconds(
                 request_payload.get("max_tokens")
             ),
             "reasoning": request_payload.get("reasoning"),
             "provider_preferences": request_payload.get("provider"),
             "response_cache": {
-                "enabled": True,
-                "ttl_seconds": openrouter_cache_ttl_seconds(),
+                "enabled": not bypass_cache,
+                "ttl_seconds": None if bypass_cache else openrouter_cache_ttl_seconds(),
             },
             "prompt_sent": request_payload["messages"][0]["content"],
         },
@@ -3664,6 +3867,7 @@ def ai_log_entry(
         "token_stats": response_payload.get("usage") if response_payload else None,
         "timing": {
             "duration_ms": round((time.time() - started_at) * 1000),
+            **(request_timing or {}),
         },
         "chain_of_thought": (
             message.get("reasoning")
@@ -3761,6 +3965,7 @@ def call_openrouter(
     run_id=None,
     max_tokens=None,
     low_cost_provider=None,
+    bypass_cache=False,
 ):
     api_key = os.environ.get("OPENROUTER_KEY")
     if not api_key:
@@ -3779,39 +3984,54 @@ def call_openrouter(
     }
     if config.get("supports_temperature", True):
         request_payload["temperature"] = 0
-    body = json.dumps(request_payload).encode("utf-8")
-    request = urllib.request.Request(
-        OPENROUTER_API_URL,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost",
-            "X-Title": "AI Stock Scorer",
-            "X-OpenRouter-Cache": "true",
-            "X-OpenRouter-Cache-TTL": str(openrouter_cache_ttl_seconds()),
-        },
-        method="POST",
-    )
+    request_payload["stream"] = True
+    providers = connection_providers(model, reasoning_mode, request_payload["max_tokens"], low_cost_provider)
+    request_headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "http://localhost",
+        "X-Title": "AI Stock Scorer",
+        "X-OpenRouter-Cache": "false" if bypass_cache else "true",
+        **({} if bypass_cache else {"X-OpenRouter-Cache-TTL": str(openrouter_cache_ttl_seconds())}),
+    }
     max_attempts = openrouter_max_attempts()
     attempt_timeout_seconds = openrouter_attempt_timeout_seconds(request_payload["max_tokens"])
     for attempt in range(1, max_attempts + 1):
+        selected_provider = providers[min(attempt - 1, len(providers) - 1)]
+        if selected_provider:
+            request_payload["provider"] = provider_preferences(config, selected_provider)
+        request = urllib.request.Request(
+            OPENROUTER_API_URL,
+            data=json.dumps(request_payload).encode("utf-8"),
+            headers=request_headers,
+            method="POST",
+        )
         started_at = time.time()
+        progress = {"phase": "connecting" if attempt == 1 else "retrying",
+                    "attempt": attempt, "started_at": started_at,
+                    "connected_at": None, "last_activity_at": None}
+        write_stock_progress(run_id, company["ticker"], progress)
+        last_progress_write = [0.0]
+        def report_progress(event):
+            now = time.time()
+            progress["phase"] = "generating"
+            if event == "connected":
+                progress["connected_at"] = now
+            else:
+                progress["last_activity_at"] = now
+            if event == "connected" or now - last_progress_write[0] >= 1:
+                write_stock_progress(run_id, company["ticker"], progress)
+                last_progress_write[0] = now
+        request.progress_callback = report_progress
+        request_timing = {"connection_timeout_seconds": 10}
         try:
-            with urllib.request.urlopen(request, timeout=attempt_timeout_seconds) as response:
-                http_status = response.status
-                response_body = read_http_response_with_deadline(
-                    response,
-                    attempt_timeout_seconds,
-                )
-                payload = json.loads(response_body.decode("utf-8"))
-                response_headers = getattr(response, "headers", None)
-                header_value = response_headers.get if response_headers is not None else lambda _name: None
-                cache_metadata = {
-                    "status": header_value("X-OpenRouter-Cache-Status"),
-                    "age_seconds": header_value("X-OpenRouter-Cache-Age"),
-                    "ttl_seconds": header_value("X-OpenRouter-Cache-TTL"),
-                }
+            payload, http_status, response_headers = fetch_completion(request, attempt_timeout_seconds, request_timing)
+            header_value = response_headers.get if response_headers is not None else lambda _name: None
+            cache_metadata = {
+                "status": header_value("X-OpenRouter-Cache-Status"),
+                "age_seconds": header_value("X-OpenRouter-Cache-Age"),
+                "ttl_seconds": header_value("X-OpenRouter-Cache-TTL"),
+            }
         except urllib.error.HTTPError as exc:
             details = openrouter_http_error_details(exc)
             append_ai_request_log(
@@ -3820,6 +4040,8 @@ def call_openrouter(
                     company,
                     request_payload,
                     started_at,
+                    bypass_cache=bypass_cache,
+                    request_timing=request_timing,
                     error=details,
                     http_status=details["status"],
                 )
@@ -3827,6 +4049,8 @@ def call_openrouter(
             message = details["message"]
             if exc.code in (401, 403):
                 raise FatalScoringError(message) from exc
+            if exc.code in (408, 429, 500, 502, 503, 504) and attempt < min(max_attempts, len(providers)):
+                continue
             raise RuntimeError(message) from exc
         except Exception as exc:
             append_ai_request_log(
@@ -3835,9 +4059,13 @@ def call_openrouter(
                     company,
                     request_payload,
                     started_at,
+                    bypass_cache=bypass_cache,
+                    request_timing=request_timing,
                     error={"message": str(exc), "type": exc.__class__.__name__},
                 )
             )
+            if isinstance(exc, ConnectionDeadline) and attempt < min(max_attempts, len(providers)):
+                continue
             raise
 
         payload_error = openrouter_payload_error_details(payload, http_status)
@@ -3851,6 +4079,8 @@ def call_openrouter(
                 company,
                 request_payload,
                 started_at,
+                bypass_cache=bypass_cache,
+                request_timing=request_timing,
                 response_payload=payload,
                 error=payload_error,
                 http_status=http_status,
@@ -3883,6 +4113,8 @@ def call_openrouter(
                 company,
                 request_payload,
                 started_at,
+                bypass_cache=bypass_cache,
+                request_timing=request_timing,
                 response_payload=payload,
                 error={"message": str(exc), "type": exc.__class__.__name__},
                 http_status=http_status,
@@ -3897,6 +4129,8 @@ def call_openrouter(
             company,
             request_payload,
             started_at,
+            bypass_cache=bypass_cache,
+            request_timing=request_timing,
             response_payload=payload,
             http_status=http_status,
             cache_metadata=cache_metadata,
@@ -3951,12 +4185,15 @@ def score_company_request(
     company,
     max_tokens,
     low_cost_provider=None,
+    bypass_cache=False,
 ):
     raw_response = None
     score = None
     error = None
     try:
         call_options = {"run_id": run_id, "max_tokens": max_tokens}
+        if bypass_cache:
+            call_options["bypass_cache"] = True
         if low_cost_provider:
             call_options["low_cost_provider"] = low_cost_provider
         raw_response = call_openrouter(prompt, company, model, reasoning_mode, **call_options)
@@ -3975,6 +4212,7 @@ def save_scoring_result(run_id, company, score, raw_response, error):
         if run_status(run_id) == "stop_requested":
             return False
         save_result(connection, run_id, company, score, raw_response, error)
+        connection.execute("DELETE FROM scoring_pending WHERE run_id = ? AND ticker = ?", (run_id, company["ticker"]))
         connection.execute(
             "UPDATE scoring_runs SET queue_count = MAX(queue_count - 1, 0) WHERE id = ?",
             (run_id,),
@@ -3988,7 +4226,7 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
     ensure_scoring_schema()
     with db_connect() as connection:
         run = connection.execute(
-            "SELECT name, prompt, model, reasoning_mode, max_tokens, low_cost_mode, company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
+            "SELECT name, prompt, model, reasoning_mode, max_tokens, low_cost_mode, response_cache_enabled, company_count FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
             (run_id,),
         ).fetchone()
         if not run:
@@ -4007,7 +4245,8 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
             low_cost_provider = lowest_cost_provider(
                 run["model"], run["reasoning_mode"], run["max_tokens"]
             )
-        companies = scoring_companies_for_run(run_id)
+        all_companies = scoring_companies_for_run(run_id)
+        companies = all_companies
         if start_index:
             companies = companies[start_index:]
         if target_tickers:
@@ -4016,39 +4255,40 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
         completed_tickers = completed_score_tickers_for_run(run_id)
         companies = [company for company in companies if company["ticker"] not in completed_tickers]
         with db_connect() as connection:
+            connection.executemany("DELETE FROM scoring_progress WHERE run_id = ? AND ticker = ?",
+                                   [(run_id, company["ticker"]) for company in companies])
+            connection.executemany("INSERT OR IGNORE INTO scoring_pending VALUES (?, ?)", [(run_id, company["ticker"]) for company in companies])
             connection.execute(
-                "UPDATE scoring_runs SET queue_count = ? WHERE id = ?",
-                (len(companies), run_id),
+                "UPDATE scoring_runs SET queue_count = (SELECT COUNT(*) FROM scoring_pending WHERE run_id = ?) WHERE id = ?",
+                (run_id, run_id),
             )
             connection.commit()
-        if not companies:
-            with db_connect() as connection:
-                connection.execute(
-                    """
-                    UPDATE scoring_runs
-                    SET status = ?, finished_at = ?, error = ?,
-                        queue_count = 0, worker_pid = NULL, worker_started_at = NULL
-                    WHERE id = ?
-                    """,
-                    ("completed", int(time.time()), None, run_id),
-                )
-                update_run_counts(connection, run_id)
-                connection.commit()
-            return
-        company_iter = iter(companies)
         futures = {}
+        retry_rounds = {}
+        retry_after = {}
         max_workers = min(scoring_concurrency(), len(companies)) or 1
 
         def submit_next(executor):
-            try:
-                company = next(company_iter)
-            except StopIteration:
+            in_flight = {company["ticker"] for company in futures.values()}
+            with db_connect() as connection:
+                pending = {row["ticker"] for row in connection.execute(
+                    "SELECT ticker FROM scoring_pending WHERE run_id = ?", (run_id,)
+                )}
+            company = next((company for company in all_companies
+                            if company["ticker"] in pending - in_flight
+                            and retry_after.get(company["ticker"], 0) <= time.monotonic()), None)
+            if company is None:
                 return False
+            retry = company["ticker"] in failed_tickers_for_run(run_id)
             current_status = run_status(run_id)
             if current_status is None:
                 return False
             if current_status == "stop_requested":
                 return False
+            write_stock_progress(run_id, company["ticker"], {
+                "phase": "preparing", "started_at": time.time(),
+                "connected_at": None, "last_activity_at": None,
+            })
             future = executor.submit(
                 score_company_request,
                 run_id,
@@ -4058,6 +4298,8 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
                 company,
                 run["max_tokens"],
                 low_cost_provider,
+                # Explicit ticker targets are passed by both redrive endpoints.
+                retry_rounds.get(company["ticker"], 0) > 0 or retry or bool(target_tickers) or not run["response_cache_enabled"],
             )
             futures[future] = company
             return True
@@ -4067,7 +4309,33 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
                 if not submit_next(executor):
                     break
 
-            while futures:
+            while True:
+                while len(futures) < max_workers and submit_next(executor):
+                    pass
+                if not futures:
+                    time.sleep(0.1)
+                    # Serialize queue completion with redrive, so an accepted retry
+                    # cannot be stranded between the final check and worker exit.
+                    with db_connect() as connection:
+                        connection.execute("BEGIN IMMEDIATE")
+                        state = connection.execute(
+                            "SELECT status FROM scoring_runs WHERE id = ? AND deleted_at IS NULL",
+                            (run_id,),
+                        ).fetchone()
+                        if not state or state["status"] == "stop_requested":
+                            stopped = True
+                            break
+                        if connection.execute(
+                            "SELECT 1 FROM scoring_pending WHERE run_id = ? LIMIT 1", (run_id,)
+                        ).fetchone():
+                            continue
+                        connection.execute(
+                            """UPDATE scoring_runs SET status = 'completed', finished_at = ?,
+                               queue_count = 0, worker_pid = NULL, worker_started_at = NULL,
+                               error = NULL WHERE id = ?""", (int(time.time()), run_id)
+                        )
+                        update_run_counts(connection, run_id)
+                    return
                 current_status = run_status(run_id)
                 if current_status is None:
                     stopped = True
@@ -4078,6 +4346,7 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
 
                 done, _pending = concurrent.futures.wait(
                     futures,
+                    timeout=0.5,
                     return_when=concurrent.futures.FIRST_COMPLETED,
                 )
                 for future in done:
@@ -4088,6 +4357,16 @@ def score_run_worker(run_id, start_index=0, target_tickers=None):
                         fatal_error = str(exc)
                         stopped = False
                         break
+
+                    ticker = company["ticker"]
+                    if error and retry_rounds.get(ticker, 0) < 2:
+                        retry_rounds[ticker] = retry_rounds.get(ticker, 0) + 1
+                        retry_after[ticker] = time.monotonic() + 5
+                        write_stock_progress(run_id, ticker, {
+                            "phase": "queued", "retry_round": retry_rounds[ticker],
+                            "last_error": error,
+                        })
+                        continue
 
                     if not save_scoring_result(run_id, company, score, raw_response, error):
                         stopped = True
@@ -4374,6 +4653,18 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/portfolios/export-ibkr":
+            # Require JSON to prevent a cross-origin HTML form from creating files.
+            if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                self.send_json({"error": "Expected application/json."}, 415)
+                return
+            try:
+                self.send_json(export_ibkr_basket(self.read_json()), 201)
+            except ValueError as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except OSError:
+                self.send_json({"error": "Could not save the CSV in Jts. Check that the folder is writable."}, 500)
+            return
         confidence_pin_match = re.fullmatch(r"/api/confidence-runs/(\d+)/pin", parsed.path)
         if confidence_pin_match:
             ensure_scoring_schema()
@@ -4499,6 +4790,7 @@ class Handler(SimpleHTTPRequestHandler):
                     max_tokens=payload.get("maxTokens"),
                     minimum_confidence_score=payload.get("minimumConfidenceScore"),
                     low_cost_mode=payload.get("lowCostMode", False),
+                    response_cache_enabled=payload.get("responseCacheEnabled", True),
                 )
                 self.send_json({"runId": run_id, "url": f"/run.html?id={run_id}"}, 201)
             except ValueError as exc:
@@ -4664,6 +4956,7 @@ class Handler(SimpleHTTPRequestHandler):
                     name=payload.get("name") if "name" in payload else None,
                     prompt=payload.get("prompt") if "prompt" in payload else None,
                     starred=payload.get("starred") if "starred" in payload else None,
+                    response_cache_enabled=payload.get("responseCacheEnabled"),
                     max_tokens=payload.get("maxTokens") if "maxTokens" in payload else None,
                     low_cost_mode=(
                         payload.get("lowCostMode") if "lowCostMode" in payload else None

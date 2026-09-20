@@ -55,6 +55,11 @@
           </span>
         </label>
         <label>
+          <span>Response cache</span>
+          <span class="run-toggle-control"><input id="runEditorResponseCache" type="checkbox" /><span>Use cached responses</span></span>
+          <small>Applies the next time this run starts. Redrives always bypass the cache.</small>
+        </label>
+        <label>
           <span>Stock universe</span>
           <select id="runEditorUniverse"></select>
           <small id="runEditorUniverseHelp">
@@ -100,6 +105,7 @@
           <button id="createPortfolioButton" type="button">Create portfolio</button>
           <button id="cancelPortfolioButton" class="secondary-button" type="button">Cancel</button>
         </div>
+        <p>After creating the portfolio, use Export to IBKR to calculate shares and save a basket CSV to your Jts folder.</p>
       </section>
 
       <p id="status" class="status" role="status"></p>
@@ -131,20 +137,26 @@
           <span>ETA</span>
           <strong id="statEta">--</strong>
         </article>
-        <article class="metric-card">
-          <span>Cost</span>
-          <strong id="statCost">--</strong>
-        </article>
-        <article class="metric-card">
-          <span>Total Tokens</span>
-          <strong id="statTokens">--</strong>
-        </article>
-        <article class="metric-card">
-          <span>Response Token Limit</span>
-          <strong id="statTokenLimit">--</strong>
+        <article class="metric-card token-breakdown-card">
+          <span>Cost &amp; Tokens</span>
+          <dl class="token-breakdown">
+            <div><dt>Cost</dt><dd id="statCost">--</dd></div>
+            <div><dt>Total tokens</dt><dd id="statTokens">--</dd></div>
+            <div><dt title="Recorded charges for failed attempts. Already included in Cost.">Wasted cost</dt><dd id="statWastedCost">--</dd></div>
+            <div><dt title="Recorded cost divided by total tokens, multiplied by one million. Includes input and completion tokens.">Cost / 1M tokens</dt><dd id="statCostPerMillion">--</dd></div>
+          </dl>
+          <small id="statWastedCostNote" class="metric-note">Failed-attempt charges, included in total cost.</small>
         </article>
         <article class="metric-card token-breakdown-card">
-          <span>Average Tokens</span>
+          <span>Token Limit</span>
+          <dl class="token-breakdown">
+            <div><dt>Response token limit</dt><dd id="statTokenLimit">--</dd></div>
+            <div><dt>Expected stocks per limit failure</dt><dd id="statTokenLimitRisk">--</dd></div>
+          </dl>
+          <small id="statTokenLimitRiskNote" class="metric-note">Waiting for successful samples</small>
+        </article>
+        <article class="metric-card token-breakdown-card">
+          <span title="Latest successful result per stock; excludes failed attempts and results with unknown usage.">Average Tokens · Successful Stocks</span>
           <dl class="token-breakdown">
             <div><dt>Input</dt><dd id="statAverageInputTokens">--</dd></div>
             <div><dt>Reasoning</dt><dd id="statAverageReasoningTokens">--</dd></div>
@@ -153,25 +165,21 @@
           </dl>
         </article>
         <article class="metric-card">
-          <span>Expected Stocks Per Limit Failure</span>
-          <strong id="statTokenLimitRisk">--</strong>
-          <small id="statTokenLimitRiskNote" class="metric-note">Waiting for successful samples</small>
+          <span>Average Attempt Timing</span>
+          <dl class="token-breakdown">
+            <div><dt title="Time until the provider returns response headers, including connection setup.">Connection</dt><dd id="statConnectionLatency">--</dd></div>
+            <div><dt title="Time receiving the response after headers arrive.">Response</dt><dd id="statResponseLatency">--</dd></div>
+            <div><dt>Total attempt</dt><dd id="statLatency">--</dd></div>
+          </dl>
+          <small class="metric-note">Finished attempts, including retries and failures. Queue wait is not recorded. Each average uses available timings.</small>
         </article>
-        <article class="metric-card">
-          <span>Avg Latency</span>
-          <strong id="statLatency">--</strong>
-        </article>
-        <article class="metric-card">
-          <span>Score Range</span>
-          <strong id="statScoreRange">--</strong>
-        </article>
-        <article class="metric-card">
-          <span>Average Score</span>
-          <strong id="statAverageScore">--</strong>
-        </article>
-        <article class="metric-card">
-          <span>Median Score</span>
-          <strong id="statMedianScore">--</strong>
+        <article class="metric-card token-breakdown-card">
+          <span>Scores</span>
+          <dl class="token-breakdown">
+            <div><dt>Average</dt><dd id="statAverageScore">--</dd></div>
+            <div><dt>Median</dt><dd id="statMedianScore">--</dd></div>
+            <div><dt>Range</dt><dd id="statScoreRange">--</dd></div>
+          </dl>
         </article>
         <article class="metric-card">
           <span>Manual Rank Correlation</span>
@@ -216,6 +224,8 @@
           data-result-view="providers"
           tabindex="-1"
         >Providers <span id="providersTabCount">0</span></button>
+        <button id="runningTab" class="result-view-tab" type="button" role="tab" aria-selected="false" aria-controls="queuedTableWrap" data-result-view="running" tabindex="-1">Running <span id="runningTabCount">0</span></button>
+        <button id="queuedTab" class="result-view-tab" type="button" role="tab" aria-selected="false" aria-controls="queuedTableWrap" data-result-view="queued" tabindex="-1">Queued <span id="queuedTabCount">0</span></button>
       </nav>
 
       <section id="failedActions" class="failed-actions" hidden aria-label="Failed response actions">
@@ -250,7 +260,7 @@
         </details>
       </section>
 
-      <section id="resultsTableWrap" class="table-wrap" aria-label="Successful stock score ranking">
+      <section id="resultsTableWrap" class="table-wrap" tabindex="0" aria-label="Successful stock score ranking">
         <table class="ranking-table ranking-view">
           <thead>
             <tr>
@@ -316,6 +326,10 @@
             <button id="resetProviderColumnOrderButton" class="column-reset-button" type="button">Reset order</button>
           </div>
         </details>
+      </section>
+      <section id="queuedTableWrap" hidden aria-label="Queued stocks">
+        <p>Queued stocks wait here until a worker is available. Running shows live activity. Failed requests return to the queue for up to two automatic retries, then move to Failed. Successful stocks move to Ranking.</p>
+        <div class="table-wrap"><table><thead><tr><th>#</th><th>Company</th><th>Ticker</th><th>Status</th><th>Connection</th><th>Response</th><th>Last activity</th></tr></thead><tbody id="queuedRows"></tbody></table></div>
       </section>
       <section id="providersTableWrap" class="table-wrap providers-table-wrap" aria-label="Provider statistics" hidden>
         <table id="providersTable" class="provider-stats-table">

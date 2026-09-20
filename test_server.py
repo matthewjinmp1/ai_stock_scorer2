@@ -1,3 +1,4 @@
+import csv
 import json
 import os
 import sqlite3
@@ -17,6 +18,9 @@ MODEL = "deepseek/deepseek-v4-flash"
 
 class ServerTestCase(unittest.TestCase):
     def setUp(self):
+        provider_patch = mock.patch.object(server, "connection_providers", return_value=[None])
+        self.connection_providers_mock = provider_patch.start()
+        self.addCleanup(provider_patch.stop)
         self.temp_dir = tempfile.TemporaryDirectory()
         self.root = Path(self.temp_dir.name)
         self.originals = {
@@ -571,14 +575,125 @@ class PromptAndParsingTests(ServerTestCase):
             self.assertEqual(server.openrouter_attempt_timeout_seconds(3000), 240)
             self.assertEqual(server.openrouter_attempt_timeout_seconds(32768), 900)
 
+    def test_connection_timeout_switches_provider_and_records_separate_timings(self):
+        providers = [{"tag": "first", "provider_name": "First"}, {"tag": "second", "provider_name": "Second"}]
+        self.connection_providers_mock.return_value = providers
+        sent = []
+        def fetch(request, timeout, timing):
+            sent.append(json.loads(request.data))
+            timing["connection_ms"] = 10000 if len(sent) == 1 else 123
+            if len(sent) == 1:
+                raise server.ConnectionDeadline("Connection timed out")
+            timing["response_ms"] = 15000
+            return {"choices": [{"message": {"content": "Score: 80"}, "finish_reason": "stop"}]}, 200, {}
+        with mock.patch.object(server, "fetch_completion", side_effect=fetch), mock.patch.dict(os.environ, {"OPENROUTER_MAX_ATTEMPTS": "3"}):
+            result = server.call_openrouter("Score COMPANY", server.scoring_companies(1)[0], MODEL, bypass_cache=True)
+        self.assertEqual(result, "Score: 80")
+        self.assertEqual([p["provider"]["only"] for p in sent], [["first"], ["second"]])
+        self.assertTrue(all(p["stream"] and not p["provider"]["allow_fallbacks"] for p in sent))
+        logs = json.loads(server.AI_REQUEST_LOG_PATH.read_text())
+        self.assertEqual(logs[-2]["timing"]["connection_ms"], 10000)
+        self.assertEqual(logs[-1]["timing"]["response_ms"], 15000)
+
+    def test_no_repeat_of_only_provider_after_connection_timeout(self):
+        self.connection_providers_mock.return_value = [{"tag": "only", "provider_name": "Only"}]
+        with mock.patch.object(server, "fetch_completion", side_effect=server.ConnectionDeadline("timeout")) as fetch:
+            with self.assertRaises(server.ConnectionDeadline):
+                server.call_openrouter("Score COMPANY", server.scoring_companies(1)[0], MODEL)
+        self.assertEqual(fetch.call_count, 1)
+
+    def test_rate_limit_and_server_errors_try_another_provider(self):
+        import io
+        for status in (429, 503):
+            with self.subTest(status=status):
+                self.connection_providers_mock.return_value = [
+                    {"tag": "first", "provider_name": "First"},
+                    {"tag": "second", "provider_name": "Second"},
+                ]
+                sent = []
+                def fetch(request, timeout, timing):
+                    sent.append(json.loads(request.data)["provider"]["only"])
+                    if len(sent) == 1:
+                        raise server.urllib.error.HTTPError(request.full_url, status, "Provider unavailable", {}, io.BytesIO(b'{"error":{"message":"Overloaded"}}'))
+                    return {"choices": [{"message": {"content": "Score: 80"}, "finish_reason": "stop"}]}, 200, {}
+                with mock.patch.object(server, "fetch_completion", side_effect=fetch), mock.patch.dict(os.environ, {"OPENROUTER_MAX_ATTEMPTS": "3"}):
+                    result = server.call_openrouter("Score COMPANY", server.scoring_companies(1)[0], MODEL)
+                self.assertEqual(result, "Score: 80")
+                self.assertEqual(sent, [["first"], ["second"]])
+
+    def test_retry_recalculates_content_length_for_longer_provider_name(self):
+        import io
+        self.connection_providers_mock.return_value = [
+            {"tag": "deepinfra/fp4", "provider_name": "DeepInfra"},
+            {"tag": "inference-net/fp4", "provider_name": "InferenceNet"},
+        ]
+        requests = []
+        def send(request, timeout):
+            # urllib adds this header to the Request during transmission.
+            declared = request.get_header("Content-length")
+            if declared is None:
+                request.add_unredirected_header("Content-length", str(len(request.data)))
+            self.assertEqual(int(request.get_header("Content-length")), len(request.data))
+            body = json.loads(request.data)
+            self.assertIs(body["stream"], True)
+            self.assertEqual(request.get_header("X-openrouter-cache"), "false")
+            requests.append(request)
+            if len(requests) == 1:
+                raise server.urllib.error.HTTPError(request.full_url, 429, "Overloaded", {}, io.BytesIO(b'{"error":{"message":"Overloaded"}}'))
+            response = mock.MagicMock()
+            response.__enter__.return_value = response
+            response.status = 200
+            response.headers = {}
+            response.read.return_value = b'{"choices":[{"message":{"content":"Score: 80"},"finish_reason":"stop"}]}'
+            return response
+        with mock.patch.object(server.urllib.request, "urlopen", side_effect=send), mock.patch.dict(os.environ, {"OPENROUTER_MAX_ATTEMPTS": "3"}):
+            result = server.call_openrouter("Score COMPANY", server.scoring_companies(1)[0], MODEL, bypass_cache=True)
+        self.assertEqual(result, "Score: 80")
+        self.assertEqual(len(requests), 2)
+        self.assertGreater(len(requests[1].data), len(requests[0].data))
+
     def test_openrouter_timeout_allows_an_explicit_override(self):
         with mock.patch.dict(os.environ, {"OPENROUTER_ATTEMPT_TIMEOUT_SECONDS": "150"}):
             self.assertEqual(server.openrouter_attempt_timeout_seconds(3000), 150)
 
+    def test_wasted_cost_counts_failed_attempts_even_after_success(self):
+        entries = [
+            {"run_id": 7, "company": {"ticker": "AAA"}, "response": {"success": False}, "token_stats": {"cost": 0.005}},
+            {"run_id": 7, "company": {"ticker": "AAA"}, "response": {"success": True}, "token_stats": {"cost": 0.01}},
+            {"run_id": 7, "response": {"success": False}, "token_stats": {"cost": 0}},
+            {"run_id": 7, "response": {"success": False}, "token_stats": None},
+            {"run_id": 8, "response": {"success": False}, "token_stats": {"cost": 9}},
+        ]
+        with mock.patch.object(server, "ai_request_entries", return_value=entries):
+            stats = server.ai_request_stats_for_run(7)
+        self.assertAlmostEqual(stats["cost"], 0.015)
+        self.assertAlmostEqual(stats["wasted_cost"], 0.005)
+        self.assertEqual(stats["failed_cost_unknown_count"], 1)
+
+    def test_attempt_timing_averages_exclude_missing_measurements(self):
+        entries = [
+            {"run_id": 7, "timing": {"connection_ms": 100, "response_ms": 900, "duration_ms": 1000}},
+            {"run_id": 7, "timing": {"connection_ms": 300, "duration_ms": 300}},
+            {"run_id": 7, "timing": {"duration_ms": 2000}},
+            {"run_id": 8, "timing": {"connection_ms": 9999}},
+        ]
+        with mock.patch.object(server, "ai_request_entries", return_value=entries):
+            stats = server.ai_request_stats_for_run(7)
+            empty = server.ai_request_stats_for_run(9)
+        self.assertEqual(stats["average_connection_ms"], 200)
+        self.assertEqual(stats["average_response_ms"], 900)
+        self.assertEqual(stats["average_attempt_ms"], 1100)
+        self.assertEqual(stats["response_timing_sample_size"], 1)
+        self.assertIsNone(empty["average_connection_ms"])
+
     def test_run_stats_include_average_response_tokens_without_reasoning(self):
+        run_id = self.create_run(company_count=1)
+        with self.connect() as connection:
+            server.save_result(connection, run_id, server.scoring_companies(1)[0], 70, "70", None)
         entries = [
             {
-                "run_id": 7,
+                "run_id": run_id,
+                "company": {"ticker": "AAA"},
                 "response": {"success": True},
                 "token_stats": {
                     "prompt_tokens": 30,
@@ -588,7 +703,8 @@ class PromptAndParsingTests(ServerTestCase):
                 },
             },
             {
-                "run_id": 7,
+                "run_id": run_id,
+                "company": {"ticker": "BBB"},
                 "response": {"success": False},
                 "token_stats": {
                     "prompt_tokens": 20,
@@ -604,15 +720,16 @@ class PromptAndParsingTests(ServerTestCase):
             },
         ]
 
+        entries.insert(0, {**entries[0], "token_stats": {"prompt_tokens": 900, "completion_tokens": 100, "total_tokens": 1000}})
         with mock.patch.object(server, "ai_request_entries", return_value=entries):
-            stats = server.ai_request_stats_for_run(7)
+            stats = server.ai_request_stats_for_run(run_id)
 
-        self.assertEqual(stats["response_tokens"], 180)
-        self.assertEqual(stats["average_prompt_tokens"], 25.0)
-        self.assertEqual(stats["average_response_tokens"], 90.0)
+        self.assertEqual(stats["response_tokens"], 280)
+        self.assertEqual(stats["average_prompt_tokens"], 30.0)
+        self.assertEqual(stats["average_response_tokens"], 100.0)
         self.assertEqual(stats["reasoning_tokens"], 20)
-        self.assertEqual(stats["average_reasoning_tokens"], 10.0)
-        self.assertEqual(stats["average_total_tokens"], 125.0)
+        self.assertEqual(stats["average_reasoning_tokens"], 20.0)
+        self.assertEqual(stats["average_total_tokens"], 150.0)
 
     def test_provider_stats_group_requests_and_trace_visibility(self):
         entries = [
@@ -979,6 +1096,23 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertEqual(stats["response_tokens"], 7)
         self.assertEqual(stats["cost"], 0)
 
+    def test_redrive_request_disables_cache_and_logs_policy(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.status = 200
+        response.headers = {}
+        response.read.return_value = json.dumps({
+            "choices": [{"message": {"content": "Score: 77"}, "finish_reason": "stop"}],
+        }).encode()
+        with mock.patch.object(server.urllib.request, "urlopen", return_value=response) as send:
+            result = server.call_openrouter("Score COMPANY", server.scoring_companies(1)[0], MODEL, run_id=1, bypass_cache=True)
+        self.assertEqual(result, "Score: 77")
+        headers = {key.lower(): value for key, value in send.call_args.args[0].header_items()}
+        self.assertEqual(headers["x-openrouter-cache"], "false")
+        self.assertNotIn("x-openrouter-cache-ttl", headers)
+        entry = json.loads(server.AI_REQUEST_LOG_PATH.read_text())[-1]
+        self.assertEqual(entry["request"]["response_cache"], {"enabled": False, "ttl_seconds": None})
+
     def test_call_openrouter_rejects_token_limited_response(self):
         payload = {
             "choices": [
@@ -1048,6 +1182,129 @@ class PromptAndParsingTests(ServerTestCase):
 
 
 class RunWorkerTests(ServerTestCase):
+    def test_queue_progress_is_exposed_and_cleared_for_redrive(self):
+        run_id = self.create_run(company_count=1)
+        server.write_stock_progress(run_id, "AAA", {
+            "phase": "generating", "started_at": 10, "connected_at": 11,
+            "last_activity_at": 12, "attempt": 2,
+        })
+        row = server.paginated_run(run_id, view="running")["results"][0]
+        self.assertEqual(row["progress"]["phase"], "generating")
+        self.assertEqual(row["progress"]["last_activity_at"], 12)
+        with self.connect() as connection:
+            server.save_result(connection, run_id, server.scoring_companies(1)[0], None, None, "timeout")
+            connection.execute("UPDATE scoring_runs SET status = 'completed' WHERE id = ?", (run_id,))
+        with mock.patch.object(server, "start_scoring_worker_process"):
+            server.redrive_failed_scoring_run(run_id)
+        self.assertIsNone(server.paginated_run(run_id, view="queued")["results"][0]["progress"])
+
+    def test_active_redrive_appends_without_duplicate_worker(self):
+        run_id = self.create_run(company_count=3)
+        companies = server.scoring_companies(3)
+        with self.connect() as connection:
+            for company in companies[:2]:
+                server.save_result(connection, run_id, company, None, None, "timeout")
+            connection.execute("UPDATE scoring_runs SET status = 'running', queue_count = 1 WHERE id = ?", (run_id,))
+            connection.execute("INSERT INTO scoring_pending VALUES (?, 'CCC')", (run_id,))
+        with mock.patch.object(server, "start_scoring_worker_process") as start:
+            server.redrive_failed_scoring_run(run_id, ["AAA"])
+            with self.assertRaises(ValueError):
+                server.redrive_failed_scoring_run(run_id, ["AAA"])
+            server.redrive_failed_scoring_run(run_id)
+            start.assert_not_called()
+        self.assertEqual(server.get_run(run_id)["queue_count"], 3)
+        self.assertEqual(server.paginated_run(run_id, view="failed")["results"], [])
+        self.assertEqual(server.paginated_run(run_id, view="queued")["result_page"]["counts"]["queued"], 3)
+
+    def test_automatic_retries_are_bounded(self):
+        run_id = self.create_run(company_count=1)
+        company = server.scoring_companies(1)[0]
+        with mock.patch.object(server, "score_company_request", return_value=(company, None, None, "timeout")) as score:
+            server.score_run_worker(run_id)
+        self.assertEqual(score.call_count, 3)
+        self.assertEqual(server.paginated_run(run_id, view="failed")["result_page"]["counts"],
+                         {"ranking": 0, "failed": 1, "queued": 0, "running": 0})
+
+    def test_worker_requeues_failure_then_succeeds(self):
+        run_id = self.create_run(company_count=3)
+        calls = []
+        def score(run_id, prompt, model, reasoning_mode, company, max_tokens, provider, bypass):
+            ticker = company["ticker"]
+            calls.append((ticker, bypass))
+            if ticker == "AAA" and len(calls) == 1:
+                return company, None, None, "temporary failure"
+            if ticker == "BBB":
+                self.assertEqual(server.paginated_run(run_id, view="failed")["results"], [])
+                self.assertIn("AAA", [r["ticker"] for r in server.paginated_run(run_id, view="queued")["results"]])
+                self.assertEqual([r["ticker"] for r in server.paginated_run(run_id, view="running")["results"]], ["BBB"])
+            return company, 70, "70", None
+        with mock.patch.object(server, "scoring_concurrency", return_value=1), mock.patch.object(server, "score_company_request", side_effect=score):
+            server.score_run_worker(run_id)
+        self.assertEqual(calls, [("AAA", False), ("BBB", False), ("CCC", False), ("AAA", True)])
+        run = server.get_run(run_id)
+        self.assertEqual((run["status"], run["completed_count"], run["failed_count"], run["queue_count"]), ("completed", 3, 0, 0))
+
+    def test_queued_tab_lists_unfinished_stocks_and_clears_on_completion(self):
+        run_id = self.create_run(company_count=3)
+        with self.connect() as connection:
+            server.save_result(connection, run_id, server.scoring_companies(1)[0], 70, "70", None)
+        page = server.paginated_run(run_id, view="queued", page_size=1)
+        self.assertEqual(page["result_page"]["counts"]["queued"], 2)
+        self.assertEqual(page["result_page"]["total_pages"], 2)
+        self.assertEqual(page["results"][0]["ticker"], "BBB")
+        with self.connect() as connection:
+            connection.execute("UPDATE scoring_runs SET status = 'completed' WHERE id = ?", (run_id,))
+        self.assertEqual(server.paginated_run(run_id, view="queued")["results"], [])
+
+    def test_queued_tab_includes_only_selected_failed_redrive(self):
+        run_id = self.create_run(company_count=3)
+        with self.connect() as connection:
+            for company in server.scoring_companies(3):
+                server.save_result(connection, run_id, company, None, None, "timeout")
+            connection.execute("UPDATE scoring_runs SET status = 'completed' WHERE id = ?", (run_id,))
+        with mock.patch.object(server, "start_scoring_worker_process"):
+            server.redrive_failed_scoring_run(run_id, ["BBB"])
+        self.assertEqual([r["ticker"] for r in server.paginated_run(run_id, view="queued")["results"]], ["BBB"])
+        failed = server.paginated_run(run_id, view="failed")
+        self.assertEqual([r["ticker"] for r in failed["results"]], ["AAA", "CCC"])
+        self.assertEqual(failed["result_page"]["counts"], {"ranking": 0, "failed": 2, "queued": 1, "running": 0})
+        server.save_scoring_result(run_id, server.scoring_companies(3)[1], 70, "70", None)
+        self.assertEqual(server.paginated_run(run_id, view="queued")["results"], [])
+
+    def test_failed_redrive_returns_from_queue_to_failed(self):
+        run_id = self.create_run(company_count=1)
+        company = server.scoring_companies(1)[0]
+        with self.connect() as connection:
+            server.save_result(connection, run_id, company, None, None, "old error")
+            connection.execute("UPDATE scoring_runs SET status = 'completed' WHERE id = ?", (run_id,))
+        with mock.patch.object(server, "start_scoring_worker_process"):
+            server.redrive_failed_scoring_run(run_id)
+        self.assertEqual(server.paginated_run(run_id, view="failed")["results"], [])
+        server.save_scoring_result(run_id, company, None, None, "new error")
+        page = server.paginated_run(run_id, view="failed")
+        self.assertEqual(page["result_page"]["counts"], {"ranking": 0, "failed": 1, "queued": 0, "running": 0})
+        self.assertEqual(page["results"][0]["error"], "new error")
+
+    def test_response_cache_setting_persists_and_controls_worker(self):
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled), mock.patch.object(server, "start_scoring_worker_process"):
+                run_id = server.create_scoring_run("Cache setting", "Score COMPANY", MODEL, company_count=1, response_cache_enabled=enabled)
+                self.assertEqual(server.get_run(run_id)["response_cache_enabled"], enabled)
+                with mock.patch.object(server, "call_openrouter", return_value="Score: 70") as call:
+                    server.score_run_worker(run_id)
+                self.assertEqual(call.call_args.kwargs.get("bypass_cache", False), not enabled)
+                server.update_scoring_run(run_id, response_cache_enabled=not enabled)
+                self.assertEqual(server.get_run(run_id)["response_cache_enabled"], not enabled)
+                server.update_scoring_run(run_id, name="Renamed")
+                self.assertEqual(server.get_run(run_id)["response_cache_enabled"], not enabled)
+
+    def test_response_cache_defaults_on_and_rejects_invalid_values(self):
+        run_id = self.create_run(company_count=1)
+        self.assertTrue(server.get_run(run_id)["response_cache_enabled"])
+        for value in ("false", 0, 1):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "Response cache"):
+                server.update_scoring_run(run_id, response_cache_enabled=value)
+
     def test_run_name_and_prompt_can_be_edited_together(self):
         run_id = self.create_run(company_count=1)
 
@@ -1326,6 +1583,12 @@ class RunWorkerTests(ServerTestCase):
         self.assertEqual(run["failed_count"], 1)
         self.assertEqual(run["queue_count"], 1)
 
+        with mock.patch.object(server, "call_openrouter", return_value="Score: 72") as call:
+            server.score_run_worker(run_id, target_tickers=worker_calls[0][2])
+        self.assertEqual(call.call_count, 1)
+        self.assertTrue(call.call_args.kwargs["bypass_cache"])
+        self.assertEqual(call.call_args.args[1]["ticker"], "BBB")
+
     def test_redrive_single_failed_stock_targets_only_requested_ticker(self):
         run_id = self.create_run(company_count=3)
         companies = server.scoring_companies(3)
@@ -1352,6 +1615,12 @@ class RunWorkerTests(ServerTestCase):
         self.assertEqual(worker_calls, [(run_id, 0, ["CCC"])])
         self.assertEqual(run["status"], "queued")
         self.assertEqual(run["queue_count"], 1)
+
+        with mock.patch.object(server, "call_openrouter", return_value="Score: 72") as call:
+            server.score_run_worker(run_id, target_tickers=worker_calls[0][2])
+        self.assertEqual(call.call_count, 1)
+        self.assertTrue(call.call_args.kwargs["bypass_cache"])
+        self.assertEqual(call.call_args.args[1]["ticker"], "CCC")
 
     def test_worker_queue_count_includes_active_and_waiting_stocks(self):
         run_id = self.create_run(company_count=3)
@@ -1495,6 +1764,44 @@ class ManualRankingTests(ServerTestCase):
 
 
 class PortfolioTests(ServerTestCase):
+    def test_ibkr_export_matches_basket_format_and_preserves_existing_files(self):
+        destination = self.root / "Jts"
+        payload = {"name": "../../My portfolio", "orders": [
+            {"symbol": "AAPL", "quantity": 2, "limitPrice": "150.25"},
+            {"symbol": "BRK B", "quantity": 1, "limitPrice": "400.00"},
+        ]}
+        with mock.patch.object(server, "IBKR_EXPORT_DIR", destination):
+            first = server.export_ibkr_basket(payload)
+            second = server.export_ibkr_basket(payload)
+        self.assertNotEqual(first["path"], second["path"])
+        self.assertEqual(Path(first["path"]).parent, destination)
+        with open(first["path"], newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(rows[0], dict(Action="BUY", Quantity="2", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD", TimeInForce="DAY", OrderType="LMT", LmtPrice="150.25"))
+        self.assertEqual(rows[1]["Symbol"], "BRK B")
+        self.assertEqual(first["limitValue"], "700.50")
+        self.assertEqual(first["orderCount"], 2)
+
+    def test_ibkr_invalid_orders_never_create_a_file(self):
+        destination = self.root / "Jts"
+        valid = {"symbol": "AAPL", "quantity": 1, "limitPrice": "10.25"}
+        invalid_orders = [
+            [], [valid, valid], [None],
+            *[[{**valid, "quantity": value}] for value in (0, -1, 1.5, "NaN", "Infinity", True)],
+            *[[{**valid, "limitPrice": value}] for value in (0, -1, "NaN", "Infinity", "1.001", "")],
+            *[[{**valid, "symbol": value}] for value in ("=BAD", "AAPL\nBUY", "AAPL,MSFT", "")],
+        ]
+        with mock.patch.object(server, "IBKR_EXPORT_DIR", destination):
+            for orders in invalid_orders:
+                with self.subTest(orders=orders), self.assertRaises(ValueError):
+                    server.export_ibkr_basket({"orders": orders})
+        self.assertFalse(destination.exists())
+
+    def test_portfolio_exposes_saved_prices_and_country_for_order_review(self):
+        portfolio = server.calculate_portfolio(self.scored_run(), "Export", 3, 0, 1)
+        self.assertEqual(portfolio["holdings"][0]["price"], "$300")
+        self.assertEqual(portfolio["holdings"][2]["country"], "UK")
+
     def scored_run(self):
         run_id = self.create_run(company_count=3)
         scores = {"AAA": 90, "BBB": 50, "CCC": 10}

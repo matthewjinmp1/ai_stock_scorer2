@@ -13,6 +13,7 @@ const runEditorName = document.querySelector("#runEditorName");
 const runEditorPrompt = document.querySelector("#runEditorPrompt");
 const runEditorMaxTokens = document.querySelector("#runEditorMaxTokens");
 const runEditorLowCostMode = document.querySelector("#runEditorLowCostMode");
+const runEditorResponseCache = document.querySelector("#runEditorResponseCache");
 const runEditorUniverse = document.querySelector("#runEditorUniverse");
 const runEditorUniverseHelp = document.querySelector("#runEditorUniverseHelp");
 const saveRunButton = document.querySelector("#saveRunButton");
@@ -105,7 +106,7 @@ const SORT_KEYS = new Set([
   "error",
 ]);
 const SORT_DIRECTIONS = new Set(["asc", "desc"]);
-const RESULT_VIEWS = new Set(["ranking", "failed", "providers"]);
+const RESULT_VIEWS = new Set(["ranking", "failed", "providers", "queued", "running"]);
 const LEGACY_COLUMN_STORAGE_KEY = "ai-stock-scorer-visible-run-columns-v6";
 const COLUMN_STORAGE_KEYS = {
   ranking: "ai-stock-scorer-visible-ranking-columns-v1",
@@ -199,7 +200,7 @@ const runResultsTable = new DataTable({
     { key: "chart", label: "Price Chart", cellClass: "search-cell", render: (result) => `<button class="details-link" type="button" data-navigation-url="${escapeHtml(`https://www.google.com/search?q=${encodeURIComponent(`${result.ticker} stock`)}`)}">Chart</button>` },
     { key: "dashboard", label: "Stock Dashboard", cellClass: "search-cell", render: (result) => `<button class="details-link" type="button" data-navigation-url="${escapeHtml(`http://localhost:3000/?ticker=${encodeURIComponent(result.ticker)}`)}" title="Open stock dashboard">Dashboard</button>` },
     { key: "actions", label: "Details", cellClass: "details-cell", render: (result) => `<button class="details-link" type="button" data-details-url="${resultUrl(result)}">Details</button>` },
-    { key: "redrive", label: "Redrive", configurable: false, pinned: "end", cellClass: "failed-redrive-column table-action-cell", available: (_context, view) => view === "failed", render: (result) => `<button class="details-link row-redrive-button" type="button" data-redrive-ticker="${escapeHtml(result.ticker)}" ${canStop(currentRun) ? "disabled" : ""}>Redrive</button>` },
+    { key: "redrive", label: "Redrive", configurable: false, pinned: "end", cellClass: "failed-redrive-column table-action-cell", available: (_context, view) => view === "failed", render: (result) => `<button class="details-link row-redrive-button" type="button" data-redrive-ticker="${escapeHtml(result.ticker)}" ${currentRun?.status === "stop_requested" ? "disabled" : ""}>Redrive</button>` },
   ],
 });
 
@@ -652,6 +653,7 @@ function renderRunStats(run) {
     reasoning.exclude === undefined ? "true" : String(reasoning.exclude)
   )}</span>
     <span class="model-id">response limit: ${escapeHtml(formatNumber(run.max_tokens))} tokens</span>
+    <span class="model-id">response cache: ${run.response_cache_enabled === false ? "off" : "on"} (redrives bypass)</span>
     <span class="model-id">provider routing: ${run.low_cost_mode
       ? "lowest output price, then lowest input price"
       : "all except blocked"}</span>
@@ -662,7 +664,19 @@ function renderRunStats(run) {
   updateEtaState(run);
   renderEta(run);
   statCost.textContent = formatCents(stats.cost);
+  document.querySelector("#statWastedCost").textContent = formatCents(stats.wasted_cost);
+  const unknownFailedCosts = Number(stats.failed_cost_unknown_count || 0);
+  document.querySelector("#statWastedCostNote").textContent =
+    "Failed-attempt charges, included in total cost." +
+    (unknownFailedCosts ? ` Charges unknown for ${formatNumber(unknownFailedCosts)} failed attempts.` : "");
+
   statTokens.textContent = formatNumber(stats.total_tokens);
+  document.querySelector("#statCostPerMillion").textContent =
+    Number(stats.total_tokens) > 0 && Number.isFinite(Number(stats.cost))
+      ? (Number(stats.cost) / Number(stats.total_tokens) * 1_000_000).toLocaleString(undefined, {
+          style: "currency", currency: "USD", minimumFractionDigits: 4, maximumFractionDigits: 4,
+        })
+      : "--";
   statTokenLimit.textContent = formatNumber(run.max_tokens);
   statAverageInputTokens.textContent = formatNumber(stats.average_prompt_tokens);
   statAverageResponseTokens.textContent = formatNumber(stats.average_response_tokens);
@@ -683,7 +697,9 @@ function renderRunStats(run) {
       riskSampleSize
     )} available`;
   }
-  statLatency.textContent = formatMs(stats.average_latency_ms);
+  statLatency.textContent = formatMs(stats.average_attempt_ms);
+  document.querySelector("#statConnectionLatency").textContent = formatMs(stats.average_connection_ms);
+  document.querySelector("#statResponseLatency").textContent = formatMs(stats.average_response_ms);
   statScoreRange.textContent =
     minScore === null ? "--" : `${formatScore(minScore)}-${formatScore(maxScore)}`;
   statAverageScore.textContent = averageScore === null ? "--" : formatScore(averageScore);
@@ -793,6 +809,8 @@ function updateResultViewTabs(run) {
   rankingTabCount.textContent = String(counts?.ranking ?? resultsForView(run, "ranking").length);
   failedTabCount.textContent = String(counts?.failed ?? resultsForView(run, "failed").length);
   providersTabCount.textContent = String((run.provider_stats || []).length);
+  document.querySelector("#runningTabCount").textContent = String(counts?.running || 0);
+  document.querySelector("#queuedTabCount").textContent = String(counts?.queued || 0);
 
   document.querySelectorAll("[data-result-view]").forEach((button) => {
     const isActive = button.dataset.resultView === activeResultView;
@@ -803,9 +821,11 @@ function updateResultViewTabs(run) {
   scoreFilterToolbar.hidden = activeResultView !== "ranking";
   failedActions.hidden = activeResultView !== "failed";
   const showingProviders = activeResultView === "providers";
-  tableDisplayTools.hidden = showingProviders;
+  const showingQueued = ["queued", "running"].includes(activeResultView);
+  document.querySelector("#queuedTableWrap").hidden = !showingQueued;
+  tableDisplayTools.hidden = showingProviders || showingQueued;
   providerTableDisplayTools.hidden = !showingProviders;
-  resultsTableWrap.hidden = showingProviders;
+  resultsTableWrap.hidden = showingProviders || showingQueued;
   resultsPagination.hidden = showingProviders;
   providersTableWrap.hidden = !showingProviders;
   rankingTable.classList.toggle("ranking-view", activeResultView === "ranking");
@@ -821,7 +841,7 @@ function setResultView(view) {
   activeResultView = view;
   currentPage = 1;
   saveRunViewState();
-  if (view === "providers") {
+  if (["providers", "queued", "running"].includes(view)) {
     if (currentRun) loadCurrentRun();
     return;
   }
@@ -982,6 +1002,7 @@ async function showRunEditor() {
   runEditorPrompt.value = currentRun.prompt || "";
   runEditorMaxTokens.value = String(currentRun.max_tokens || 200);
   runEditorLowCostMode.checked = Boolean(currentRun.low_cost_mode);
+  runEditorResponseCache.checked = currentRun.response_cache_enabled !== false;
   runEditorUniverse.disabled = true;
   runEditorUniverse.innerHTML = '<option value="">Loading universes...</option>';
   runEditorUniverseHelp.textContent =
@@ -1152,6 +1173,7 @@ async function saveCurrentRun() {
         prompt,
         maxTokens,
         lowCostMode,
+        responseCacheEnabled: runEditorResponseCache.checked,
         ...(universeValue !== initialRunEditorUniverse
           ? {
               stockListId:
@@ -1258,13 +1280,29 @@ async function extendCurrentRun() {
   }
 }
 
+function queuedProgressCells(progress) {
+  if (progress?.phase === "queued") return `<td>Waiting to retry · ${escapeHtml(progress.last_error || "")}</td><td>—</td><td>—</td><td>—</td>`;
+  if (!progress) return "<td>Waiting / awaiting worker update</td><td>—</td><td>—</td><td>—</td>";
+  const now = Date.now() / 1000;
+  const duration = (seconds) => {
+    const value = Math.max(0, Math.floor(seconds));
+    return value < 60 ? `${value}s` : `${Math.floor(value / 60)}m ${value % 60}s`;
+  };
+  const phase = { preparing: "Preparing", connecting: "Connecting", retrying: "Retrying · connecting", generating: "Generating" }[progress.phase] || "Waiting";
+  const connection = progress.phase === "preparing" ? "—"
+    : duration((progress.connected_at || now) - progress.started_at);
+  const response = progress.connected_at ? duration(now - progress.connected_at) : "—";
+  const activity = progress.last_activity_at ? `${duration(now - progress.last_activity_at)} ago` : "No response data yet";
+  return `<td>${phase}${progress.attempt > 1 ? ` · attempt ${progress.attempt}` : ""}</td><td>${connection}</td><td>${response}</td><td>${activity}</td>`;
+}
+
 async function redriveFailedStocks() {
   if (!currentRun) {
     statusEl.textContent = "Pick a saved run before redriving failed stocks.";
     return;
   }
 
-  const failedCount = resultsForView(currentRun, "failed").length;
+  const failedCount = currentRun.result_page?.counts?.failed || 0;
   if (!failedCount) {
     statusEl.textContent = "This run has no failed stocks to redrive.";
     return;
@@ -1299,7 +1337,7 @@ async function redriveFailedStocks() {
     statusEl.textContent = error.message;
   } finally {
     redriveFailedButton.disabled =
-      !currentRun || canStop(currentRun) || !resultsForView(currentRun, "failed").length;
+      !currentRun || currentRun.status === "stop_requested" || !currentRun.result_page?.counts?.failed;
   }
 }
 
@@ -1337,7 +1375,7 @@ async function redriveFailedStock(ticker, button) {
   } catch (error) {
     statusEl.textContent = error.message;
   } finally {
-    if (button.isConnected) button.disabled = !currentRun || canStop(currentRun);
+    if (button.isConnected) button.disabled = !currentRun || currentRun.status === "stop_requested";
   }
 }
 
@@ -1373,9 +1411,16 @@ function renderRun(run) {
   copyRunButton.disabled = false;
   extendButton.disabled = canStop(run) || Number(run.extension_limit || 0) <= Number(run.company_count || 0);
   buildPortfolioButton.disabled = canStop(run) || !(page.counts?.ranking || 0);
-  redriveFailedButton.disabled = canStop(run) || !(page.counts?.failed || 0);
+  redriveFailedButton.disabled = run.status === "stop_requested" || !(page.counts?.failed || 0);
   deleteButton.disabled = false;
 
+  if (["queued", "running"].includes(activeResultView)) {
+    document.querySelector("#queuedRows").innerHTML = run.results.length
+      ? run.results.map((row, index) => `<tr><td>${page.offset + index + 1}</td><td>${escapeHtml(row.company_name)}</td><td>${escapeHtml(row.ticker)}</td>${queuedProgressCells(row.progress)}</tr>`).join("")
+      : `<tr><td colspan="7">No stocks ${activeResultView}.</td></tr>`;
+    restoreScrollPosition();
+    return;
+  }
   if (activeResultView === "providers") {
     providerStatsTable.setRows(run.provider_stats || [], {
       emptyMessage: "No provider information has been recorded for this run yet.",
@@ -1443,7 +1488,7 @@ async function loadCurrentRun() {
   const query = new URLSearchParams({
     page: String(currentPage),
     pageSize: "100",
-    view: activeResultView === "failed" ? "failed" : "ranking",
+    view: ["queued", "running"].includes(activeResultView) ? activeResultView : activeResultView === "failed" ? "failed" : "ranking",
     sort: sortState.key,
     dir: sortState.direction,
   });
@@ -1560,7 +1605,7 @@ try {
   await runResultsTable.initialize("ranking", { view: "ranking", offset: 0 });
   await runResultsTable.initialize("failed", { view: "failed", offset: 0 });
   await providerStatsTable.initialize("providers");
-  if (activeResultView !== "providers") {
+  if (activeResultView === "ranking" || activeResultView === "failed") {
     await runResultsTable.setScope(activeResultView, { view: activeResultView, offset: 0 });
   }
   syncScoreFilterInputs();

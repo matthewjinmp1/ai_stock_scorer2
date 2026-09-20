@@ -153,6 +153,9 @@ async function loadDetail() {
   els.completionTokens.textContent = formatNumber(responseTokenCount);
   els.costValue.textContent = formatCost(tokens.cost);
   els.latencyValue.textContent = formatMs(aiRequest?.timing?.duration_ms);
+  const timing = aiRequest?.timing;
+  document.querySelector("#connectionTiming").textContent = timing?.connection_ms == null ? "" :
+    `Connection: ${formatMs(timing.connection_ms)} · Response: ${formatMs(timing.response_ms)}`;
 
   els.promptSent.textContent = prompt || "--";
   els.promptLength.textContent = prompt ? `${prompt.length.toLocaleString()} chars` : "";

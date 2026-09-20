@@ -48,6 +48,26 @@
         </article>
       </section>
 
+      <section id="ibkrExport" class="prompt-editor" hidden aria-label="IBKR basket export">
+        <h2>Export to IBKR</h2>
+        <p>Create US stock BUY orders using SMART routing, USD, DAY, and limit prices. Prices below come from the saved run, not live quotes; edit them before saving. Non-US holdings are excluded.</p>
+        <div class="actions">
+          <label>Budget (USD)<input id="ibkrBudget" type="number" min="0.01" max="1000000000000" step="0.01" placeholder="Enter amount" /></label>
+          <button id="calculateIbkr" class="secondary-button" type="button">Calculate shares</button>
+        </div>
+        <p>Shares are rounded down using each holding’s portfolio weight and the limit price you enter. Excluded holdings and rounding leave cash unallocated. You can also edit quantities directly.</p>
+        <div class="table-wrap ibkr-table-wrap">
+          <table>
+            <thead><tr><th>Include</th><th>IBKR symbol</th><th>Target weight</th><th>Shares</th><th>Limit price (USD)</th></tr></thead>
+            <tbody id="ibkrOrders"></tbody>
+          </table>
+        </div>
+        <p id="ibkrSummary" role="status"></p>
+        <div class="actions"><button id="saveIbkr" type="button" disabled>Save IBKR CSV to Jts</button></div>
+        <p>Open the saved CSV in BasketTrader to review and submit the orders. Saving here only creates the file.</p>
+        <p id="ibkrStatus" class="status" role="status"></p>
+      </section>
+
       <section class="table-display-tools" aria-label="Portfolio table display options">
         <details id="portfolioColumnSelector" class="column-selector">
           <summary>Columns</summary>
