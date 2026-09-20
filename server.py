@@ -2682,6 +2682,8 @@ def export_ibkr_basket(payload):
         symbol = str(order.get("symbol", "")).strip().upper()
         if not re.fullmatch(r"[A-Z][A-Z0-9]*(?:[ .-][A-Z0-9]+)*", symbol) or len(symbol) > 24:
             raise ValueError(f"Order {index}: enter a valid IBKR stock symbol.")
+        if re.fullmatch(r"BRK[-.][AB]", symbol):
+            symbol = symbol.replace("-", " ").replace(".", " ")
         if symbol in seen:
             raise ValueError(f"Duplicate stock symbol: {symbol}.")
         seen.add(symbol)
@@ -2696,7 +2698,7 @@ def export_ibkr_basket(payload):
             raise ValueError(f"{symbol}: limit price must be positive with at most two decimal places.")
         rows.append(["BUY", format(quantity.normalize(), "f"), symbol, "STK", "SMART", "USD", "DAY", "LMT", f"{price:.2f}"])
         total += quantity * price
-    source_symbols = [order.get("sourceSymbol", order["symbol"].replace(" ", "-")) for order in orders]
+    source_symbols = [order.get("sourceSymbol", order["symbol"].strip().upper().replace(" ", "-").replace(".", "-")) for order in orders]
     for order, source_symbol in zip(orders, source_symbols):
         if not isinstance(source_symbol, str) or source_symbol.replace(".", "-") != order["symbol"].strip().upper().replace(" ", "-").replace(".", "-"):
             raise ValueError("IBKR symbol must match the source stock.")

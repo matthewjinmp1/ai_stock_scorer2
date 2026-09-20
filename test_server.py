@@ -1814,6 +1814,14 @@ class PortfolioTests(ServerTestCase):
         self.assertEqual(first["limitValue"], "700.50")
         self.assertEqual(first["orderCount"], 2)
 
+    def test_ibkr_export_translates_berkshire_aliases(self):
+        with mock.patch.object(server, "IBKR_EXPORT_DIR", self.root / "aliases"):
+            for symbol in ("BRK-B", "BRK.B", "BRK B"):
+                result = server.export_ibkr_basket({"orders": [{"symbol": symbol, "quantity": 1, "limitPrice": "400.00"}]})
+                with open(result["path"], newline="") as handle:
+                    self.assertEqual(list(csv.DictReader(handle))[0]["Symbol"], "BRK B")
+                self.fresh_prices.assert_called_with(["BRK-B"])
+
     def test_ibkr_export_preserves_fractional_quantity(self):
         with mock.patch.object(server, "IBKR_EXPORT_DIR", self.root / "fractional"):
             result = server.export_ibkr_basket({"orders": [

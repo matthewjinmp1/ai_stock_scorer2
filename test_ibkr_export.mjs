@@ -36,3 +36,9 @@ test('small budget supports fractional allocations without exceeding target', ()
   assert.equal(quantity, 0.064);
   assert.ok(quantity * 341.76 <= 21.8753);
 });
+
+test('Berkshire uses IBKR spaces while retaining source tickers', () => {
+  const orders = draftOrders(['BRK-B', 'BRK.A', 'AAPL'].map(ticker => ({ticker, country:'USA', portfolio_weight:10})));
+  assert.deepEqual(orders.map(order => order.symbol), ['BRK B', 'BRK A', 'AAPL']);
+  assert.deepEqual(orders.map(order => order.sourceSymbol), ['BRK-B', 'BRK.A', 'AAPL']);
+});
