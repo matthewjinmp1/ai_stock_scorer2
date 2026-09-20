@@ -15,7 +15,7 @@ function renderIbkrOrders() {
       <td><input data-field="symbol" aria-label="IBKR symbol for holding ${index + 1}" value="${escapeHtml(order.symbol)}" ${!order.supported ? "disabled" : ""} /></td>
       <td>${formatNumber(order.weight, 4)}%</td>
       <td><input data-field="quantity" aria-label="Shares for holding ${index + 1}" type="number" min="0" max="1000000000" step="0.0001" value="${order.quantity}" ${!order.supported ? "disabled" : ""} /></td>
-      <td><input data-field="limitPrice" aria-label="Limit price for holding ${index + 1}" type="number" min="0.01" max="1000000000" step="0.01" value="${escapeHtml(order.limitPrice)}" ${!order.supported ? "disabled" : ""} /></td>
+      <td><input data-field="limitPrice" aria-label="Limit price for holding ${index + 1}" type="number" min="0.01" max="1000000000" step="0.01" readonly value="${escapeHtml(order.limitPrice)}" ${!order.supported ? "disabled" : ""} /></td>
     </tr>`).join("");
   updateIbkrSummary();
 }
@@ -27,8 +27,8 @@ function reviewedIbkrOrders() {
   }
   return selected.filter(order => Number(order.quantity) > 0).map(order => {
     const price = Number(order.limitPrice);
-    if (!Number.isFinite(price) || price < 0.01 || price > 1e9 || Math.abs(price * 100 - Math.round(price * 100)) > 1e-6) throw new Error(`${order.symbol}: enter a positive limit price with at most two decimal places.`);
-    return { symbol: order.symbol, quantity: Number(order.quantity), limitPrice: price.toFixed(2) };
+    if (!Number.isFinite(price) || price < 0.01 || price > 1e9 || Math.abs(price * 100 - Math.round(price * 100)) > 1e-6) throw new Error(`${order.symbol}: fetch a valid source price before saving.`);
+    return { symbol: order.symbol, sourceSymbol: order.sourceSymbol, quantity: Number(order.quantity), limitPrice: price.toFixed(2) };
   });
 }
 
@@ -57,17 +57,35 @@ ibkrRows.addEventListener("input", event => {
   updateIbkrSummary();
 });
 document.querySelector("#ibkrBudget").addEventListener("input", updateIbkrSummary);
-document.querySelector("#calculateIbkr").addEventListener("click", () => {
+document.querySelector("#calculateIbkr").addEventListener("click", async () => {
+  if (savingBasket) return;
+  const button = document.querySelector("#calculateIbkr");
+  button.disabled = true;
+  savingBasket = true;
+  exportOrders = exportOrders.map(order => ({ ...order, limitPrice: "", quantity: 0 }));
+  renderIbkrOrders();
+  ibkrRows.querySelectorAll("input").forEach(input => input.disabled = true);
+  ibkrStatus.textContent = "Fetching US prices from CompaniesMarketCap…";
   try {
+    const response = await fetch("/api/portfolios/ibkr-prices", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({symbols: exportOrders.filter(order => order.included).map(order => order.sourceSymbol)}),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Price fetch failed.");
+    exportOrders = exportOrders.map(order => ({...order, limitPrice: result.prices[order.sourceSymbol] || ""}));
     exportOrders = allocateOrders(exportOrders, Number(document.querySelector("#ibkrBudget").value));
-    ibkrStatus.textContent = "";
-    renderIbkrOrders();
+    ibkrStatus.textContent = `Prices fetched ${new Date(result.fetchedAt * 1000).toLocaleString()}. Source prices may be delayed.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
+  finally { savingBasket = false; button.disabled = false; renderIbkrOrders(); }
 });
 saveIbkrButton.addEventListener("click", async () => {
+  if (savingBasket) return;
   savingBasket = true;
+  document.querySelector("#calculateIbkr").disabled = true;
+  ibkrRows.querySelectorAll("input").forEach(input => input.disabled = true);
   saveIbkrButton.disabled = true;
-  ibkrStatus.textContent = "Saving CSV…";
+  ibkrStatus.textContent = "Rechecking fresh US prices and saving CSV…";
   try {
     const response = await fetch("/api/portfolios/export-ibkr", {
       method: "POST",
@@ -78,7 +96,7 @@ saveIbkrButton.addEventListener("click", async () => {
     if (!response.ok) throw new Error(result.error || "Could not save IBKR CSV.");
     ibkrStatus.textContent = `Saved ${result.orderCount} ${result.orderCount === 1 ? "order" : "orders"} to ${result.path}. In BasketTrader, click Browse, select this file, then Load.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
-  finally { savingBasket = false; updateIbkrSummary(); }
+  finally { savingBasket = false; document.querySelector("#calculateIbkr").disabled = false; renderIbkrOrders(); }
 });
 
 const PORTFOLIO_PREVIEW_STORAGE_KEY = "ai-stock-scorer-portfolio-preview-v1";

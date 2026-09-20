@@ -1767,6 +1767,24 @@ class ManualRankingTests(ServerTestCase):
 
 
 class PortfolioTests(ServerTestCase):
+    def setUp(self):
+        super().setUp()
+        patch = mock.patch.object(server, "fetch_ibkr_prices", return_value={
+            "prices": {"AAPL": "150.25", "BRK-B": "400.00", "GOOG": "341.76"}
+        })
+        self.fresh_prices = patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_export_rejects_changed_price_and_fetch_failure(self):
+        payload = {"orders": [{"symbol": "AAPL", "quantity": 1, "limitPrice": "150.24"}]}
+        with mock.patch.object(server, "IBKR_EXPORT_DIR", self.root / "exports"):
+            with self.assertRaisesRegex(ValueError, "Prices changed"):
+                server.export_ibkr_basket(payload)
+            self.fresh_prices.side_effect = OSError("offline")
+            with self.assertRaises(OSError):
+                server.export_ibkr_basket(payload)
+            self.assertFalse((self.root / "exports").exists())
+
     def test_ibkr_export_matches_basket_format_and_preserves_existing_files(self):
         destination = self.root / "Jts"
         payload = {"name": "../../My portfolio", "orders": [
@@ -1932,3 +1950,20 @@ class ModelCutoffTests(unittest.TestCase):
             self.assertIsNone(server.openrouter_knowledge_cutoff("missing"))
             self.assertIsNone(server.openrouter_knowledge_cutoff("missing"))
             self.assertEqual(fetch.call_count, 1)
+
+class FreshBasketPriceTests(unittest.TestCase):
+    def test_us_pages_stop_when_requested_prices_found(self):
+        rows = [{"ticker": "AAA", "country": "USA", "price": "$123.45"}]
+        with mock.patch.object(server, "_fetch_html", return_value="html") as fetch, mock.patch.object(server, "_parse_companies", return_value=rows):
+            self.assertEqual(server.fetch_ibkr_prices(["AAA"])["prices"], {"AAA": "123.45"})
+            self.assertEqual(fetch.call_count, 1)
+            self.assertIn("/usa/", fetch.call_args.args[0])
+
+    def test_missing_or_invalid_price_never_uses_stored_price(self):
+        for price in ("", "$0", "NaN"):
+            with mock.patch.object(server, "_fetch_html", return_value="html"), mock.patch.object(server, "_parse_companies", return_value=[{"ticker": "AAA", "country": "USA", "price": price}]):
+                with self.assertRaises(ValueError):
+                    server.fetch_ibkr_prices(["AAA"])
+        with mock.patch.object(server, "_fetch_html", return_value="html"), mock.patch.object(server, "_parse_companies", return_value=[{"ticker": "BBB", "country": "USA", "price": "$12"}]):
+            with self.assertRaisesRegex(ValueError, "AAA"):
+                server.fetch_ibkr_prices(["AAA"])

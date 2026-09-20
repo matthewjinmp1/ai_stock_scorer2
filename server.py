@@ -2625,6 +2625,42 @@ def calculate_portfolio(
     }
 
 
+def fetch_ibkr_prices(symbols):
+    if not isinstance(symbols, list) or not 1 <= len(symbols) <= 10000:
+        raise ValueError("Select stocks to fetch prices.")
+    wanted = set()
+    for symbol in symbols:
+        if not isinstance(symbol, str) or not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,23}", symbol):
+            raise ValueError("Invalid source stock symbol.")
+        wanted.add(symbol)
+    prices = {}
+    seen = set()
+    base = "https://companiesmarketcap.com/usa/largest-companies-in-the-usa-by-market-cap/"
+    for page in range(1, 201):
+        url = base if page == 1 else base + f"?page={page}"
+        companies = _parse_companies(_fetch_html(url))
+        tickers = {row["ticker"] for row in companies}
+        if not tickers - seen:
+            break
+        seen.update(tickers)
+        for row in companies:
+            ticker = row["ticker"]
+            if ticker not in wanted or row.get("country") not in ("USA", "United States"):
+                continue
+            value = str(row.get("price", ""))
+            if not re.fullmatch(r"\$[0-9,]+(?:\.[0-9]{1,2})?", value):
+                raise ValueError(f"{ticker}: source price is missing or invalid.")
+            price = Decimal(value.replace("$", "").replace(",", ""))
+            if not Decimal("0.01") <= price <= Decimal("1000000000"):
+                raise ValueError(f"{ticker}: source price is invalid.")
+            prices[ticker] = f"{price:.2f}"
+        if wanted <= prices.keys():
+            return {"prices": prices, "fetchedAt": int(time.time()), "pages": page}
+        if len(companies) < COMPANIESMARKETCAP_PAGE_SIZE:
+            break
+    raise ValueError("No fresh US price found for: " + ", ".join(sorted(wanted - prices.keys())))
+
+
 def export_ibkr_basket(payload):
     """Save reviewed stock orders locally; this does not contact a broker."""
     if not isinstance(payload, dict):
@@ -2655,6 +2691,15 @@ def export_ibkr_basket(payload):
             raise ValueError(f"{symbol}: limit price must be positive with at most two decimal places.")
         rows.append(["BUY", format(quantity.normalize(), "f"), symbol, "STK", "SMART", "USD", "DAY", "LMT", f"{price:.2f}"])
         total += quantity * price
+    source_symbols = [order.get("sourceSymbol", order["symbol"].replace(" ", "-")) for order in orders]
+    for order, source_symbol in zip(orders, source_symbols):
+        if not isinstance(source_symbol, str) or source_symbol.replace(".", "-") != order["symbol"].strip().upper().replace(" ", "-").replace(".", "-"):
+            raise ValueError("IBKR symbol must match the source stock.")
+    fresh = fetch_ibkr_prices(source_symbols)["prices"]
+    for row, source_symbol in zip(rows, source_symbols):
+        if row[-1] != fresh[source_symbol]:
+            raise ValueError("Prices changed. Fetch prices and calculate shares again before saving.")
+        row[-1] = fresh[source_symbol]
     output = io.StringIO(newline="")
     writer = csv.writer(output)
     writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "LmtPrice"])
@@ -4684,6 +4729,14 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/portfolios/ibkr-prices":
+            try:
+                self.send_json(fetch_ibkr_prices(self.read_json().get("symbols")), 200)
+            except (ValueError, TypeError, AttributeError) as exc:
+                self.send_json({"error": str(exc)}, 400)
+            except Exception:
+                self.send_json({"error": "Price fetch failed. Stored prices will not be used."}, 502)
+            return
         if parsed.path == "/api/portfolios/export-ibkr":
             # Require JSON to prevent a cross-origin HTML form from creating files.
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
@@ -4694,7 +4747,7 @@ class Handler(SimpleHTTPRequestHandler):
             except ValueError as exc:
                 self.send_json({"error": str(exc)}, 400)
             except OSError:
-                self.send_json({"error": "Could not save the CSV in Jts. Check that the folder is writable."}, 500)
+                self.send_json({"error": "Fresh price fetch or CSV save failed. No stored prices were used."}, 500)
             return
         confidence_pin_match = re.fullmatch(r"/api/confidence-runs/(\d+)/pin", parsed.path)
         if confidence_pin_match:

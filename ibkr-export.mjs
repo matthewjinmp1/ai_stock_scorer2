@@ -1,15 +1,14 @@
 export function draftOrders(holdings) {
   return holdings.map((holding) => {
     const supported = ["USA", "United States"].includes(holding.country);
-    const rawPrice = String(holding.price ?? "").replace(/[$,\s]/g, "");
-    const price = rawPrice && Number(rawPrice);
     return {
       symbol: holding.ticker,
+      sourceSymbol: holding.ticker,
       weight: Number(holding.portfolio_weight),
       supported,
       included: supported,
       quantity: 0,
-      limitPrice: supported && Number.isFinite(price) && price > 0 ? price.toFixed(2) : "",
+      limitPrice: "",
     };
   });
 }
