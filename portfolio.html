@@ -21,7 +21,7 @@
 
       <p id="portfolioStatus" class="status" role="status"></p>
 
-      <section class="metric-grid portfolio-metric-grid" aria-label="Portfolio summary">
+      <section data-portfolio-view class="metric-grid portfolio-metric-grid" aria-label="Portfolio summary">
         <article class="metric-card">
           <span>Source Run</span>
           <strong id="portfolioRun">--</strong>
@@ -48,9 +48,12 @@
         </article>
       </section>
 
+      <div data-portfolio-view class="actions"><button id="openIbkrExport" type="button" disabled>Export to IBKR</button></div>
+
       <section id="ibkrExport" class="prompt-editor" hidden aria-label="IBKR basket export">
-        <h2>Export to IBKR</h2>
-        <p>Create US stock BUY orders using SMART routing, USD, DAY, and limit prices. Prices below come from the saved run, not live quotes; edit them before saving. Non-US holdings are excluded.</p>
+        <div class="actions"><button id="backToPortfolio" class="secondary-button" type="button">Back to portfolio</button></div>
+        <h2 id="ibkrExportTitle" tabindex="-1">Export to IBKR</h2>
+        <p>Create US stock BUY orders using SMART routing, USD, DAY, and limit prices. Prices are freshly fetched from CompaniesMarketCap and may be delayed. Non-US holdings are excluded.</p>
         <div class="actions">
           <label>Budget (USD)<input id="ibkrBudget" type="number" min="0.01" max="1000000000000" step="0.01" placeholder="Enter amount" /></label>
           <button id="calculateIbkr" class="secondary-button" type="button">Fetch prices &amp; calculate shares</button>
@@ -68,7 +71,7 @@
         <p id="ibkrStatus" class="status" role="status"></p>
       </section>
 
-      <section class="table-display-tools" aria-label="Portfolio table display options">
+      <section data-portfolio-view class="table-display-tools" aria-label="Portfolio table display options">
         <details id="portfolioColumnSelector" class="column-selector">
           <summary>Columns</summary>
           <div class="column-selector-menu">
@@ -79,7 +82,7 @@
         </details>
       </section>
 
-      <section class="table-wrap portfolio-table-wrap" aria-label="Portfolio holdings">
+      <section data-portfolio-view class="table-wrap portfolio-table-wrap" aria-label="Portfolio holdings">
         <table class="portfolio-table">
           <thead>
             <tr>

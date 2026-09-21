@@ -8,6 +8,26 @@ const ibkrRows = document.querySelector("#ibkrOrders");
 const ibkrStatus = document.querySelector("#ibkrStatus");
 const saveIbkrButton = document.querySelector("#saveIbkr");
 
+function showPortfolioView() {
+  const exporting = Boolean(exportPortfolio) && window.location.hash === "#ibkr";
+  document.querySelectorAll("[data-portfolio-view]").forEach(element => { element.hidden = exporting; });
+  document.querySelector("#ibkrExport").hidden = !exporting;
+  if (exportPortfolio) document.title = `${exportPortfolio.name} - ${exporting ? "Export to IBKR" : "Portfolio"}`;
+}
+
+document.querySelector("#openIbkrExport").addEventListener("click", () => {
+  window.location.hash = "ibkr";
+});
+document.querySelector("#backToPortfolio").addEventListener("click", () => {
+  window.location.hash = "";
+});
+window.addEventListener("hashchange", () => {
+  showPortfolioView();
+  const target = window.location.hash === "#ibkr" ? "#ibkrExportTitle" : "#openIbkrExport";
+  document.querySelector(target).focus();
+  window.scrollTo({ top: 0 });
+});
+
 function renderIbkrOrders() {
   ibkrRows.innerHTML = exportOrders.map((order, index) => `
     <tr data-order="${index}">
@@ -209,7 +229,7 @@ function renderPortfolio(portfolio) {
   exportPortfolio = portfolio;
   exportOrders = draftOrders(portfolio.holdings);
   renderIbkrOrders();
-  document.querySelector("#ibkrExport").hidden = false;
+  document.querySelector("#openIbkrExport").disabled = false;
   const baseWeighting = portfolio.base_weighting === "equal" ? "equal" : "market_cap";
   document.title = `${portfolio.name} - Portfolio`;
   document.querySelector("#portfolioTitle").textContent = portfolio.name;
@@ -228,6 +248,7 @@ function renderPortfolio(portfolio) {
   portfolioTable.setContext({ baseWeighting });
   portfolioTable.setRows(portfolio.holdings, { emptyMessage: "No holdings match these portfolio rules." });
   statusEl.textContent = "";
+  showPortfolioView();
 }
 
 function loadPortfolio() {

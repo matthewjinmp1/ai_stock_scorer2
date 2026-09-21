@@ -1628,3 +1628,5 @@ tbody tr:hover {
   color: white;
   border-color: #0969c9;
 }
+
+[data-portfolio-view][hidden] { display: none; }
