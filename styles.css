@@ -1618,7 +1618,9 @@ tbody tr:hover {
   }
 }
 /* Basket review keeps large portfolios scrollable and numeric fields readable. */
-.ibkr-table-wrap { max-height: 420px; overflow: auto; }
+.ibkr-export-view[hidden] { display: none; }
+.ibkr-dashboard { margin-bottom: 20px; }
+.ibkr-table-wrap { max-height: none; overflow-x: auto; }
 .ibkr-table-wrap input:not([type="checkbox"]) { width: 140px; }
 .ibkr-table-wrap input[type="checkbox"] { width: auto; }
 #ibkrStatus { overflow-wrap: anywhere; }
