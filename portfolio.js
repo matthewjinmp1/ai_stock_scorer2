@@ -29,15 +29,20 @@ window.addEventListener("hashchange", () => {
 });
 
 function renderIbkrOrders() {
-  ibkrRows.innerHTML = exportOrders.map((order, index) => `
-    <tr data-order="${index}">
-      <td><input type="checkbox" data-field="included" aria-label="Include ${escapeHtml(order.symbol)}" ${order.included ? "checked" : ""} ${!order.supported ? "disabled" : ""} />${!order.supported ? "Non-US: excluded" : ""}</td>
-      <td><input data-field="symbol" aria-label="IBKR symbol for holding ${index + 1}" value="${escapeHtml(order.symbol)}" ${!order.supported ? "disabled" : ""} /></td>
+  ibkrRows.innerHTML = exportOrders.map((order, index) => {
+    const holding = exportPortfolio.holdings[index];
+    const logo = holding.logo ? `<img class="logo" src="${escapeHtml(holding.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />` : "";
+    return `<tr data-order="${index}">
+      <td>${index + 1}</td>
+      <td><div class="company-cell">${logo}<div><strong class="company-name">${escapeHtml(holding.company_name || holding.ticker)}</strong><span class="ticker">${escapeHtml(order.symbol)}</span>${!order.supported ? '<span class="ticker">Non-US: excluded</span>' : ""}</div></div></td>
+      <td><strong>${formatNumber(holding.score)}</strong></td>
+      <td>${formatNumber(holding.score_percentile, 1)}%</td>
       <td>${formatNumber(order.weight, 4)}%</td>
-      <td><input data-field="quantity" aria-label="Shares for holding ${index + 1}" type="number" min="0" max="1000000000" step="0.0001" value="${order.quantity}" ${!order.supported ? "disabled" : ""} /></td>
-      <td><input data-field="limitPrice" aria-label="Limit price for holding ${index + 1}" type="number" min="0.01" max="1000000000" step="0.01" readonly value="${escapeHtml(order.limitPrice)}" ${!order.supported ? "disabled" : ""} /></td>
+      <td>${formatNumber(order.quantity, 4)}</td>
+      <td>${order.limitPrice ? Number(order.limitPrice).toLocaleString("en-US", {style: "currency", currency: "USD"}) : "—"}</td>
       <td data-purchase-value></td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
   updateIbkrSummary();
 }
 
@@ -78,14 +83,6 @@ function updateIbkrSummary() {
   }
 }
 
-ibkrRows.addEventListener("input", event => {
-  const field = event.target.dataset.field;
-  if (!field) return;
-  const order = exportOrders[Number(event.target.closest("tr").dataset.order)];
-  order[field] = field === "included" ? event.target.checked : event.target.value;
-  ibkrStatus.textContent = "";
-  updateIbkrSummary();
-});
 document.querySelector("#ibkrBudget").addEventListener("input", updateIbkrSummary);
 document.querySelector("#calculateIbkr").addEventListener("click", async () => {
   if (savingBasket) return;
@@ -94,7 +91,6 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
   savingBasket = true;
   exportOrders = exportOrders.map(order => ({ ...order, limitPrice: "", quantity: 0 }));
   renderIbkrOrders();
-  ibkrRows.querySelectorAll("input").forEach(input => input.disabled = true);
   ibkrStatus.textContent = "Fetching US prices from CompaniesMarketCap…";
   try {
     const response = await fetch("/api/portfolios/ibkr-prices", {
@@ -113,7 +109,6 @@ saveIbkrButton.addEventListener("click", async () => {
   if (savingBasket) return;
   savingBasket = true;
   document.querySelector("#calculateIbkr").disabled = true;
-  ibkrRows.querySelectorAll("input").forEach(input => input.disabled = true);
   saveIbkrButton.disabled = true;
   ibkrStatus.textContent = "Rechecking fresh US prices and saving CSV…";
   try {

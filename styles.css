@@ -1621,8 +1621,10 @@ tbody tr:hover {
 .ibkr-export-view[hidden] { display: none; }
 .ibkr-dashboard { margin-bottom: 20px; }
 .ibkr-table-wrap { max-height: none; overflow-x: auto; }
-.ibkr-table-wrap input:not([type="checkbox"]) { width: 140px; }
-.ibkr-table-wrap input[type="checkbox"] { width: auto; }
+.ibkr-table { min-width: 100%; }
+.ibkr-table .company-cell > div { min-width: 0; }
+.ibkr-table .company-name { white-space: normal; overflow-wrap: anywhere; }
+.ibkr-table td { font-variant-numeric: tabular-nums; }
 #ibkrStatus { overflow-wrap: anywhere; }
 
 #companiesUsFilter[aria-pressed="true"] {
