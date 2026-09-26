@@ -72,3 +72,12 @@ Fetch every company currently listed by CompaniesMarketCap:
 The command prints progress after each page and only updates `companies.db`
 after the complete scrape succeeds. A complete refresh also removes stale
 companies that are no longer present in the site's full listing.
+
+## Read-only IBKR cash
+
+Install `python3 -m pip install -r requirements.txt`. Keep TWS logged in with
+Socket Clients enabled, Read-Only API checked, and port 7496. **All cash** on the
+IBKR export view fills the USD budget from the lower of CashBalance and
+AvailableFunds. It requires exactly one account and USD balances. No fees are
+reserved. Click **Fetch prices & calculate shares** after loading cash.
+The integration requests account data only and never submits orders.

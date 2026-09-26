@@ -57,12 +57,13 @@
           <p>Create US stock BUY orders using SMART routing, USD, DAY, and limit prices. Prices are freshly fetched from CompaniesMarketCap and may be delayed. Non-US holdings are excluded.</p>
           <div class="actions">
             <label>Budget (USD)<input id="ibkrBudget" type="number" min="0.01" max="1000000000000" step="0.01" placeholder="Enter amount" /></label>
+            <button id="allCashIbkr" class="secondary-button" type="button">All cash</button>
             <button id="calculateIbkr" class="secondary-button" type="button">Fetch prices &amp; calculate shares</button>
           </div>
           <p>Fractional shares are rounded down to four decimal places using each holding’s portfolio weight and freshly fetched CompaniesMarketCap US prices. Excluded holdings and rounding leave cash unallocated. Stored prices are never used. Saving rechecks source prices; if prices change, fetch and calculate again. Fractional trading requires eligible stocks and IBKR account permissions.</p>
           <p id="ibkrSummary" role="status"></p>
           <div class="actions"><button id="saveIbkr" type="button" disabled>Save IBKR CSV to Jts</button></div>
-          <p>Open the saved CSV in BasketTrader to review and submit the orders. Saving here only creates the file.</p>
+          <p>All cash uses the lower of USD cash and available funds; fees are not reserved. Open the saved CSV in BasketTrader to review and submit the orders. Saving here only creates the file.</p>
           <p id="ibkrStatus" class="status" role="status"></p>
         </div>
         <div class="table-wrap ibkr-table-wrap">

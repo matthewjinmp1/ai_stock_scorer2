@@ -4739,6 +4739,17 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/portfolios/ibkr-cash":
+            if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                self.send_json({"error": "Use application/json."}, 415)
+                return
+            try:
+                result = subprocess.run([sys.executable, str(ROOT / "ibkr_cash.py")], capture_output=True, text=True, timeout=25, check=True)
+                payload = json.loads(result.stdout)
+                self.send_json(payload, 502 if "error" in payload else 200)
+            except (subprocess.SubprocessError, ValueError, OSError):
+                self.send_json({"error": "Unable to read cash. Check TWS is logged in with its API enabled on port 7496."}, 502)
+            return
         if parsed.path == "/api/portfolios/ibkr-prices":
             try:
                 self.send_json(fetch_ibkr_prices(self.read_json().get("symbols")), 200)

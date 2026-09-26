@@ -83,6 +83,29 @@ function updateIbkrSummary() {
   }
 }
 
+document.querySelector("#allCashIbkr").addEventListener("click", async () => {
+  if (savingBasket) return;
+  savingBasket = true;
+  const button = document.querySelector("#allCashIbkr");
+  button.disabled = true;
+  document.querySelector("#calculateIbkr").disabled = true;
+  updateIbkrSummary();
+  ibkrStatus.textContent = "Reading available cash from TWS…";
+  try {
+    const response = await fetch("/api/portfolios/ibkr-cash", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Unable to read cash.");
+    document.querySelector("#ibkrBudget").value = result.cash;
+    exportOrders = exportOrders.map(order => ({...order, quantity: 0}));
+    ibkrStatus.textContent = `Budget set to $${result.cash}. Fetch prices and calculate shares next. Fees are not reserved.`;
+  } catch (error) { ibkrStatus.textContent = error.message; }
+  finally {
+    savingBasket = false;
+    button.disabled = false;
+    document.querySelector("#calculateIbkr").disabled = false;
+    renderIbkrOrders();
+  }
+});
 document.querySelector("#ibkrBudget").addEventListener("input", updateIbkrSummary);
 document.querySelector("#calculateIbkr").addEventListener("click", async () => {
   if (savingBasket) return;
