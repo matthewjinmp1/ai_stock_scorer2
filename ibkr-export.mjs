@@ -13,8 +13,8 @@ export function draftOrders(holdings) {
   });
 }
 
-// IBKR's credit check adds 5% to market orders, and commissions are capped at 1% of trade value.
-export const MARKET_ORDER_RESERVE = 1.06;
+// IBKR's credit check adds 5% to market orders. IBKR Lite charges no commission on US stock buys.
+export const MARKET_ORDER_RESERVE = 1.05;
 
 export function spendableBudget(budget) {
   return Math.floor(budget / MARKET_ORDER_RESERVE * 100) / 100;

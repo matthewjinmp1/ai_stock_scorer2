@@ -74,9 +74,9 @@ test('buy-only balancing matches share classes and ignores non-target holdings',
   assert.ok(result[1].quantity > 4.999);
 });
 
-test('spendable budget leaves room for the market-order hold and commissions', async () => {
+test('spendable budget leaves room for the market-order hold', async () => {
   const {spendableBudget} = await import('./ibkr-export.mjs');
-  assert.equal(spendableBudget(43.85), 41.36);
-  assert.equal(spendableBudget(106), 100);
-  assert.ok(spendableBudget(43.85) * 1.05 + spendableBudget(43.85) * 0.01 <= 43.85);
+  assert.equal(spendableBudget(43.85), 41.76);
+  assert.equal(spendableBudget(105), 100);
+  assert.ok(spendableBudget(43.85) * 1.05 <= 43.85);
 });

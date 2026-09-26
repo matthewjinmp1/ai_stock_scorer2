@@ -76,7 +76,7 @@ function updateIbkrSummary() {
     const total = orders.reduce((sum, order) => sum + order.quantity * Number(order.limitPrice), 0);
     const budget = Number(document.querySelector("#ibkrBudget").value);
     const spendable = budget > 0 ? spendableBudget(budget) : 0;
-    const remaining = budget > 0 ? ` $${formatNumber(budget - spendable)} reserved for IBKR's 5% market-order hold and fees. ${total > spendable ? "Over budget by" : "Unallocated budget:"} $${formatNumber(Math.abs(spendable - total))}.` : "";
+    const remaining = budget > 0 ? ` $${formatNumber(budget - spendable)} reserved for IBKR's 5% market-order hold. ${total > spendable ? "Over budget by" : "Unallocated budget:"} $${formatNumber(Math.abs(spendable - total))}.` : "";
     const omitted = exportOrders.length - orders.length;
     summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} estimated at fetched prices, excluding fees.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
     saveIbkrButton.disabled = savingBasket || !orders.length || !basketSchedule;
@@ -100,7 +100,7 @@ document.querySelector("#allCashIbkr").addEventListener("click", async () => {
     if (!response.ok) throw new Error(result.error || "Unable to read cash.");
     document.querySelector("#ibkrBudget").value = result.cash;
     exportOrders = exportOrders.map(order => ({...order, quantity: 0}));
-    ibkrStatus.textContent = `Budget set to $${result.cash}. Fetch prices and calculate shares next. 6% is reserved for IBKR's market-order hold and fees.`;
+    ibkrStatus.textContent = `Budget set to $${result.cash}. Fetch prices and calculate shares next. 5% is reserved for IBKR's market-order hold.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally {
     savingBasket = false;
