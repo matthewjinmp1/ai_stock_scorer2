@@ -7,7 +7,7 @@ PROJECT_DIR="$(pwd)"
 PORT="3001"
 export PORT
 
-WATCHED_FILES=(server.py openrouter_transport.py index.html styles.css app.js run.html run.js result.html result.js portfolio.html portfolio.js ibkr-export.mjs)
+WATCHED_FILES=(ibkr_schedule.py ibkr_cash.py server.py openrouter_transport.py index.html styles.css app.js run.html run.js result.html result.js portfolio.html portfolio.js ibkr-export.mjs)
 
 signature() {
   python3 -c 'import os, sys

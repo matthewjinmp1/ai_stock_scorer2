@@ -4,6 +4,7 @@ import { draftOrders, allocateOrders, allocateBuysOverPositions } from "./ibkr-e
 let exportPortfolio;
 let exportOrders = [];
 let savingBasket = false;
+let basketSchedule = null;
 const ibkrRows = document.querySelector("#ibkrOrders");
 const ibkrStatus = document.querySelector("#ibkrStatus");
 const saveIbkrButton = document.querySelector("#saveIbkr");
@@ -74,8 +75,8 @@ function updateIbkrSummary() {
     const budget = Number(document.querySelector("#ibkrBudget").value);
     const remaining = budget > 0 ? ` ${total > budget ? "Over budget by" : "Unallocated budget:"} $${formatNumber(Math.abs(budget - total))}.` : "";
     const omitted = exportOrders.length - orders.length;
-    summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} at limit prices, excluding fees.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
-    saveIbkrButton.disabled = savingBasket || !orders.length;
+    summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} estimated at fetched prices, excluding fees.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
+    saveIbkrButton.disabled = savingBasket || !orders.length || !basketSchedule;
   } catch (error) {
     summary.textContent = error.message;
     saveIbkrButton.disabled = true;
@@ -106,6 +107,7 @@ document.querySelector("#allCashIbkr").addEventListener("click", async () => {
   }
 });
 function invalidateIbkrSizing() {
+  basketSchedule = null;
   exportOrders = exportOrders.map(order => ({...order, quantity: 0, currentQuantity: undefined}));
   renderIbkrOrders();
 }
@@ -120,10 +122,14 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
   document.querySelector("#balanceIbkr").disabled = true;
   document.querySelector("#ibkrBudget").disabled = true;
   savingBasket = true;
+  basketSchedule = null;
   exportOrders = exportOrders.map(order => ({ ...order, limitPrice: "", quantity: 0, currentQuantity: undefined }));
   renderIbkrOrders();
   ibkrStatus.textContent = "Fetching US prices from CompaniesMarketCap…";
   try {
+    const scheduleResponse = await fetch("/api/portfolios/ibkr-schedule");
+    const schedule = await scheduleResponse.json();
+    if (!scheduleResponse.ok) throw new Error(schedule.error || "Unable to determine trading date.");
     const response = await fetch("/api/portfolios/ibkr-prices", {
       method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({symbols: exportOrders.filter(order => order.included).map(order => order.sourceSymbol)}),
@@ -140,6 +146,8 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
     } else {
       exportOrders = allocateOrders(exportOrders, budget);
     }
+    basketSchedule = schedule;
+    document.querySelector("#ibkrSchedule").textContent = `Market orders activate ${schedule.label}. Submit in TWS before that time. This is a one-time basket.`;
     ibkrStatus.textContent = `Prices fetched ${new Date(result.fetchedAt * 1000).toLocaleString()}. Source prices may be delayed.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally { savingBasket = false; button.disabled = false; document.querySelector("#balanceIbkr").disabled = false; document.querySelector("#ibkrBudget").disabled = false; renderIbkrOrders(); }
@@ -154,11 +162,11 @@ saveIbkrButton.addEventListener("click", async () => {
     const response = await fetch("/api/portfolios/export-ibkr", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: exportPortfolio.name, orders: reviewedIbkrOrders() }),
+      body: JSON.stringify({ name: exportPortfolio.name, orders: reviewedIbkrOrders(), scheduledAt: basketSchedule?.scheduledAt }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Could not save IBKR CSV.");
-    ibkrStatus.textContent = `Saved ${result.orderCount} ${result.orderCount === 1 ? "order" : "orders"} to ${result.path}. In BasketTrader, click Browse, select this file, then Load.`;
+    ibkrStatus.textContent = `Saved ${result.orderCount} ${result.orderCount === 1 ? "order" : "orders"} to ${result.path}. In BasketTrader, click Browse, select this file, then Load. Scheduled for ${result.label}. Verify the activation time before transmitting.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally { savingBasket = false; document.querySelector("#calculateIbkr").disabled = false; renderIbkrOrders(); }
 });

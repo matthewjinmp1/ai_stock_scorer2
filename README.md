@@ -3,18 +3,25 @@
 ## Export a portfolio to IBKR
 
 In Runs, select **Build Portfolio**, choose the rules, and click **Create portfolio**.
-On the composition page, use **Export to IBKR**: enter a USD budget, review or edit
-the saved-run limit prices, and click **Calculate shares**. Quantities round down
-at the portfolio weights; excluded holdings and rounding leave cash unallocated.
-Review the IBKR symbols and quantities, then click **Save IBKR CSV to Jts**.
-Each export creates a unique CSV in `~/Jts` without overwriting earlier exports.
-The confirmation shows the exact path to load using BasketTrader's **Browse** button.
+On the composition page, open **Export to IBKR**, enter a USD budget, and
+click **Fetch prices & calculate shares**. Fresh CompaniesMarketCap US prices
+are used only for sizing; stored prices are never substituted.
 
-Exports contain US stock BUY / LMT / DAY orders in USD routed through SMART.
-Non-US holdings are excluded; zero-share rows are omitted. Saved prices are not
-live quotes. Symbol mappings (including share classes) should be checked in IBKR.
-Saving a CSV does not submit orders or rebalance existing positions.
+Exports contain BUY / MKT / DAY orders, SMART routing, and fractional quantities
+rounded down to four decimal places. **GoodAfter** schedules activation at 10:30
+Eastern on the next trading day (strictly after today), skipping weekends and
+NYSE holidays. **OutsideRth** is FALSE. The exact date appears before saving.
+This is a one-time schedule, not a recurring weekly purchase.
 
+Market execution prices and total spending can differ from estimates. No cash
+buffer is deducted; IBKR may reject orders for insufficient funds. Review the
+schedule and fractional-order acceptance in TWS before transmitting. Unexpected
+exchange closures may require reviewing the date manually.
+
+**Save IBKR CSV to Jts** replaces `~/Jts/ibkr_basket.csv` only after validation
+and a complete write. Saving creates a file; it never submits orders.
+
+Install dependencies with `python3 -m pip install -r requirements.txt`.
 Order sizing tests: `node --test test_ibkr_export.mjs`.
 
 ## US company confidence run

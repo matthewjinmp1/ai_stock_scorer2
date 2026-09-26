@@ -21,6 +21,7 @@ from decimal import Decimal, InvalidOperation
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, unquote, urlparse
+from ibkr_schedule import next_basket_schedule
 from openrouter_transport import ConnectionDeadline, fetch_completion
 
 
@@ -2708,9 +2709,14 @@ def export_ibkr_basket(payload):
         if row[-1] != fresh[source_symbol]:
             raise ValueError("Prices changed. Fetch prices and calculate shares again before saving.")
         row[-1] = fresh[source_symbol]
+    schedule = next_basket_schedule()
+    if payload.get("scheduledAt") and payload["scheduledAt"] != schedule["scheduledAt"]:
+        raise ValueError("The trading date changed. Fetch prices and calculate again to review the new schedule.")
+    for row in rows:
+        row[7:] = ["MKT", schedule["goodAfter"], "FALSE"]
     output = io.StringIO(newline="")
     writer = csv.writer(output)
-    writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "LmtPrice"])
+    writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "GoodAfter", "OutsideRth"])
     writer.writerows(rows)
     filename = "ibkr_basket.csv"
     IBKR_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
@@ -2726,7 +2732,7 @@ def export_ibkr_basket(payload):
     for old_path in IBKR_EXPORT_DIR.glob("ibkr_*.csv"):
         if old_path.name == "ibkr_basket_example.csv" or re.fullmatch(r"ibkr_.+_\d{8}_\d{6}_[0-9a-f]{8}\.csv", old_path.name):
             old_path.unlink()
-    return {"path": str(path), "filename": filename, "orderCount": len(rows), "limitValue": str(total)}
+    return {"path": str(path), "filename": filename, "orderCount": len(rows), "estimatedValue": str(total), **schedule}
 
 
 def _run_result_sort_value(result, key):
@@ -4546,6 +4552,12 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/portfolios/ibkr-schedule":
+            try:
+                self.send_json(next_basket_schedule())
+            except Exception:
+                self.send_json({"error": "Unable to determine the next trading day. Check calendar dependencies."}, 503)
+            return
         if parsed.path == "/run.html":
             self.path = "/run.html"
             super().do_GET()

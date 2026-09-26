@@ -1810,10 +1810,21 @@ class PortfolioTests(ServerTestCase):
         self.assertEqual(Path(first["path"]).parent, destination)
         with open(first["path"], newline="") as handle:
             rows = list(csv.DictReader(handle))
-        self.assertEqual(rows[0], dict(Action="BUY", Quantity="2", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD", TimeInForce="DAY", OrderType="LMT", LmtPrice="150.25"))
+        self.assertEqual(rows[0], dict(Action="BUY", Quantity="2", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD", TimeInForce="DAY", OrderType="MKT", GoodAfter=first["goodAfter"], OutsideRth="FALSE"))
         self.assertEqual(rows[1]["Symbol"], "BRK B")
-        self.assertEqual(first["limitValue"], "700.50")
+        self.assertEqual(first["estimatedValue"], "700.50")
         self.assertEqual(first["orderCount"], 2)
+
+    def test_ibkr_export_blocks_stale_schedule_before_replacing_file(self):
+        destination = self.root / "scheduled"
+        destination.mkdir()
+        path = destination / "ibkr_basket.csv"
+        path.write_text("previous basket")
+        payload = {"scheduledAt": "2000-01-01T10:30:00-05:00", "orders": [{"symbol": "AAPL", "quantity": 1, "limitPrice": "150.25"}]}
+        with mock.patch.object(server, "IBKR_EXPORT_DIR", destination):
+            with self.assertRaisesRegex(ValueError, "trading date changed"):
+                server.export_ibkr_basket(payload)
+        self.assertEqual(path.read_text(), "previous basket")
 
     def test_ibkr_export_translates_berkshire_aliases(self):
         with mock.patch.object(server, "IBKR_EXPORT_DIR", self.root / "aliases"):
