@@ -1649,3 +1649,5 @@ tbody tr:hover {
   margin: 0;
   padding: 0;
 }
+
+.ibkr-budget-controls { align-items: flex-end; }
