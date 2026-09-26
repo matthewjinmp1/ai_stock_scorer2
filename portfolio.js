@@ -32,16 +32,23 @@ function renderIbkrOrders() {
   ibkrRows.innerHTML = exportOrders.map((order, index) => {
     const holding = exportPortfolio.holdings[index];
     const logo = holding.logo ? `<img class="logo" src="${escapeHtml(holding.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />` : "";
+    const price = Number(order.limitPrice);
+    const priced = order.limitPrice !== "" && Number.isFinite(price) && price > 0;
+    const current = order.currentQuantity;
+    const buy = order.included ? Number(order.quantity) : 0;
+    const currentCents = current == null || !priced ? null : Math.round(current * price * 100);
+    const buyCents = priced ? Math.round(buy * price * 100) : null;
+    const positionCell = (shares, cents) => shares == null ? "—" : `<strong>${cents == null ? "—" : (cents / 100).toLocaleString("en-US", {style: "currency", currency: "USD"})}</strong><span class="ticker">${formatNumber(shares, 4)} shares</span>`;
     return `<tr data-order="${index}">
       <td>${index + 1}</td>
       <td><div class="company-cell">${logo}<div><strong class="company-name">${escapeHtml(holding.company_name || holding.ticker)}</strong><span class="ticker">${escapeHtml(order.symbol)}</span>${!order.supported ? '<span class="ticker">Non-US: excluded</span>' : ""}</div></div></td>
       <td><strong>${formatNumber(holding.score)}</strong></td>
       <td>${formatNumber(holding.score_percentile, 1)}%</td>
       <td>${formatNumber(order.weight, 4)}%</td>
-      <td>${order.currentQuantity == null ? "—" : formatNumber(order.currentQuantity, 4)}</td>
-      <td>${formatNumber(order.quantity, 4)}</td>
-      <td>${order.limitPrice ? Number(order.limitPrice).toLocaleString("en-US", {style: "currency", currency: "USD"}) : "—"}</td>
-      <td data-purchase-value></td>
+      <td>${positionCell(current, currentCents)}</td>
+      <td>${positionCell(buy, buyCents)}</td>
+      <td>${positionCell(current == null ? null : current + buy, currentCents == null || buyCents == null ? null : currentCents + buyCents)}</td>
+      <td>${priced ? price.toLocaleString("en-US", {style: "currency", currency: "USD"}) : "—"}</td>
     </tr>`;
   }).join("");
   updateIbkrSummary();
@@ -60,15 +67,6 @@ function reviewedIbkrOrders() {
 }
 
 function updateIbkrSummary() {
-  ibkrRows.querySelectorAll("[data-purchase-value]").forEach(cell => {
-    const order = exportOrders[Number(cell.closest("tr").dataset.order)];
-    const quantity = Number(order.quantity);
-    const price = Number(order.limitPrice);
-    const value = quantity * price;
-    cell.textContent = !order.included ? "$0.00"
-      : order.limitPrice !== "" && Number.isFinite(value) && quantity >= 0 && price > 0
-        ? value.toLocaleString("en-US", { style: "currency", currency: "USD" }) : "—";
-  });
   const summary = document.querySelector("#ibkrSummary");
   try {
     const orders = reviewedIbkrOrders();

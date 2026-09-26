@@ -68,9 +68,10 @@
           <p>All cash uses the lower of USD cash and available funds; fees are not reserved. Open the saved CSV in BasketTrader to review and submit the orders. Saving here only creates the file.</p>
           <p id="ibkrStatus" class="status" role="status"></p>
         </div>
+        <p>Current position + buy amount = projected target position after these buys. Values use fetched limit prices, exclude fees, and are displayed in USD with shares beneath. Dollar totals sum the displayed rounded amounts. Enable position balancing to see current and target positions.</p>
         <div class="table-wrap ibkr-table-wrap">
           <table class="ibkr-table">
-            <thead><tr><th>#</th><th>Company</th><th>Score</th><th>Score percentile</th><th>Target weight</th><th>Current shares</th><th>Buy shares</th><th>Limit price (USD)</th><th title="Shares × limit price, excluding fees">Purchase value (USD)</th></tr></thead>
+            <thead><tr><th>#</th><th>Company</th><th>Score</th><th>Score percentile</th><th>Target weight</th><th>Current position</th><th>+ Buy amount</th><th>= Target position</th><th>Limit price (USD)</th></tr></thead>
             <tbody id="ibkrOrders"></tbody>
           </table>
         </div>
