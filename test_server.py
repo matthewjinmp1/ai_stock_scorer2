@@ -477,6 +477,19 @@ class PromptAndParsingTests(ServerTestCase):
     def test_glm_5_3_flash_model(self):
         self.assertEqual(server.normalize_model("z-ai/glm-5.3-flash"), "z-ai/glm-5.3-flash")
 
+    def test_muse_contributor_model_and_reasoning_settings(self):
+        model = "meta/muse-spark-1.3-contributor"
+        self.assertEqual(server.normalize_model(model), model)
+        option = next(item for item in server.openrouter_model_options() if item["id"] == model)
+        self.assertEqual(option["label"], "Muse Spark 1.3 Contributor")
+        self.assertEqual(option["default_reasoning_mode"], "medium")
+        self.assertEqual(
+            server.reasoning_config("minimal", model)["reasoning"],
+            {"effort": "minimal", "exclude": False},
+        )
+        with self.assertRaisesRegex(ValueError, "not available for this model"):
+            server.normalize_reasoning_mode("none", model)
+
     def test_luna_xhigh_model_and_reasoning_settings(self):
         self.assertEqual(server.normalize_model("openai/gpt-5.6-luna"), "openai/gpt-5.6-luna")
         self.assertEqual(
@@ -486,6 +499,7 @@ class PromptAndParsingTests(ServerTestCase):
 
     def test_reasoning_modes_are_specific_to_each_model(self):
         expected_modes = {
+            "meta/muse-spark-1.3-contributor": ["minimal", "low", "medium", "high", "xhigh", "max"],
             "deepseek/deepseek-v4-flash-0731": ["none", "low", "high", "max"],
             "z-ai/glm-5.3-flash": ["low", "high", "max"],
             "openai/gpt-5.6-luna": ["none", "low", "medium", "high", "xhigh", "max"],

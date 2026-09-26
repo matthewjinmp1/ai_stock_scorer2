@@ -115,6 +115,19 @@ MODEL_OPTIONS = [
             "require_parameters": True,
         },
     },
+    {
+        "id": "meta/muse-spark-1.3-contributor",
+        "label": "Muse Spark 1.3 Contributor",
+        "reasoning": {
+            "mandatory": True,
+            "default_enabled": True,
+            "supported_efforts": ["max", "xhigh", "high", "medium", "low", "minimal"],
+            "default_effort": "medium",
+        },
+        "provider": {
+            "require_parameters": True,
+        },
+    },
 ]
 LEGACY_MODEL_OPTIONS = [
     {
@@ -132,9 +145,10 @@ LEGACY_MODEL_OPTIONS = [
     },
 ]
 ALL_MODEL_OPTIONS = MODEL_OPTIONS + LEGACY_MODEL_OPTIONS
-REASONING_EFFORT_ORDER = ("none", "low", "medium", "high", "xhigh", "max")
+REASONING_EFFORT_ORDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 REASONING_EFFORT_LABELS = {
     "none": "Non-reasoning",
+    "minimal": "Minimal reasoning",
     "low": "Low reasoning",
     "medium": "Medium reasoning",
     "high": "High reasoning",
