@@ -687,20 +687,14 @@ function renderRunStats(run) {
     ? "--"
     : Number(stats.tokens_per_second).toLocaleString(undefined, { maximumFractionDigits: 1 });
   const riskSampleSize = Number(stats.token_limit_risk_sample_size || 0);
-  const riskOneIn = Number(stats.token_limit_risk_one_in);
-  if (Number.isFinite(riskOneIn) && riskOneIn > 0) {
-    statTokenLimitRisk.textContent = `${stats.token_limit_risk_capped ? ">" : ""}${formatNumber(
-      riskOneIn
-    )}`;
-    statTokenLimitRiskNote.textContent = `1 expected token-limit failure per ${
-      stats.token_limit_risk_capped ? "more than " : ""
-    }${formatNumber(riskOneIn)} stocks · ${formatNumber(riskSampleSize)} successful samples`;
-  } else {
-    statTokenLimitRisk.textContent = "--";
-    statTokenLimitRiskNote.textContent = `Needs 10 successful stocks · ${formatNumber(
-      riskSampleSize
-    )} available`;
-  }
+  const riskRate = stats.token_limit_risk_probability;
+  const percent = (value) => (Number(value) * 100).toLocaleString(undefined, { maximumFractionDigits: 1 }) + "%";
+  statTokenLimitRisk.textContent = riskRate == null ? "--" : percent(riskRate);
+  statTokenLimitRiskNote.textContent = riskSampleSize
+    ? `${formatNumber(stats.token_limit_risk_failures)} of ${formatNumber(riskSampleSize)} stocks hit the limit. ` +
+      `95% uncertainty range: ${percent(stats.token_limit_risk_lower)}–${percent(stats.token_limit_risk_upper)}. ` +
+      "First completed attempt per stock at this token limit; retries, cached results, and incomplete attempts excluded."
+    : "No completed stocks with a recorded matching token limit yet.";
   statLatency.textContent = formatMs(stats.average_attempt_ms);
   document.querySelector("#statConnectionLatency").textContent = formatMs(stats.average_connection_ms);
   document.querySelector("#statResponseLatency").textContent = formatMs(stats.average_response_ms);

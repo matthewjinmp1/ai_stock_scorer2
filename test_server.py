@@ -828,49 +828,36 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertEqual(provider["reasoning_trace_visible_percent"], 100.0)
         self.assertEqual(provider["cache_hit_count"], 1)
 
-    def test_token_limit_risk_uses_successful_completion_distribution(self):
-        risk = server.estimate_token_limit_failure_risk(
-            [180, 220, 250, 290, 330, 380, 450, 540, 680, 850],
-            1000,
-        )
+    def test_token_limit_risk_reports_observed_rate_and_uncertainty(self):
+        risk = server.estimate_token_limit_failure_risk([True] * 2 + [False] * 8)
+        self.assertEqual(risk["probability"], 0.2)
+        self.assertAlmostEqual(risk["lower"], 0.05668, places=4)
+        self.assertAlmostEqual(risk["upper"], 0.50984, places=4)
+        zero = server.estimate_token_limit_failure_risk([False] * 10)
+        self.assertIsNone(zero["one_in"])
+        self.assertGreater(zero["upper"], 0.27)
+        self.assertIsNone(server.estimate_token_limit_failure_risk([])["probability"])
+        self.assertEqual(server.estimate_token_limit_failure_risk([True] * 10)["probability"], 1)
 
-        self.assertEqual(risk["sample_size"], 10)
-        self.assertIsInstance(risk["one_in"], int)
-        self.assertGreater(risk["one_in"], 1)
-        self.assertGreater(risk["probability"], 0)
-
-    def test_token_limit_risk_requires_ten_successful_samples(self):
-        risk = server.estimate_token_limit_failure_risk([100, 200, 300], 1000)
-
-        self.assertEqual(risk["sample_size"], 3)
-        self.assertIsNone(risk["one_in"])
-        self.assertIsNone(risk["probability"])
-
-    def test_run_token_limit_risk_uses_latest_success_per_stock(self):
-        entries = []
-        for index in range(10):
-            entries.append(
-                {
-                    "run_id": 7,
-                    "company": {"ticker": f"T{index}"},
-                    "response": {"success": True},
-                    "token_stats": {"completion_tokens": 100 + index * 10},
-                }
-            )
-        entries.append(
-            {
-                "run_id": 7,
-                "company": {"ticker": "T0"},
-                "response": {"success": False},
-                "token_stats": {"completion_tokens": 1000},
-            }
-        )
-
+    def test_run_token_limit_risk_keeps_first_outcome_and_excludes_unknowns(self):
+        def entry(ticker, response, budget=1000):
+            return {"run_id": 7, "company": {"ticker": ticker},
+                    "request": {"max_tokens": budget}, "response": response}
+        entries = [
+            entry("A", {"success": False, "finish_reason": "length"}),
+            entry("A", {"success": True}),
+            entry("B", {"success": False, "error": "timeout"}),
+            entry("B", {"success": True}),
+            entry("C", {"success": True}, 2000),
+            entry("D", {"success": True}, None),
+            entry("E", {"success": True, "cache": {"status": "HIT"}}),
+            entry("F", {"success": False, "error": "connection failed"}),
+        ]
         with mock.patch.object(server, "ai_request_entries", return_value=entries):
             stats = server.ai_request_stats_for_run(7, token_limit=1000)
-
-        self.assertEqual(stats["token_limit_risk_sample_size"], 9)
-        self.assertIsNone(stats["token_limit_risk_one_in"])
+        self.assertEqual(stats["token_limit_risk_sample_size"], 2)
+        self.assertEqual(stats["token_limit_risk_failures"], 1)
+        self.assertEqual(stats["token_limit_risk_probability"], 0.5)
 
     def test_request_stats_by_ticker_include_duration(self):
         entries = [
