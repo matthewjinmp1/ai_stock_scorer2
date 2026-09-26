@@ -13,6 +13,13 @@ export function draftOrders(holdings) {
   });
 }
 
+// IBKR's credit check adds 5% to market orders, and commissions are capped at 1% of trade value.
+export const MARKET_ORDER_RESERVE = 1.06;
+
+export function spendableBudget(budget) {
+  return Math.floor(budget / MARKET_ORDER_RESERVE * 100) / 100;
+}
+
 export function allocateOrders(orders, budget) {
   if (!Number.isFinite(budget) || budget <= 0 || budget > 1e12) throw new Error("Enter a positive USD budget up to 1 trillion.");
   const cents = Math.round(budget * 100);

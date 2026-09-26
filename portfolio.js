@@ -1,6 +1,6 @@
 import { makeColumnsDraggable, DataTable } from "./data-table.js";
 const applyDraggedColumns = makeColumnsDraggable(document.querySelector(".ibkr-table"), "ibkr-column-order");
-import { draftOrders, allocateOrders, allocateBuysOverPositions } from "./ibkr-export.mjs";
+import { draftOrders, allocateOrders, allocateBuysOverPositions, spendableBudget } from "./ibkr-export.mjs";
 
 let exportPortfolio;
 let exportOrders = [];
@@ -75,7 +75,8 @@ function updateIbkrSummary() {
     const orders = reviewedIbkrOrders();
     const total = orders.reduce((sum, order) => sum + order.quantity * Number(order.limitPrice), 0);
     const budget = Number(document.querySelector("#ibkrBudget").value);
-    const remaining = budget > 0 ? ` ${total > budget ? "Over budget by" : "Unallocated budget:"} $${formatNumber(Math.abs(budget - total))}.` : "";
+    const spendable = budget > 0 ? spendableBudget(budget) : 0;
+    const remaining = budget > 0 ? ` $${formatNumber(budget - spendable)} reserved for IBKR's 5% market-order hold and fees. ${total > spendable ? "Over budget by" : "Unallocated budget:"} $${formatNumber(Math.abs(spendable - total))}.` : "";
     const omitted = exportOrders.length - orders.length;
     summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} estimated at fetched prices, excluding fees.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
     saveIbkrButton.disabled = savingBasket || !orders.length || !basketSchedule;
@@ -99,7 +100,7 @@ document.querySelector("#allCashIbkr").addEventListener("click", async () => {
     if (!response.ok) throw new Error(result.error || "Unable to read cash.");
     document.querySelector("#ibkrBudget").value = result.cash;
     exportOrders = exportOrders.map(order => ({...order, quantity: 0}));
-    ibkrStatus.textContent = `Budget set to $${result.cash}. Fetch prices and calculate shares next. Fees are not reserved.`;
+    ibkrStatus.textContent = `Budget set to $${result.cash}. Fetch prices and calculate shares next. 6% is reserved for IBKR's market-order hold and fees.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally {
     savingBasket = false;
@@ -120,7 +121,7 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
   const button = document.querySelector("#calculateIbkr");
   button.disabled = true;
   const balance = document.querySelector("#balanceIbkr").checked;
-  const budget = Number(document.querySelector("#ibkrBudget").value);
+  const budget = spendableBudget(Number(document.querySelector("#ibkrBudget").value));
   document.querySelector("#balanceIbkr").disabled = true;
   document.querySelector("#ibkrBudget").disabled = true;
   savingBasket = true;

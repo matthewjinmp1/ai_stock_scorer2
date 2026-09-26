@@ -13,8 +13,9 @@ Eastern on the next trading day (strictly after today), skipping weekends and
 NYSE holidays. **OutsideRth** is FALSE. The exact date appears before saving.
 This is a one-time schedule, not a recurring weekly purchase.
 
-Market execution prices and total spending can differ from estimates. No cash
-buffer is deducted; IBKR may reject orders for insufficient funds. Review the
+Shares are sized to the budget divided by 1.06: IBKR's credit check adds 5% to
+market orders, and commissions are capped at 1% of trade value. Market execution
+prices and total spending can still differ from estimates. Review the
 schedule and fractional-order acceptance in TWS before transmitting. Unexpected
 exchange closures may require reviewing the date manually.
 
