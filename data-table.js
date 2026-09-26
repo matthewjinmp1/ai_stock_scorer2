@@ -14,6 +14,84 @@ function uniqueKnownKeys(keys, knownKeys) {
   return [...valid, ...knownKeys.filter((key) => !valid.includes(key))];
 }
 
+export function reorderedColumns(order, source, target, after = false) {
+  if (source === target || !order.includes(source) || !order.includes(target)) return [...order];
+  const next = order.filter(key => key !== source);
+  next.splice(next.indexOf(target) + (after ? 1 : 0), 0, source);
+  return next;
+}
+
+function bindColumnDrag(headRow, move) {
+  let source = null;
+  let suppressClickUntil = 0;
+  const clear = () => {
+    source = null;
+    headRow.querySelectorAll(".column-drop-before, .column-drop-after").forEach(cell =>
+      cell.classList.remove("column-drop-before", "column-drop-after"));
+  };
+  headRow.addEventListener("dragstart", event => {
+    const cell = event.target.closest("th[data-table-column]");
+    if (!cell) return;
+    source = cell.dataset.tableColumn;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", source);
+  });
+  headRow.addEventListener("dragover", event => {
+    const cell = event.target.closest("th[data-table-column]");
+    if (!source || !cell) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    headRow.querySelectorAll(".column-drop-before, .column-drop-after").forEach(item =>
+      item.classList.remove("column-drop-before", "column-drop-after"));
+    const rect = cell.getBoundingClientRect();
+    cell.classList.add(event.clientX > rect.left + rect.width / 2 ? "column-drop-after" : "column-drop-before");
+  });
+  headRow.addEventListener("drop", event => {
+    const cell = event.target.closest("th[data-table-column]");
+    if (!source || !cell) return;
+    event.preventDefault();
+    const rect = cell.getBoundingClientRect();
+    const key = source;
+    clear();
+    suppressClickUntil = Date.now() + 300;
+    move(key, cell.dataset.tableColumn, event.clientX > rect.left + rect.width / 2);
+  });
+  headRow.addEventListener("dragend", () => { suppressClickUntil = Date.now() + 300; clear(); });
+  headRow.addEventListener("click", event => {
+    if (Date.now() < suppressClickUntil) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
+}
+
+// Adapter for tables whose rows are rendered outside DataTable.
+export function makeColumnsDraggable(table, storageKey) {
+  const headRow = table.querySelector("thead tr");
+  const keys = [...headRow.cells].map((cell, index) => {
+    const key = cell.textContent.trim();
+    cell.dataset.tableColumn = key;
+    cell.draggable = true;
+    cell.title = "Drag to rearrange columns";
+    return key;
+  });
+  let order = [...keys];
+  try { order = uniqueKnownKeys(JSON.parse(localStorage.getItem(storageKey)), keys); } catch (_) {}
+  const apply = () => {
+    for (const row of [headRow, ...table.querySelectorAll("tbody tr")]) {
+      if (row.cells.length !== keys.length || [...row.cells].some(cell => cell.colSpan > 1)) continue;
+      const cells = [...row.cells];
+      cells.forEach((cell, index) => { if (!cell.dataset.tableColumn) cell.dataset.tableColumn = keys[index]; });
+      const byKey = new Map(cells.map(cell => [cell.dataset.tableColumn, cell]));
+      order.forEach(key => row.appendChild(byKey.get(key)));
+    }
+  };
+  bindColumnDrag(headRow, (source, target, after) => {
+    order = reorderedColumns(order, source, target, after);
+    try { localStorage.setItem(storageKey, JSON.stringify(order)); } catch (_) {}
+    apply();
+  });
+  apply();
+  return apply;
+}
+
 export class DataTable {
   constructor({
     table,
@@ -41,7 +119,7 @@ export class DataTable {
     this.resetColumnsButton = resetColumnsButton;
     this.resetOrderButton = resetOrderButton;
     this.storageKey = storageKey;
-    this.orderStorageKey = orderStorageKey;
+    this.orderStorageKey = orderStorageKey || `table-order:${location.pathname}:${this.body?.id || table.id}`;
     this.loadPreferences = loadPreferences;
     this.savePreferences = savePreferences;
     this.onSort = onSort;
@@ -112,16 +190,9 @@ export class DataTable {
     const state = this.state();
     const availableColumns = this.availableColumns();
     const available = new Set(availableColumns.map((column) => column.key));
-    const ordered = state.order
-      .filter((key) => available.has(key) && state.visible.has(key))
-      .map((key) => this.columnMap.get(key));
-    const starts = availableColumns.filter((column) => column.pinned === "start");
-    const ends = availableColumns.filter((column) => column.pinned === "end");
-    return [
-      ...starts,
-      ...ordered.filter((column) => !column.pinned),
-      ...ends,
-    ];
+    return state.order
+      .filter(key => available.has(key) && (state.visible.has(key) || this.columnMap.get(key).pinned))
+      .map(key => this.columnMap.get(key));
   }
 
   configurableColumns() {
@@ -202,7 +273,7 @@ export class DataTable {
         const content = sortKey
           ? `<button class="sort-button${active ? " is-active" : ""}" type="button" data-table-sort="${escapeHtml(sortKey)}">${label}</button>`
           : label;
-        return `<th data-table-column="${escapeHtml(column.key)}"${sortKey ? ` aria-sort="${ariaSort}"` : ""}${column.headerClass ? ` class="${escapeHtml(column.headerClass)}"` : ""}>${content}</th>`;
+        return `<th draggable="true" title="Drag to rearrange columns" data-table-column="${escapeHtml(column.key)}"${sortKey ? ` aria-sort="${ariaSort}"` : ""}${column.headerClass ? ` class="${escapeHtml(column.headerClass)}"` : ""}>${content}</th>`;
       })
       .join("");
   }
@@ -251,7 +322,7 @@ export class DataTable {
   saveLocalState(scope = this.scope) {
     const state = this.state(scope);
     try {
-      localStorage.setItem(this.storageName(this.storageKey, scope), JSON.stringify([...state.visible]));
+      if (this.storageKey) localStorage.setItem(this.storageName(this.storageKey, scope), JSON.stringify([...state.visible]));
       localStorage.setItem(this.storageName(this.orderStorageKey, scope), JSON.stringify(state.order));
     } catch (_error) {
       // In-memory preferences still work for this page.
@@ -270,7 +341,7 @@ export class DataTable {
       );
       this.savePreferences(scope, {
         columns: [...state.visible].filter((key) => configurableKeys.has(key)),
-        order: state.order.filter((key) => configurableKeys.has(key)),
+        order: state.order,
       })
         .catch(() => {});
     }, 200));
@@ -315,6 +386,11 @@ export class DataTable {
   }
 
   bindEvents() {
+    if (this.headRow) bindColumnDrag(this.headRow, (source, target, after) => {
+      this.state().order = reorderedColumns(this.state().order, source, target, after);
+      this.persistState();
+      this.render();
+    });
     this.headRow?.addEventListener("click", (event) => {
       const button = event.target.closest("[data-table-sort]");
       if (button && this.onSort) this.onSort(button.dataset.tableSort);

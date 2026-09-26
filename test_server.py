@@ -206,7 +206,9 @@ class AppPreferenceTests(ServerTestCase):
         self.assertEqual(failed[:2], ["error", "company"])
         self.assertEqual(ranking, server.get_run_table_column_order_preference("ranking"))
         self.assertEqual(failed, server.get_run_table_column_order_preference("failed"))
-        self.assertEqual(set(ranking), set(server.RUN_TABLE_COLUMN_KEYS))
+        self.assertEqual(set(ranking), set(server.RUN_TABLE_COLUMN_KEYS) | {"position", "redrive"})
+        moved = server.save_run_table_column_order_preference(["redrive", "company", "position"], "failed")
+        self.assertEqual(server.get_run_table_column_order_preference("failed"), moved)
 
     def test_run_table_column_order_rejects_unknown_column(self):
         with self.assertRaisesRegex(ValueError, "Unknown run table column"):

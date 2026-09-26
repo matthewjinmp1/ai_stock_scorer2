@@ -295,13 +295,13 @@ button:hover {
   table-layout: fixed;
 }
 
-.confidence-table th:nth-child(1) { width: 8%; }
-.confidence-table th:nth-child(2) { width: 27%; }
-.confidence-table th:nth-child(3) { width: 13%; }
-.confidence-table th:nth-child(4) { width: 12%; }
-.confidence-table th:nth-child(5) { width: 12%; }
-.confidence-table th:nth-child(6) { width: 15%; }
-.confidence-table th:nth-child(7) { width: 13%; }
+.confidence-table th[data-table-column="run"] { width: 8%; }
+.confidence-table th[data-table-column="name"] { width: 27%; }
+.confidence-table th[data-table-column="status"] { width: 13%; }
+.confidence-table th[data-table-column="progress"] { width: 12%; }
+.confidence-table th[data-table-column="cost"] { width: 12%; }
+.confidence-table th[data-table-column="created"] { width: 15%; }
+.confidence-table th[data-table-column="pin"] { width: 13%; }
 
 .confidence-score {
   font-weight: 800;
@@ -317,12 +317,12 @@ button:hover {
   table-layout: fixed;
 }
 
-.companies-table th:nth-child(1) { width: 6%; }
-.companies-table th:nth-child(2) { width: 13%; }
-.companies-table th:nth-child(3) { width: 31%; }
-.companies-table th:nth-child(4) { width: 18%; }
-.companies-table th:nth-child(5) { width: 14%; }
-.companies-table th:nth-child(6) { width: 18%; }
+.companies-table th[data-table-column="position"] { width: 6%; }
+.companies-table th[data-table-column="rank"] { width: 13%; }
+.companies-table th[data-table-column="company"] { width: 31%; }
+.companies-table th[data-table-column="marketCap"] { width: 18%; }
+.companies-table th[data-table-column="price"] { width: 14%; }
+.companies-table th[data-table-column="country"] { width: 18%; }
 
 .section-heading,
 .selected-stocks-heading {
@@ -597,15 +597,15 @@ button:hover {
   table-layout: fixed;
 }
 
-.portfolio-table th:nth-child(1) { width: 4%; }
-.portfolio-table th:nth-child(2) { width: 22%; }
-.portfolio-table th:nth-child(3) { width: 7%; }
-.portfolio-table th:nth-child(4) { width: 12%; }
-.portfolio-table th:nth-child(5) { width: 12%; }
-.portfolio-table th:nth-child(6) { width: 9%; }
-.portfolio-table th:nth-child(7) { width: 13%; }
-.portfolio-table th:nth-child(8) { width: 10%; }
-.portfolio-table th:nth-child(9) { width: 11%; }
+.portfolio-table th[data-table-column="position"] { width: 4%; }
+.portfolio-table th[data-table-column="company"] { width: 22%; }
+.portfolio-table th[data-table-column="score"] { width: 7%; }
+.portfolio-table th[data-table-column="scorePercentile"] { width: 12%; }
+.portfolio-table th[data-table-column="marketCap"] { width: 12%; }
+.portfolio-table th[data-table-column="multiplier"] { width: 9%; }
+.portfolio-table th[data-table-column="adjustedMarketCap"] { width: 13%; }
+.portfolio-table th[data-table-column="weight"] { width: 10%; }
+.portfolio-table th[data-table-column="weightUplift"] { width: 11%; }
 
 .portfolio-table th,
 .portfolio-table td {
@@ -1571,18 +1571,18 @@ tbody tr:hover {
   width: 100%;
 }
 
-.manual-ranking-table th:nth-child(1),
-.manual-ranking-table td:nth-child(1) {
+.manual-ranking-table th[data-table-column="rank"],
+.manual-ranking-table td[data-table-column="rank"] {
   width: 110px;
 }
 
-.manual-ranking-table th:nth-child(2),
-.manual-ranking-table td:nth-child(2) {
+.manual-ranking-table th[data-table-column="score"],
+.manual-ranking-table td[data-table-column="score"] {
   width: 150px;
 }
 
-.manual-ranking-table th:nth-child(4),
-.manual-ranking-table td:nth-child(4) {
+.manual-ranking-table th[data-table-column="marketCap"],
+.manual-ranking-table td[data-table-column="marketCap"] {
   width: 190px;
 }
 
@@ -1651,3 +1651,9 @@ tbody tr:hover {
 }
 
 .ibkr-budget-controls { align-items: flex-end; }
+
+/* Shared column drag affordances and insertion markers. */
+th[draggable="true"] { cursor: grab; }
+th[draggable="true"]:active { cursor: grabbing; }
+th.column-drop-before { box-shadow: inset 3px 0 #086dcc; }
+th.column-drop-after { box-shadow: inset -3px 0 #086dcc; }

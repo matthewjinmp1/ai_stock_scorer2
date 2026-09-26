@@ -1150,7 +1150,7 @@ def save_column_order_preference(preference_key, columns, allowed_columns, label
 
 def get_run_table_column_order_preference(view="ranking"):
     return get_column_order_preference(
-        run_table_column_order_preference_key(view), RUN_TABLE_COLUMN_KEYS
+        run_table_column_order_preference_key(view), ("position",) + RUN_TABLE_COLUMN_KEYS + ("redrive",)
     )
 
 
@@ -1158,7 +1158,7 @@ def save_run_table_column_order_preference(columns, view="ranking"):
     return save_column_order_preference(
         run_table_column_order_preference_key(view),
         columns,
-        RUN_TABLE_COLUMN_KEYS,
+        ("position",) + RUN_TABLE_COLUMN_KEYS + ("redrive",),
         "run table",
     )
 

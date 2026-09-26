@@ -1,4 +1,5 @@
-import { DataTable, bindTablePagination } from "./data-table.js";
+import { makeColumnsDraggable, DataTable, bindTablePagination } from "./data-table.js";
+const applyDraggedColumns = makeColumnsDraggable(document.querySelector("#queuedRows").closest("table"), "queue-column-order");
 
 const params = new URLSearchParams(window.location.search);
 const stopButton = document.querySelector("#stopButton");
@@ -1416,6 +1417,7 @@ function renderRun(run) {
     document.querySelector("#queuedRows").innerHTML = run.results.length
       ? run.results.map((row, index) => `<tr><td>${page.offset + index + 1}</td><td>${escapeHtml(row.company_name)}</td><td>${escapeHtml(row.ticker)}</td>${queuedProgressCells(row.progress)}</tr>`).join("")
       : `<tr><td colspan="7">No stocks ${activeResultView}.</td></tr>`;
+    applyDraggedColumns();
     restoreScrollPosition();
     return;
   }

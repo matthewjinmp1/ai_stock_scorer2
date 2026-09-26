@@ -1,4 +1,5 @@
-import { DataTable } from "./data-table.js";
+import { makeColumnsDraggable, DataTable } from "./data-table.js";
+const applyDraggedColumns = makeColumnsDraggable(document.querySelector(".ibkr-table"), "ibkr-column-order");
 import { draftOrders, allocateOrders, allocateBuysOverPositions } from "./ibkr-export.mjs";
 
 let exportPortfolio;
@@ -52,6 +53,7 @@ function renderIbkrOrders() {
       <td>${priced ? price.toLocaleString("en-US", {style: "currency", currency: "USD"}) : "—"}</td>
     </tr>`;
   }).join("");
+  applyDraggedColumns();
   updateIbkrSummary();
 }
 
