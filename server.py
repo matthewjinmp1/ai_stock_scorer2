@@ -3219,6 +3219,7 @@ def ai_request_stats_for_run(run_id, token_limit=None):
         stats[f"average_{phase}_ms"] = round(sum(values) / len(values)) if values else None
         stats[f"{phase}_timing_sample_size"] = len(values)
     samples = []
+    throughput_samples = []
     for ticker, entry in latest_entries.items():
         if ticker not in successful_tickers or not (entry.get("response") or {}).get("success"):
             continue
@@ -3233,6 +3234,20 @@ def ai_request_stats_for_run(run_id, token_limit=None):
                             reasoning, float(usage["total_tokens"])))
         except (TypeError, ValueError):
             continue
+        try:
+            response_ms = float((entry.get("timing") or {}).get("response_ms"))
+            completion_tokens = float(usage["completion_tokens"])
+            if math.isfinite(response_ms) and response_ms > 0 and math.isfinite(completion_tokens) and completion_tokens >= 0:
+                throughput_samples.append((completion_tokens, response_ms))
+        except (TypeError, ValueError):
+            pass
+    # Use matching usage/timing samples; completion includes reasoning, not input.
+    stats["tokens_per_second"] = (
+        round(sum(tokens for tokens, _ in throughput_samples) * 1000 /
+              sum(duration for _, duration in throughput_samples), 1)
+        if throughput_samples else None
+    )
+    stats["throughput_sample_size"] = len(throughput_samples)
     stats["average_token_sample_size"] = len(samples)
     if samples:
         for index, key in enumerate(("prompt", "response", "reasoning", "total")):

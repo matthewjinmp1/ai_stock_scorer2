@@ -683,6 +683,9 @@ function renderRunStats(run) {
   statAverageResponseTokens.textContent = formatNumber(stats.average_response_tokens);
   statAverageReasoningTokens.textContent = formatNumber(stats.average_reasoning_tokens);
   statAverageTotalTokens.textContent = formatNumber(stats.average_total_tokens);
+  document.querySelector("#statTokensPerSecond").textContent = stats.tokens_per_second == null
+    ? "--"
+    : Number(stats.tokens_per_second).toLocaleString(undefined, { maximumFractionDigits: 1 });
   const riskSampleSize = Number(stats.token_limit_risk_sample_size || 0);
   const riskOneIn = Number(stats.token_limit_risk_one_in);
   if (Number.isFinite(riskOneIn) && riskOneIn > 0) {

@@ -747,6 +747,19 @@ class PromptAndParsingTests(ServerTestCase):
         self.assertEqual(stats["reasoning_tokens"], 20)
         self.assertEqual(stats["average_reasoning_tokens"], 20.0)
         self.assertEqual(stats["average_total_tokens"], 150.0)
+        self.assertIsNone(stats["tokens_per_second"])
+        entries[1]["timing"] = {"response_ms": 2000, "duration_ms": 9000}
+        entries[0]["timing"] = {"response_ms": 1}
+        entries[2]["timing"] = {"response_ms": 1}
+        with mock.patch.object(server, "ai_request_entries", return_value=entries):
+            stats = server.ai_request_stats_for_run(run_id)
+        self.assertEqual(stats["tokens_per_second"], 60.0)
+        self.assertEqual(stats["throughput_sample_size"], 1)
+        for invalid in (0, -1, "bad", float("nan")):
+            entries[1]["timing"]["response_ms"] = invalid
+            with mock.patch.object(server, "ai_request_entries", return_value=entries):
+                self.assertIsNone(server.ai_request_stats_for_run(run_id)["tokens_per_second"])
+
 
     def test_provider_stats_group_requests_and_trace_visibility(self):
         entries = [
