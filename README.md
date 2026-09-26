@@ -81,3 +81,9 @@ IBKR export view fills the USD budget from the lower of CashBalance and
 AvailableFunds. It requires exactly one account and USD balances. No fees are
 reserved. Click **Fetch prices & calculate shares** after loading cash.
 The integration requests account data only and never submits orders.
+
+Enable **Balance purchases against my current positions (buy only)** to read
+TWS positions before sizing. The budget tops up underweight target US holdings,
+using fresh source prices and normalized eligible target weights. No sells are
+created; non-target positions and pending orders are not included. Incomplete
+position reads or short target holdings stop calculation.

@@ -1,5 +1,5 @@
 import { DataTable } from "./data-table.js";
-import { draftOrders, allocateOrders } from "./ibkr-export.mjs";
+import { draftOrders, allocateOrders, allocateBuysOverPositions } from "./ibkr-export.mjs";
 
 let exportPortfolio;
 let exportOrders = [];
@@ -38,6 +38,7 @@ function renderIbkrOrders() {
       <td><strong>${formatNumber(holding.score)}</strong></td>
       <td>${formatNumber(holding.score_percentile, 1)}%</td>
       <td>${formatNumber(order.weight, 4)}%</td>
+      <td>${order.currentQuantity == null ? "—" : formatNumber(order.currentQuantity, 4)}</td>
       <td>${formatNumber(order.quantity, 4)}</td>
       <td>${order.limitPrice ? Number(order.limitPrice).toLocaleString("en-US", {style: "currency", currency: "USD"}) : "—"}</td>
       <td data-purchase-value></td>
@@ -106,13 +107,22 @@ document.querySelector("#allCashIbkr").addEventListener("click", async () => {
     renderIbkrOrders();
   }
 });
-document.querySelector("#ibkrBudget").addEventListener("input", updateIbkrSummary);
+function invalidateIbkrSizing() {
+  exportOrders = exportOrders.map(order => ({...order, quantity: 0, currentQuantity: undefined}));
+  renderIbkrOrders();
+}
+document.querySelector("#ibkrBudget").addEventListener("input", invalidateIbkrSizing);
+document.querySelector("#balanceIbkr").addEventListener("change", invalidateIbkrSizing);
 document.querySelector("#calculateIbkr").addEventListener("click", async () => {
   if (savingBasket) return;
   const button = document.querySelector("#calculateIbkr");
   button.disabled = true;
+  const balance = document.querySelector("#balanceIbkr").checked;
+  const budget = Number(document.querySelector("#ibkrBudget").value);
+  document.querySelector("#balanceIbkr").disabled = true;
+  document.querySelector("#ibkrBudget").disabled = true;
   savingBasket = true;
-  exportOrders = exportOrders.map(order => ({ ...order, limitPrice: "", quantity: 0 }));
+  exportOrders = exportOrders.map(order => ({ ...order, limitPrice: "", quantity: 0, currentQuantity: undefined }));
   renderIbkrOrders();
   ibkrStatus.textContent = "Fetching US prices from CompaniesMarketCap…";
   try {
@@ -123,10 +133,18 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Price fetch failed.");
     exportOrders = exportOrders.map(order => ({...order, limitPrice: result.prices[order.sourceSymbol] || ""}));
-    exportOrders = allocateOrders(exportOrders, Number(document.querySelector("#ibkrBudget").value));
+    if (balance) {
+      ibkrStatus.textContent = "Reading current positions from TWS…";
+      const positionsResponse = await fetch("/api/portfolios/ibkr-positions", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+      const snapshot = await positionsResponse.json();
+      if (!positionsResponse.ok) throw new Error(snapshot.error || "Unable to read positions.");
+      exportOrders = allocateBuysOverPositions(exportOrders, budget, snapshot.positions);
+    } else {
+      exportOrders = allocateOrders(exportOrders, budget);
+    }
     ibkrStatus.textContent = `Prices fetched ${new Date(result.fetchedAt * 1000).toLocaleString()}. Source prices may be delayed.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
-  finally { savingBasket = false; button.disabled = false; renderIbkrOrders(); }
+  finally { savingBasket = false; button.disabled = false; document.querySelector("#balanceIbkr").disabled = false; document.querySelector("#ibkrBudget").disabled = false; renderIbkrOrders(); }
 });
 saveIbkrButton.addEventListener("click", async () => {
   if (savingBasket) return;

@@ -60,6 +60,8 @@
             <button id="allCashIbkr" class="secondary-button" type="button">All cash</button>
             <button id="calculateIbkr" class="secondary-button" type="button">Fetch prices &amp; calculate shares</button>
           </div>
+          <label><input id="balanceIbkr" type="checkbox" /> Balance purchases against my current positions (buy only)</label>
+          <p>When enabled, reads TWS positions and directs the budget toward underweight target US stocks. Overweight and non-target holdings are left untouched. Eligible target weights are normalized; no sells are created. Pending orders are not included—review existing open orders before submitting another basket.</p>
           <p>Fractional shares are rounded down to four decimal places using each holding’s portfolio weight and freshly fetched CompaniesMarketCap US prices. Excluded holdings and rounding leave cash unallocated. Stored prices are never used. Saving rechecks source prices; if prices change, fetch and calculate again. Fractional trading requires eligible stocks and IBKR account permissions.</p>
           <p id="ibkrSummary" role="status"></p>
           <div class="actions"><button id="saveIbkr" type="button" disabled>Save IBKR CSV to Jts</button></div>
@@ -68,7 +70,7 @@
         </div>
         <div class="table-wrap ibkr-table-wrap">
           <table class="ibkr-table">
-            <thead><tr><th>#</th><th>Company</th><th>Score</th><th>Score percentile</th><th>Target weight</th><th>Shares</th><th>Limit price (USD)</th><th title="Shares × limit price, excluding fees">Purchase value (USD)</th></tr></thead>
+            <thead><tr><th>#</th><th>Company</th><th>Score</th><th>Score percentile</th><th>Target weight</th><th>Current shares</th><th>Buy shares</th><th>Limit price (USD)</th><th title="Shares × limit price, excluding fees">Purchase value (USD)</th></tr></thead>
             <tbody id="ibkrOrders"></tbody>
           </table>
         </div>

@@ -26,3 +26,34 @@ export function allocateOrders(orders, budget) {
     return { ...order, quantity: Math.floor((cents * order.weight / 100) / Math.round(price * 100) * 10000) / 10000 };
   });
 }
+
+export function allocateBuysOverPositions(orders, budget, positions) {
+  // Validate prices and weights through the same rules as ordinary purchases.
+  allocateOrders(orders, budget);
+  if (!Array.isArray(positions)) throw new Error("Complete positions are required.");
+  const normalize = symbol => symbol.replace(/[ .-]/g, " ");
+  const holdings = new Map();
+  for (const position of positions) {
+    if (position.type !== "STK" || position.currency !== "USD") continue;
+    const quantity = Number(position.quantity);
+    if (!Number.isFinite(quantity)) throw new Error("Invalid position quantity from TWS.");
+    const key = normalize(position.symbol);
+    holdings.set(key, (holdings.get(key) || 0) + quantity);
+  }
+  const rows = orders.map(order => ({...order, currentQuantity: holdings.get(normalize(order.symbol)) || 0}));
+  const included = rows.filter(order => order.included);
+  if (included.some(order => order.currentQuantity < 0)) throw new Error("Buy-only balancing does not support short positions in target stocks.");
+  const weightSum = included.reduce((sum, order) => sum + order.weight, 0);
+  if (!weightSum) throw new Error("No eligible target stocks.");
+  const cash = Math.floor(budget * 100) / 100;
+  // Raise underweight holdings toward a common target level. Overweight holdings stay untouched.
+  let low = 0;
+  let high = cash + included.reduce((sum, order) => sum + order.currentQuantity * Number(order.limitPrice), 0);
+  for (let i = 0; i < 80; i++) {
+    const level = (low + high) / 2;
+    const needed = included.reduce((sum, order) => sum + Math.max(0, level * order.weight / weightSum - order.currentQuantity * Number(order.limitPrice)), 0);
+    if (needed > cash) high = level; else low = level;
+  }
+  return rows.map(order => ({...order, quantity: order.included
+    ? Math.floor(Math.max(0, low * order.weight / weightSum / Number(order.limitPrice) - order.currentQuantity) * 10000) / 10000 : 0}));
+}

@@ -49,3 +49,27 @@ test('all hyphens become spaces without changing price-source tickers', () => {
   assert.deepEqual(orders.map(order => order.symbol), ['BF B', 'HEI A', 'AAA B C', 'AAPL']);
   assert.deepEqual(orders.map(order => order.sourceSymbol), tickers);
 });
+
+test('buy-only balancing tops up deficits without selling or exceeding budget', async () => {
+  const {allocateBuysOverPositions} = await import('./ibkr-export.mjs');
+  const orders = ['AAA','BBB'].map(symbol => ({symbol, included:true, weight:50, limitPrice:'10'}));
+  const positions = [{symbol:'AAA', type:'STK', currency:'USD', quantity:'10'}];
+  const result = allocateBuysOverPositions(orders, 50, positions);
+  assert.equal(result[0].quantity, 0);
+  assert.ok(result[1].quantity > 4.999 && result[1].quantity <= 5);
+  assert.ok(result.reduce((sum,o) => sum + o.quantity * 10, 0) <= 50);
+  const balanced = allocateBuysOverPositions(orders, 100, []);
+  assert.ok(balanced.every(o => Math.abs(o.quantity - 5) < 0.00011));
+  assert.throws(() => allocateBuysOverPositions(orders, 50, [{...positions[0],quantity:'-1'}]), /short positions/);
+  assert.throws(() => allocateBuysOverPositions(orders, 50, null), /Complete positions/);
+});
+
+test('buy-only balancing matches share classes and ignores non-target holdings', async () => {
+  const {allocateBuysOverPositions} = await import('./ibkr-export.mjs');
+  const orders = [{symbol:'BRK B', included:true, weight:25, limitPrice:'100'}, {symbol:'AAA', included:true, weight:25, limitPrice:'10'}];
+  const positions = [{symbol:'BRK.B',type:'STK',currency:'USD',quantity:'1'}, {symbol:'OTHER',type:'STK',currency:'USD',quantity:'999'}];
+  const result = allocateBuysOverPositions(orders, 50, positions);
+  assert.equal(result[0].currentQuantity, 1);
+  assert.equal(result[0].quantity, 0);
+  assert.ok(result[1].quantity > 4.999);
+});

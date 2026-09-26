@@ -4739,12 +4739,15 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        if parsed.path == "/api/portfolios/ibkr-cash":
+        if parsed.path in ("/api/portfolios/ibkr-cash", "/api/portfolios/ibkr-positions"):
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 self.send_json({"error": "Use application/json."}, 415)
                 return
             try:
-                result = subprocess.run([sys.executable, str(ROOT / "ibkr_cash.py")], capture_output=True, text=True, timeout=25, check=True)
+                command = [sys.executable, str(ROOT / "ibkr_cash.py")]
+                if parsed.path.endswith("ibkr-positions"):
+                    command.append("--positions")
+                result = subprocess.run(command, capture_output=True, text=True, timeout=35, check=True)
                 payload = json.loads(result.stdout)
                 self.send_json(payload, 502 if "error" in payload else 200)
             except (subprocess.SubprocessError, ValueError, OSError):
