@@ -1826,7 +1826,7 @@ class PortfolioTests(ServerTestCase):
         self.assertEqual(Path(first["path"]).parent, destination)
         with open(first["path"], newline="") as handle:
             rows = list(csv.DictReader(handle))
-        self.assertEqual(rows[0], dict(Action="BUY", Quantity="2", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD", TimeInForce="DAY", OrderType="MKT", GoodAfter=first["goodAfter"], OutsideRth="FALSE"))
+        self.assertEqual(rows[0], dict(Action="BUY", Quantity="2", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD", TimeInForce="DAY", OrderType="MKT", GoodAfterTime=first["goodAfter"], OutsideRth="FALSE"))
         self.assertEqual(rows[1]["Symbol"], "BRK B")
         self.assertEqual(first["estimatedValue"], "700.50")
         self.assertEqual(first["orderCount"], 2)

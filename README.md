@@ -8,7 +8,7 @@ click **Fetch prices & calculate shares**. Fresh CompaniesMarketCap US prices
 are used only for sizing; stored prices are never substituted.
 
 Exports contain BUY / MKT / DAY orders, SMART routing, and fractional quantities
-rounded down to four decimal places. **GoodAfter** schedules activation at 10:30
+rounded down to four decimal places. **GoodAfterTime** schedules activation at 10:30
 Eastern on the next trading day (strictly after today), skipping weekends and
 NYSE holidays. **OutsideRth** is FALSE. The exact date appears before saving.
 This is a one-time schedule, not a recurring weekly purchase.

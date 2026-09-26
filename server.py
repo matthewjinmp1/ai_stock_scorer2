@@ -2730,7 +2730,7 @@ def export_ibkr_basket(payload):
         row[7:] = ["MKT", schedule["goodAfter"], "FALSE"]
     output = io.StringIO(newline="")
     writer = csv.writer(output)
-    writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "GoodAfter", "OutsideRth"])
+    writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "GoodAfterTime", "OutsideRth"])
     writer.writerows(rows)
     filename = "ibkr_basket.csv"
     IBKR_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
