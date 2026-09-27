@@ -2706,9 +2706,8 @@ def export_ibkr_basket(payload):
     """Save reviewed stock orders locally; this does not contact a broker."""
     if not isinstance(payload, dict):
         raise ValueError("Expected an order basket.")
-    # Risk Navigator imports target positions and orders the difference from current holdings.
+    # Risk Navigator's "Add Portfolio" orders each imported quantity as-is, so it gets the buy amounts.
     risk_navigator = payload.get("format") == "risk-navigator"
-    targets = []
     orders = payload.get("orders")
     if not isinstance(orders, list) or not 1 <= len(orders) <= 10000:
         raise ValueError("Include between 1 and 10,000 orders.")
@@ -2736,14 +2735,6 @@ def export_ibkr_basket(payload):
         if not price.is_finite() or not Decimal("0.01") <= price <= Decimal("1000000000") or price != price.quantize(Decimal("0.01")):
             raise ValueError(f"{symbol}: limit price must be positive with at most two decimal places.")
         rows.append(["BUY", format(quantity.normalize(), "f"), symbol, "STK", "SMART", "USD", "DAY", "LMT", f"{price:.2f}"])
-        if risk_navigator:
-            try:
-                current = Decimal(str(order.get("currentQuantity", "")))
-            except InvalidOperation:
-                current = Decimal("NaN")
-            if not current.is_finite() or current < 0:
-                raise ValueError(f"{symbol}: current position is required. Enable position balancing and calculate again.")
-            targets.append(["BUY", format((current + quantity).normalize(), "f"), symbol, "STK", "SMART", "USD"])
     source_symbols = [order.get("sourceSymbol", order["symbol"].strip().upper().replace(" ", "-").replace(".", "-")) for order in orders]
     for order, source_symbol in zip(orders, source_symbols):
         if not isinstance(source_symbol, str) or source_symbol.replace(".", "-") != order["symbol"].strip().upper().replace(" ", "-").replace(".", "-"):
@@ -2754,8 +2745,8 @@ def export_ibkr_basket(payload):
             raise ValueError("Prices changed. Fetch prices and calculate shares again before saving.")
         row[-1] = fresh[source_symbol]
     if risk_navigator:
-        path = _write_jts_csv("ibkr_risk_navigator.csv", ["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency"], targets)
-        return {"path": str(path), "filename": path.name, "orderCount": len(targets)}
+        path = _write_jts_csv("ibkr_risk_navigator.csv", ["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency"], [row[:6] for row in rows])
+        return {"path": str(path), "filename": path.name, "orderCount": len(rows)}
     schedule = next_basket_schedule()
     if payload.get("scheduledAt") and payload["scheduledAt"] != schedule["scheduledAt"]:
         raise ValueError("The trading date changed. Fetch prices and calculate again to review the new schedule.")

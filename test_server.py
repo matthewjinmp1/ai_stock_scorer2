@@ -1832,23 +1832,20 @@ class PortfolioTests(ServerTestCase):
         self.assertEqual(first["estimatedValue"], "707.52")
         self.assertEqual(first["orderCount"], 2)
 
-    def test_risk_navigator_export_writes_target_positions(self):
+    def test_risk_navigator_export_writes_buy_amounts(self):
         destination = self.root / "Jts"
         payload = {"format": "risk-navigator", "orders": [
-            {"symbol": "AAPL", "quantity": 0.5, "limitPrice": "150.25", "currentQuantity": "0.0105"},
-            {"symbol": "BRK B", "quantity": 1, "limitPrice": "400.00", "currentQuantity": 0},
+            {"symbol": "AAPL", "quantity": 0.5, "limitPrice": "150.25"},
+            {"symbol": "BRK B", "quantity": 1, "limitPrice": "400.00"},
         ]}
         with mock.patch.object(server, "IBKR_EXPORT_DIR", destination):
             result = server.export_ibkr_basket(payload)
             with open(result["path"], newline="") as handle:
                 rows = list(csv.DictReader(handle))
-            self.assertEqual(Path(result["path"]).name, "ibkr_risk_navigator.csv")
-            self.assertEqual(rows[0], dict(Action="BUY", Quantity="0.5105", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD"))
-            self.assertEqual(rows[1]["Quantity"], "1")
-            self.assertFalse((destination / "ibkr_basket.csv").exists())
-            del payload["orders"][0]["currentQuantity"]
-            with self.assertRaisesRegex(ValueError, "current position is required"):
-                server.export_ibkr_basket(payload)
+        self.assertEqual(Path(result["path"]).name, "ibkr_risk_navigator.csv")
+        self.assertEqual(rows[0], dict(Action="BUY", Quantity="0.5", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD"))
+        self.assertEqual(rows[1]["Symbol"], "BRK B")
+        self.assertFalse((destination / "ibkr_basket.csv").exists())
 
     def test_ibkr_export_blocks_stale_schedule_before_replacing_file(self):
         destination = self.root / "scheduled"

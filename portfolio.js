@@ -81,7 +81,7 @@ function reviewedIbkrOrders() {
   return selected.filter(order => Number(order.quantity) > 0).map(order => {
     const price = Number(order.limitPrice);
     if (!Number.isFinite(price) || price < 0.01 || price > 1e9 || Math.abs(price * 100 - Math.round(price * 100)) > 1e-6) throw new Error(`${order.symbol}: fetch a valid source price before saving.`);
-    return { symbol: order.symbol, sourceSymbol: order.sourceSymbol, quantity: Number(order.quantity), limitPrice: price.toFixed(2), currentQuantity: order.currentQuantity };
+    return { symbol: order.symbol, sourceSymbol: order.sourceSymbol, quantity: Number(order.quantity), limitPrice: price.toFixed(2) };
   });
 }
 
@@ -95,7 +95,7 @@ function updateIbkrSummary() {
     const omitted = exportOrders.length - orders.length;
     summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} maximum at limit prices.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
     saveIbkrButton.disabled = savingBasket || !orders.length || !basketSchedule;
-    saveRiskNavigatorButton.disabled = saveIbkrButton.disabled || orders.some(order => order.currentQuantity == null);
+    saveRiskNavigatorButton.disabled = saveIbkrButton.disabled;
   } catch (error) {
     summary.textContent = error.message;
     saveIbkrButton.disabled = true;
@@ -189,7 +189,7 @@ async function saveIbkrFile(format) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Could not save IBKR CSV.");
     ibkrStatus.textContent = format === "risk-navigator"
-      ? `Saved ${result.orderCount} target ${result.orderCount === 1 ? "position" : "positions"} to ${result.path}. In Risk Navigator, choose Portfolio → Import, select this file, then trade the positions. Orders are the difference from your holdings, so only trade if positions haven't changed since the last Flex report.`
+      ? `Saved ${result.orderCount} ${result.orderCount === 1 ? "buy" : "buys"} to ${result.path}. In Risk Navigator, choose Portfolio → Import and select this file, then select every row, right-click, and choose Add Portfolio. Review the orders before transmitting.`
       : `Saved ${result.orderCount} ${result.orderCount === 1 ? "order" : "orders"} to ${result.path}. In BasketTrader, click Browse, select this file, then Load. Scheduled for ${result.label}. Verify the activation time before transmitting.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally { savingBasket = false; document.querySelector("#calculateIbkr").disabled = false; renderIbkrOrders(); }
