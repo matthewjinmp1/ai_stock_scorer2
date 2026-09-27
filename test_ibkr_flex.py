@@ -36,6 +36,10 @@ class FlexTests(unittest.TestCase):
             {"symbol": "BRK B", "currency": "USD", "type": "STK", "quantity": "2"},
         ])
 
+    def test_falls_back_to_base_currency_summary(self):
+        xml = STATEMENT.replace('<CashReportCurrency accountId="U1" currency="USD" endingCash="43.859" />', "")
+        self.assertEqual(parse_statement(ET.fromstring(xml))["cash"], "99.00")
+
     def test_missing_sections_and_multiple_accounts_fail(self):
         for xml, message in [
             (STATEMENT.replace("OpenPositions", "Other"), "Open Positions"),

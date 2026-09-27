@@ -60,13 +60,15 @@ def parse_statement(root):
             raise ValueError(f"IBKR Flex returned an invalid quantity for {row.get('symbol')}.")
         positions.append({"symbol": row.get("symbol", ""), "currency": row.get("currency", ""), "type": row.get("assetCategory", ""), "quantity": str(quantity)})
     cash = None
-    for row in statement.findall("./CashReport/CashReportCurrency"):
-        if row.get("currency") == "USD":
-            try:
-                value = Decimal(row.get("endingCash", ""))
-            except InvalidOperation:
-                raise ValueError("IBKR Flex returned an invalid cash balance.")
-            cash = str(max(Decimal(0), value).quantize(Decimal("0.01"), rounding=ROUND_DOWN))
+    rows = {row.get("currency"): row for row in statement.findall("./CashReport/CashReportCurrency")}
+    # Single-currency accounts may report only the base-currency summary (USD for US accounts).
+    row = rows.get("USD", rows.get("BASE_SUMMARY"))
+    if row is not None:
+        try:
+            value = Decimal(row.get("endingCash", ""))
+        except InvalidOperation:
+            raise ValueError("IBKR Flex returned an invalid cash balance.")
+        cash = str(max(Decimal(0), value).quantize(Decimal("0.01"), rounding=ROUND_DOWN))
     return {"positions": positions, "cash": cash, "currency": "USD", "asOf": statement.get("toDate")}
 
 
