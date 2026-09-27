@@ -27,6 +27,7 @@ from openrouter_transport import ConnectionDeadline, fetch_completion
 
 ROOT = Path(__file__).resolve().parent
 IBKR_EXPORT_DIR = Path.home() / "Jts"
+IBKR_LIMIT_BUFFER_PERCENT = 3
 SOURCE_URL = "https://companiesmarketcap.com/"
 COMPANY_UNIVERSE_LIMIT = 2000
 COMPANIESMARKETCAP_PAGE_SIZE = 100
@@ -2690,7 +2691,6 @@ def export_ibkr_basket(payload):
         raise ValueError("Include between 1 and 10,000 orders.")
     rows = []
     seen = set()
-    total = Decimal(0)
     for index, order in enumerate(orders, 1):
         if not isinstance(order, dict):
             raise ValueError(f"Order {index} is invalid.")
@@ -2713,7 +2713,6 @@ def export_ibkr_basket(payload):
         if not price.is_finite() or not Decimal("0.01") <= price <= Decimal("1000000000") or price != price.quantize(Decimal("0.01")):
             raise ValueError(f"{symbol}: limit price must be positive with at most two decimal places.")
         rows.append(["BUY", format(quantity.normalize(), "f"), symbol, "STK", "SMART", "USD", "DAY", "LMT", f"{price:.2f}"])
-        total += quantity * price
     source_symbols = [order.get("sourceSymbol", order["symbol"].strip().upper().replace(" ", "-").replace(".", "-")) for order in orders]
     for order, source_symbol in zip(orders, source_symbols):
         if not isinstance(source_symbol, str) or source_symbol.replace(".", "-") != order["symbol"].strip().upper().replace(" ", "-").replace(".", "-"):
@@ -2726,11 +2725,16 @@ def export_ibkr_basket(payload):
     schedule = next_basket_schedule()
     if payload.get("scheduledAt") and payload["scheduledAt"] != schedule["scheduledAt"]:
         raise ValueError("The trading date changed. Fetch prices and calculate again to review the new schedule.")
+    total = Decimal(0)
     for row in rows:
-        row[7:] = ["MKT", schedule["goodAfter"], "FALSE"]
+        # Must match limitPriceFor in ibkr-export.mjs, which sized the quantities.
+        cents = int(Decimal(row[-1]) * 100)
+        limit = Decimal(-(-cents * (100 + IBKR_LIMIT_BUFFER_PERCENT) // 100)) / 100
+        row[7:] = ["LMT", f"{limit:.2f}", schedule["goodAfter"], "FALSE"]
+        total += Decimal(row[1]) * limit
     output = io.StringIO(newline="")
     writer = csv.writer(output)
-    writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "GoodAfterTime", "OutsideRth"])
+    writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "LmtPrice", "GoodAfterTime", "OutsideRth"])
     writer.writerows(rows)
     filename = "ibkr_basket.csv"
     IBKR_EXPORT_DIR.mkdir(parents=True, exist_ok=True)

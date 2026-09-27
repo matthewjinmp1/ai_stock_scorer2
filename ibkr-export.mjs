@@ -13,11 +13,12 @@ export function draftOrders(holdings) {
   });
 }
 
-// IBKR's credit check adds 5% to market orders. IBKR Lite charges no commission on US stock buys.
-export const MARKET_ORDER_RESERVE = 1.05;
+// Limits sit above the fetched price so scheduled orders fill like market orders. IBKR Lite
+// treats market orders placed before the open as OnOpen orders, which lose commission-free pricing.
+export const LIMIT_BUFFER_PERCENT = 3;
 
-export function spendableBudget(budget) {
-  return Math.floor(budget / MARKET_ORDER_RESERVE * 100) / 100;
+export function limitPriceFor(price) {
+  return Math.ceil(Math.round(Number(price) * 100) * (100 + LIMIT_BUFFER_PERCENT) / 100) / 100;
 }
 
 export function allocateOrders(orders, budget) {
@@ -30,7 +31,7 @@ export function allocateOrders(orders, budget) {
       throw new Error(`${order.symbol}: enter a positive limit price with at most two decimal places.`);
     }
     if (!Number.isFinite(order.weight) || order.weight <= 0 || order.weight > 100) throw new Error(`${order.symbol}: invalid portfolio weight. Rebuild the portfolio.`);
-    return { ...order, quantity: Math.floor((cents * order.weight / 100) / Math.round(price * 100) * 10000) / 10000 };
+    return { ...order, quantity: Math.floor((cents * order.weight / 100) / Math.round(limitPriceFor(price) * 100) * 10000) / 10000 };
   });
 }
 
@@ -54,13 +55,14 @@ export function allocateBuysOverPositions(orders, budget, positions) {
   if (!weightSum) throw new Error("No eligible target stocks.");
   const cash = Math.floor(budget * 100) / 100;
   // Raise underweight holdings toward a common target level. Overweight holdings stay untouched.
+  // Positions are valued at fetched prices; purchases must fit the budget at limit prices.
+  const sharesAt = (order, level) => Math.max(0, level * order.weight / weightSum / Number(order.limitPrice) - order.currentQuantity);
   let low = 0;
   let high = cash + included.reduce((sum, order) => sum + order.currentQuantity * Number(order.limitPrice), 0);
   for (let i = 0; i < 80; i++) {
     const level = (low + high) / 2;
-    const needed = included.reduce((sum, order) => sum + Math.max(0, level * order.weight / weightSum - order.currentQuantity * Number(order.limitPrice)), 0);
-    if (needed > cash) high = level; else low = level;
+    const cost = included.reduce((sum, order) => sum + sharesAt(order, level) * limitPriceFor(order.limitPrice), 0);
+    if (cost > cash) high = level; else low = level;
   }
-  return rows.map(order => ({...order, quantity: order.included
-    ? Math.floor(Math.max(0, low * order.weight / weightSum / Number(order.limitPrice) - order.currentQuantity) * 10000) / 10000 : 0}));
+  return rows.map(order => ({...order, quantity: order.included ? Math.floor(sharesAt(order, low) * 10000) / 10000 : 0}));
 }

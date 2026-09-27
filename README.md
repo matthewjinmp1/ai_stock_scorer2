@@ -7,18 +7,22 @@ On the composition page, open **Export to IBKR**, enter a USD budget, and
 click **Fetch prices & calculate shares**. Fresh CompaniesMarketCap US prices
 are used only for sizing; stored prices are never substituted.
 
-Exports contain BUY / MKT / DAY orders, SMART routing, and fractional quantities
-rounded down to four decimal places. **GoodAfterTime** schedules activation at 10:30
-Eastern on the next trading day (strictly after today), skipping weekends and
-NYSE holidays. **OutsideRth** is FALSE. The exact date appears before saving.
-This is a one-time schedule, not a recurring weekly purchase.
+Exports contain BUY / LMT / DAY orders, SMART routing, and fractional quantities
+rounded down to four decimal places. Each **LmtPrice** is 3% above the freshly
+fetched price, rounded up to the cent, so orders fill like market orders unless
+the price rises more than 3% by activation; unfilled orders expire at the close.
+**GoodAfterTime** schedules activation at 10:30 Eastern on the next trading day
+(strictly after today), skipping weekends and NYSE holidays. **OutsideRth** is
+FALSE. The exact date appears before saving. This is a one-time schedule, not a
+recurring weekly purchase.
 
-Shares are sized to the budget divided by 1.05 because IBKR's credit check adds 5%
-to market orders. This assumes IBKR Lite, which has no commission on US stock
-buys; IBKR Pro commissions are not reserved. Market execution
-prices and total spending can still differ from estimates. Review the
-schedule and fractional-order acceptance in TWS before transmitting. Unexpected
-exchange closures may require reviewing the date manually.
+Limit orders are used because IBKR Lite treats market orders placed before the
+open as OnOpen orders, which lose commission-free pricing past 10% of monthly
+volume; IBKR cancelled such a weekend market basket. Shares are sized so the
+total at limit prices fits the budget, which also covers IBKR's cash check.
+Commissions are not reserved (IBKR Lite). Review the schedule and
+fractional-order acceptance in TWS before transmitting. Unexpected exchange
+closures may require reviewing the date manually.
 
 **Save IBKR CSV to Jts** replaces `~/Jts/ibkr_basket.csv` only after validation
 and a complete write. Saving creates a file; it never submits orders.

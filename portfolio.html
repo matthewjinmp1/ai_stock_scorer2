@@ -54,9 +54,9 @@
         <div class="prompt-editor ibkr-dashboard">
           <div class="actions"><button id="backToPortfolio" class="secondary-button" type="button">Back to portfolio</button></div>
           <h2 id="ibkrExportTitle" tabindex="-1">Export to IBKR</h2>
-          <p>Create US stock BUY market orders using SMART routing, USD and DAY, scheduled for 10:30 a.m. Eastern on the next trading day. Prices are freshly fetched from CompaniesMarketCap and may be delayed. Non-US holdings are excluded.</p>
+          <p>Create US stock BUY limit orders using SMART routing, USD and DAY, scheduled for 10:30 a.m. Eastern on the next trading day. Prices are freshly fetched from CompaniesMarketCap and may be delayed. Non-US holdings are excluded.</p>
           <p id="ibkrSchedule" role="status">The exact trading date appears after calculating. Weekends and NYSE holidays are skipped.</p>
-          <p>Market orders have no maximum purchase price. Fetched prices are estimates for sizing; actual spending and positions may differ. IBKR may reject orders if available cash is insufficient.</p>
+          <p>Each limit is 3% above the fetched price, rounded up to the cent, so orders fill like market orders unless the price rises more than 3%; unfilled orders expire at the close. Limit orders can be submitted on weekends and stay commission-free on IBKR Lite, unlike market orders placed before the open.</p>
           <div class="actions ibkr-budget-controls">
             <label>Budget (USD)<input id="ibkrBudget" type="number" min="0.01" max="1000000000000" step="0.01" placeholder="Enter amount" /></label>
             <button id="allCashIbkr" class="secondary-button" type="button">All cash</button>
@@ -67,13 +67,13 @@
           <p>Fractional shares are rounded down to four decimal places using each holding’s portfolio weight and freshly fetched CompaniesMarketCap US prices. Excluded holdings and rounding leave cash unallocated. Stored prices are never used. Saving rechecks source prices; if prices change, fetch and calculate again. Fractional trading requires eligible stocks and IBKR account permissions.</p>
           <p id="ibkrSummary" role="status"></p>
           <div class="actions"><button id="saveIbkr" type="button" disabled>Save IBKR CSV to Jts</button></div>
-          <p>All cash uses the lower of USD cash and available funds. Shares are sized to budget ÷ 1.05, leaving room for IBKR's 5% market-order credit hold. Assumes IBKR Lite (no commissions). Open the saved CSV in BasketTrader to review and submit the orders. Saving here only creates the file.</p>
+          <p>All cash uses the lower of USD cash and available funds. Shares are sized so the total at limit prices fits the budget. Assumes IBKR Lite (no commissions). Open the saved CSV in BasketTrader to review and submit the orders. Saving here only creates the file.</p>
           <p id="ibkrStatus" class="status" role="status"></p>
         </div>
         <p>Current position + buy amount = projected target position after these buys. Values use fetched reference prices, exclude fees, and are displayed in USD with shares beneath. Dollar totals sum the displayed rounded amounts. Enable position balancing to see current and target positions.</p>
         <div class="table-wrap ibkr-table-wrap">
           <table class="ibkr-table">
-            <thead><tr><th>#</th><th>Company</th><th>Score</th><th>Score percentile</th><th>Target weight</th><th>Current position</th><th>+ Buy amount</th><th>= Target position</th><th>Reference price (USD)</th></tr></thead>
+            <thead><tr><th>#</th><th>Company</th><th>Score</th><th>Score percentile</th><th>Target weight</th><th>Current position</th><th>+ Buy amount</th><th>= Target position</th><th>Limit price (USD)</th></tr></thead>
             <tbody id="ibkrOrders"></tbody>
           </table>
         </div>

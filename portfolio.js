@@ -1,6 +1,6 @@
 import { makeColumnsDraggable, DataTable } from "./data-table.js";
 const applyDraggedColumns = makeColumnsDraggable(document.querySelector(".ibkr-table"), "ibkr-column-order");
-import { draftOrders, allocateOrders, allocateBuysOverPositions, spendableBudget } from "./ibkr-export.mjs";
+import { draftOrders, allocateOrders, allocateBuysOverPositions, limitPriceFor, LIMIT_BUFFER_PERCENT } from "./ibkr-export.mjs";
 
 let exportPortfolio;
 let exportOrders = [];
@@ -50,7 +50,7 @@ function renderIbkrOrders() {
       <td>${positionCell(current, currentCents)}</td>
       <td>${positionCell(buy, buyCents)}</td>
       <td>${positionCell(current == null ? null : current + buy, currentCents == null || buyCents == null ? null : currentCents + buyCents)}</td>
-      <td>${priced ? price.toLocaleString("en-US", {style: "currency", currency: "USD"}) : "—"}</td>
+      <td>${priced ? `<strong>${limitPriceFor(price).toLocaleString("en-US", {style: "currency", currency: "USD"})}</strong><span class="ticker">fetched ${price.toLocaleString("en-US", {style: "currency", currency: "USD"})}</span>` : "—"}</td>
     </tr>`;
   }).join("");
   applyDraggedColumns();
@@ -73,12 +73,11 @@ function updateIbkrSummary() {
   const summary = document.querySelector("#ibkrSummary");
   try {
     const orders = reviewedIbkrOrders();
-    const total = orders.reduce((sum, order) => sum + order.quantity * Number(order.limitPrice), 0);
+    const total = orders.reduce((sum, order) => sum + order.quantity * limitPriceFor(order.limitPrice), 0);
     const budget = Number(document.querySelector("#ibkrBudget").value);
-    const spendable = budget > 0 ? spendableBudget(budget) : 0;
-    const remaining = budget > 0 ? ` $${formatNumber(budget - spendable)} reserved for IBKR's 5% market-order hold. ${total > spendable ? "Over budget by" : "Unallocated budget:"} $${formatNumber(Math.abs(spendable - total))}.` : "";
+    const remaining = budget > 0 ? ` ${total > budget ? "Over budget by" : "Unallocated budget:"} $${formatNumber(Math.abs(budget - total))}.` : "";
     const omitted = exportOrders.length - orders.length;
-    summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} estimated at fetched prices, excluding fees.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
+    summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} maximum at limit prices.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
     saveIbkrButton.disabled = savingBasket || !orders.length || !basketSchedule;
   } catch (error) {
     summary.textContent = error.message;
@@ -100,7 +99,7 @@ document.querySelector("#allCashIbkr").addEventListener("click", async () => {
     if (!response.ok) throw new Error(result.error || "Unable to read cash.");
     document.querySelector("#ibkrBudget").value = result.cash;
     exportOrders = exportOrders.map(order => ({...order, quantity: 0}));
-    ibkrStatus.textContent = `Budget set to $${result.cash}. Fetch prices and calculate shares next. 5% is reserved for IBKR's market-order hold.`;
+    ibkrStatus.textContent = `Budget set to $${result.cash}. Fetch prices and calculate shares next.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally {
     savingBasket = false;
@@ -121,7 +120,7 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
   const button = document.querySelector("#calculateIbkr");
   button.disabled = true;
   const balance = document.querySelector("#balanceIbkr").checked;
-  const budget = spendableBudget(Number(document.querySelector("#ibkrBudget").value));
+  const budget = Number(document.querySelector("#ibkrBudget").value);
   document.querySelector("#balanceIbkr").disabled = true;
   document.querySelector("#ibkrBudget").disabled = true;
   savingBasket = true;
@@ -150,7 +149,7 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
       exportOrders = allocateOrders(exportOrders, budget);
     }
     basketSchedule = schedule;
-    document.querySelector("#ibkrSchedule").textContent = `Market orders activate ${schedule.label}. Submit in TWS before that time. This is a one-time basket.`;
+    document.querySelector("#ibkrSchedule").textContent = `Limit orders (${LIMIT_BUFFER_PERCENT}% above fetched prices) activate ${schedule.label}. Submit in TWS before that time. This is a one-time basket.`;
     ibkrStatus.textContent = `Prices fetched ${new Date(result.fetchedAt * 1000).toLocaleString()}. Source prices may be delayed.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally { savingBasket = false; button.disabled = false; document.querySelector("#balanceIbkr").disabled = false; document.querySelector("#ibkrBudget").disabled = false; renderIbkrOrders(); }
