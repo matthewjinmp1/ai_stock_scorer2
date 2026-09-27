@@ -330,7 +330,17 @@
       </section>
       <section id="queuedTableWrap" hidden aria-label="Queued stocks">
         <p>Queued stocks wait here until a worker is available. Running shows live activity. Failed requests return to the queue for up to two automatic retries, then move to Failed. Successful stocks move to Ranking.</p>
-        <div class="table-wrap"><table><thead><tr><th>#</th><th>Company</th><th>Ticker</th><th>Status</th><th>Connection</th><th>Response</th><th>Last activity</th></tr></thead><tbody id="queuedRows"></tbody></table></div>
+        <section class="table-display-tools" aria-label="Queue table display options">
+          <details id="queueColumnSelector" class="column-selector">
+            <summary>Columns</summary>
+            <div class="column-selector-menu">
+              <div id="queueColumnSelectorOptions" class="column-selector-options"></div>
+              <button id="resetQueueColumnsButton" class="column-reset-button" type="button">Show all</button>
+              <button id="resetQueueColumnOrderButton" class="column-reset-button" type="button">Reset order</button>
+            </div>
+          </details>
+        </section>
+        <div class="table-wrap"><table id="queuedTable"><thead><tr></tr></thead><tbody id="queuedRows"></tbody></table></div>
       </section>
       <section id="providersTableWrap" class="table-wrap providers-table-wrap" aria-label="Provider statistics" hidden>
         <table id="providersTable" class="provider-stats-table">

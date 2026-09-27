@@ -62,36 +62,6 @@ function bindColumnDrag(headRow, move) {
   }, true);
 }
 
-// Adapter for tables whose rows are rendered outside DataTable.
-export function makeColumnsDraggable(table, storageKey) {
-  const headRow = table.querySelector("thead tr");
-  const keys = [...headRow.cells].map((cell, index) => {
-    const key = cell.textContent.trim();
-    cell.dataset.tableColumn = key;
-    cell.draggable = true;
-    cell.title = "Drag to rearrange columns";
-    return key;
-  });
-  let order = [...keys];
-  try { order = uniqueKnownKeys(JSON.parse(localStorage.getItem(storageKey)), keys); } catch (_) {}
-  const apply = () => {
-    for (const row of [headRow, ...table.querySelectorAll("tbody tr")]) {
-      if (row.cells.length !== keys.length || [...row.cells].some(cell => cell.colSpan > 1)) continue;
-      const cells = [...row.cells];
-      cells.forEach((cell, index) => { if (!cell.dataset.tableColumn) cell.dataset.tableColumn = keys[index]; });
-      const byKey = new Map(cells.map(cell => [cell.dataset.tableColumn, cell]));
-      order.forEach(key => row.appendChild(byKey.get(key)));
-    }
-  };
-  bindColumnDrag(headRow, (source, target, after) => {
-    order = reorderedColumns(order, source, target, after);
-    try { localStorage.setItem(storageKey, JSON.stringify(order)); } catch (_) {}
-    apply();
-  });
-  apply();
-  return apply;
-}
-
 export class DataTable {
   constructor({
     table,

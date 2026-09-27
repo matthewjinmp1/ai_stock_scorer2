@@ -1,5 +1,4 @@
-import { makeColumnsDraggable, DataTable } from "./data-table.js";
-const applyDraggedColumns = makeColumnsDraggable(document.querySelector(".ibkr-table"), "ibkr-column-order");
+import { DataTable } from "./data-table.js";
 import { draftOrders, allocateOrders, allocateBuysOverPositions, limitPriceFor, LIMIT_BUFFER_PERCENT } from "./ibkr-export.mjs";
 
 let exportPortfolio;
@@ -30,30 +29,46 @@ window.addEventListener("hashchange", () => {
   window.scrollTo({ top: 0 });
 });
 
+const formatUsd = cents => (cents / 100).toLocaleString("en-US", {style: "currency", currency: "USD"});
+const positionCell = (shares, cents) => shares == null ? "—" : `<strong>${cents == null ? "—" : formatUsd(cents)}</strong><span class="ticker">${formatNumber(shares, 4)} shares</span>`;
+const ibkrTable = new DataTable({
+  table: document.querySelector(".ibkr-table"),
+  body: ibkrRows,
+  selector: document.querySelector("#ibkrColumnSelector"),
+  selectorOptions: document.querySelector("#ibkrColumnSelectorOptions"),
+  resetColumnsButton: document.querySelector("#resetIbkrColumnsButton"),
+  resetOrderButton: document.querySelector("#resetIbkrColumnOrderButton"),
+  storageKey: "ibkr-table-columns",
+  orderStorageKey: "ibkr-table-column-order",
+  statusElement: ibkrStatus,
+  columns: [
+    { key: "position", label: "#", configurable: false, pinned: "start", render: (row) => row.index + 1 },
+    { key: "company", label: "Company", render: ({holding, order}) => {
+      const logo = holding.logo ? `<img class="logo" src="${escapeHtml(holding.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />` : "";
+      return `<div class="company-cell">${logo}<div><strong class="company-name">${escapeHtml(holding.company_name || holding.ticker)}</strong><span class="ticker">${escapeHtml(order.symbol)}</span>${!order.supported ? '<span class="ticker">Non-US: excluded</span>' : ""}</div></div>`;
+    } },
+    { key: "score", label: "Score", render: ({holding}) => `<strong>${formatNumber(holding.score)}</strong>` },
+    { key: "scorePercentile", label: "Score percentile", render: ({holding}) => `${formatNumber(holding.score_percentile, 1)}%` },
+    { key: "weight", label: "Target weight", render: ({order}) => `${formatNumber(order.weight, 4)}%` },
+    { key: "current", label: "Current position", render: (row) => positionCell(row.current, row.currentCents) },
+    { key: "buy", label: "+ Buy amount", render: (row) => positionCell(row.buy, row.buyCents) },
+    { key: "target", label: "= Target position", render: (row) => positionCell(row.current == null ? null : row.current + row.buy, row.currentCents == null || row.buyCents == null ? null : row.currentCents + row.buyCents) },
+    { key: "limitPrice", label: "Limit price (USD)", render: ({price, priced}) => priced ? `<strong>${formatUsd(Math.round(limitPriceFor(price) * 100))}</strong><span class="ticker">fetched ${formatUsd(Math.round(price * 100))}</span>` : "—" },
+  ],
+});
+
 function renderIbkrOrders() {
-  ibkrRows.innerHTML = exportOrders.map((order, index) => {
-    const holding = exportPortfolio.holdings[index];
-    const logo = holding.logo ? `<img class="logo" src="${escapeHtml(holding.logo)}" alt="" loading="lazy" onerror="this.hidden=true" />` : "";
+  ibkrTable.setRows(exportOrders.map((order, index) => {
     const price = Number(order.limitPrice);
     const priced = order.limitPrice !== "" && Number.isFinite(price) && price > 0;
     const current = order.currentQuantity;
     const buy = order.included ? Number(order.quantity) : 0;
-    const currentCents = current == null || !priced ? null : Math.round(current * price * 100);
-    const buyCents = priced ? Math.round(buy * price * 100) : null;
-    const positionCell = (shares, cents) => shares == null ? "—" : `<strong>${cents == null ? "—" : (cents / 100).toLocaleString("en-US", {style: "currency", currency: "USD"})}</strong><span class="ticker">${formatNumber(shares, 4)} shares</span>`;
-    return `<tr data-order="${index}">
-      <td>${index + 1}</td>
-      <td><div class="company-cell">${logo}<div><strong class="company-name">${escapeHtml(holding.company_name || holding.ticker)}</strong><span class="ticker">${escapeHtml(order.symbol)}</span>${!order.supported ? '<span class="ticker">Non-US: excluded</span>' : ""}</div></div></td>
-      <td><strong>${formatNumber(holding.score)}</strong></td>
-      <td>${formatNumber(holding.score_percentile, 1)}%</td>
-      <td>${formatNumber(order.weight, 4)}%</td>
-      <td>${positionCell(current, currentCents)}</td>
-      <td>${positionCell(buy, buyCents)}</td>
-      <td>${positionCell(current == null ? null : current + buy, currentCents == null || buyCents == null ? null : currentCents + buyCents)}</td>
-      <td>${priced ? `<strong>${limitPriceFor(price).toLocaleString("en-US", {style: "currency", currency: "USD"})}</strong><span class="ticker">fetched ${price.toLocaleString("en-US", {style: "currency", currency: "USD"})}</span>` : "—"}</td>
-    </tr>`;
-  }).join("");
-  applyDraggedColumns();
+    return {
+      index, order, holding: exportPortfolio.holdings[index], price, priced, current, buy,
+      currentCents: current == null || !priced ? null : Math.round(current * price * 100),
+      buyCents: priced ? Math.round(buy * price * 100) : null,
+    };
+  }), { emptyMessage: "No holdings." });
   updateIbkrSummary();
 }
 

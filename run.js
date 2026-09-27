@@ -1,5 +1,4 @@
-import { makeColumnsDraggable, DataTable, bindTablePagination } from "./data-table.js";
-const applyDraggedColumns = makeColumnsDraggable(document.querySelector("#queuedRows").closest("table"), "queue-column-order");
+import { DataTable, bindTablePagination } from "./data-table.js";
 
 const params = new URLSearchParams(window.location.search);
 const stopButton = document.querySelector("#stopButton");
@@ -1279,9 +1278,9 @@ async function extendCurrentRun() {
   }
 }
 
-function queuedProgressCells(progress) {
-  if (progress?.phase === "queued") return `<td>Waiting to retry · ${escapeHtml(progress.last_error || "")}</td><td>—</td><td>—</td><td>—</td>`;
-  if (!progress) return "<td>Waiting / awaiting worker update</td><td>—</td><td>—</td><td>—</td>";
+function queuedProgress(progress) {
+  if (progress?.phase === "queued") return { status: `Waiting to retry · ${escapeHtml(progress.last_error || "")}`, connection: "—", response: "—", activity: "—" };
+  if (!progress) return { status: "Waiting / awaiting worker update", connection: "—", response: "—", activity: "—" };
   const now = Date.now() / 1000;
   const duration = (seconds) => {
     const value = Math.max(0, Math.floor(seconds));
@@ -1292,8 +1291,29 @@ function queuedProgressCells(progress) {
     : duration((progress.connected_at || now) - progress.started_at);
   const response = progress.connected_at ? duration(now - progress.connected_at) : "—";
   const activity = progress.last_activity_at ? `${duration(now - progress.last_activity_at)} ago` : "No response data yet";
-  return `<td>${phase}${progress.attempt > 1 ? ` · attempt ${progress.attempt}` : ""}</td><td>${connection}</td><td>${response}</td><td>${activity}</td>`;
+  return { status: `${phase}${progress.attempt > 1 ? ` · attempt ${progress.attempt}` : ""}`, connection, response, activity };
 }
+
+const queueTable = new DataTable({
+  table: document.querySelector("#queuedTable"),
+  body: document.querySelector("#queuedRows"),
+  selector: document.querySelector("#queueColumnSelector"),
+  selectorOptions: document.querySelector("#queueColumnSelectorOptions"),
+  resetColumnsButton: document.querySelector("#resetQueueColumnsButton"),
+  resetOrderButton: document.querySelector("#resetQueueColumnOrderButton"),
+  storageKey: "queue-table-columns",
+  orderStorageKey: "queue-table-column-order",
+  statusElement: statusEl,
+  columns: [
+    { key: "position", label: "#", configurable: false, pinned: "start", render: (row) => row.position },
+    { key: "company", label: "Company", render: (row) => escapeHtml(row.company_name) },
+    { key: "ticker", label: "Ticker", render: (row) => escapeHtml(row.ticker) },
+    { key: "status", label: "Status", render: (row) => row.live.status },
+    { key: "connection", label: "Connection", render: (row) => row.live.connection },
+    { key: "response", label: "Response", render: (row) => row.live.response },
+    { key: "activity", label: "Last activity", render: (row) => row.live.activity },
+  ],
+});
 
 async function redriveFailedStocks() {
   if (!currentRun) {
@@ -1414,10 +1434,9 @@ function renderRun(run) {
   deleteButton.disabled = false;
 
   if (["queued", "running"].includes(activeResultView)) {
-    document.querySelector("#queuedRows").innerHTML = run.results.length
-      ? run.results.map((row, index) => `<tr><td>${page.offset + index + 1}</td><td>${escapeHtml(row.company_name)}</td><td>${escapeHtml(row.ticker)}</td>${queuedProgressCells(row.progress)}</tr>`).join("")
-      : `<tr><td colspan="7">No stocks ${activeResultView}.</td></tr>`;
-    applyDraggedColumns();
+    queueTable.setRows(run.results.map((row, index) => ({ ...row, position: page.offset + index + 1, live: queuedProgress(row.progress) })), {
+      emptyMessage: `No stocks ${activeResultView}.`,
+    });
     restoreScrollPosition();
     return;
   }
