@@ -17,10 +17,12 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+import xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, unquote, urlparse
+from ibkr_flex import read_flex
 from ibkr_schedule import next_basket_schedule
 from openrouter_transport import ConnectionDeadline, fetch_completion
 
@@ -4764,9 +4766,19 @@ class Handler(SimpleHTTPRequestHandler):
             if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
                 self.send_json({"error": "Use application/json."}, 415)
                 return
+            include_positions = parsed.path.endswith("ibkr-positions")
+            if os.environ.get("IBKR_FLEX_TOKEN") or os.environ.get("IBKR_FLEX_QUERY_ID"):
+                # Flex works on IBKR Lite, which blocks the TWS API.
+                try:
+                    self.send_json({**read_flex(os.environ.get("IBKR_FLEX_TOKEN"), os.environ.get("IBKR_FLEX_QUERY_ID"), include_positions), "source": "flex"})
+                except ValueError as exc:
+                    self.send_json({"error": str(exc)}, 502)
+                except (OSError, ET.ParseError):
+                    self.send_json({"error": "Unable to reach IBKR Flex. Try again."}, 502)
+                return
             try:
                 command = [sys.executable, str(ROOT / "ibkr_cash.py")]
-                if parsed.path.endswith("ibkr-positions"):
+                if include_positions:
                     command.append("--positions")
                 result = subprocess.run(command, capture_output=True, text=True, timeout=35, check=True)
                 payload = json.loads(result.stdout)

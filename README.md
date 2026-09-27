@@ -24,6 +24,23 @@ Commissions are not reserved (IBKR Lite). Review the schedule and
 fractional-order acceptance in TWS before transmitting. Unexpected exchange
 closures may require reviewing the date manually.
 
+### Read positions and cash with IBKR Flex (works on IBKR Lite)
+
+IBKR Lite blocks the TWS API, so **All cash** and position balancing can read a
+Flex Query instead. Flex is reporting-only and cannot place orders.
+
+1. In the IBKR Portal, open **Performance & Reports → Flex Queries** and create an
+   **Activity Flex Query** with the **Open Positions** section (Summary; Symbol,
+   Asset Class, Currency, Quantity) and the **Cash Report** section. Use XML
+   format and period **Last Business Day**. Save it and note its Query ID.
+2. On the same page, open **Flex Web Service Configuration**, enable it, and
+   generate a token.
+3. Add `IBKR_FLEX_TOKEN=...` and `IBKR_FLEX_QUERY_ID=...` to `.env` (not
+   committed), then restart the app.
+
+When both are set, the app uses Flex instead of TWS. Flex data is as of the last
+business day and excludes pending orders and newer deposits.
+
 **Save IBKR CSV to Jts** replaces `~/Jts/ibkr_basket.csv` only after validation
 and a complete write. Saving creates a file; it never submits orders.
 

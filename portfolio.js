@@ -92,14 +92,15 @@ document.querySelector("#allCashIbkr").addEventListener("click", async () => {
   button.disabled = true;
   document.querySelector("#calculateIbkr").disabled = true;
   updateIbkrSummary();
-  ibkrStatus.textContent = "Reading available cash from TWS…";
+  ibkrStatus.textContent = "Reading available cash from IBKR…";
   try {
     const response = await fetch("/api/portfolios/ibkr-cash", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Unable to read cash.");
     document.querySelector("#ibkrBudget").value = result.cash;
     exportOrders = exportOrders.map(order => ({...order, quantity: 0}));
-    ibkrStatus.textContent = `Budget set to $${result.cash}. Fetch prices and calculate shares next.`;
+    const asOf = result.asOf ? ` (Flex report as of ${result.asOf.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3")}; newer deposits and pending orders are not included)` : "";
+    ibkrStatus.textContent = `Budget set to $${result.cash}${asOf}. Fetch prices and calculate shares next.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally {
     savingBasket = false;
@@ -140,7 +141,7 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
     if (!response.ok) throw new Error(result.error || "Price fetch failed.");
     exportOrders = exportOrders.map(order => ({...order, limitPrice: result.prices[order.sourceSymbol] || ""}));
     if (balance) {
-      ibkrStatus.textContent = "Reading current positions from TWS…";
+      ibkrStatus.textContent = "Reading current positions from IBKR…";
       const positionsResponse = await fetch("/api/portfolios/ibkr-positions", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
       const snapshot = await positionsResponse.json();
       if (!positionsResponse.ok) throw new Error(snapshot.error || "Unable to read positions.");
