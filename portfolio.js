@@ -8,7 +8,6 @@ let basketSchedule = null;
 const ibkrRows = document.querySelector("#ibkrOrders");
 const ibkrStatus = document.querySelector("#ibkrStatus");
 const saveIbkrButton = document.querySelector("#saveIbkr");
-const saveRiskNavigatorButton = document.querySelector("#saveRiskNavigator");
 
 function showPortfolioView() {
   const exporting = Boolean(exportPortfolio) && window.location.hash === "#ibkr";
@@ -95,11 +94,9 @@ function updateIbkrSummary() {
     const omitted = exportOrders.length - orders.length;
     summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} maximum at limit prices.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
     saveIbkrButton.disabled = savingBasket || !orders.length || !basketSchedule;
-    saveRiskNavigatorButton.disabled = saveIbkrButton.disabled;
   } catch (error) {
     summary.textContent = error.message;
     saveIbkrButton.disabled = true;
-    saveRiskNavigatorButton.disabled = true;
   }
 }
 
@@ -173,29 +170,24 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally { savingBasket = false; button.disabled = false; document.querySelector("#balanceIbkr").disabled = false; document.querySelector("#ibkrBudget").disabled = false; renderIbkrOrders(); }
 });
-async function saveIbkrFile(format) {
+saveIbkrButton.addEventListener("click", async () => {
   if (savingBasket) return;
   savingBasket = true;
   document.querySelector("#calculateIbkr").disabled = true;
   saveIbkrButton.disabled = true;
-  saveRiskNavigatorButton.disabled = true;
   ibkrStatus.textContent = "Rechecking fresh US prices and saving CSV…";
   try {
     const response = await fetch("/api/portfolios/export-ibkr", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: exportPortfolio.name, orders: reviewedIbkrOrders(), scheduledAt: basketSchedule?.scheduledAt, format }),
+      body: JSON.stringify({ name: exportPortfolio.name, orders: reviewedIbkrOrders(), scheduledAt: basketSchedule?.scheduledAt }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Could not save IBKR CSV.");
-    ibkrStatus.textContent = format === "risk-navigator"
-      ? `Saved ${result.orderCount} ${result.orderCount === 1 ? "buy" : "buys"} to ${result.path}. In Risk Navigator, choose Portfolio → Import and select this file, then select every row, right-click, and choose Add Portfolio. Review the orders before transmitting.`
-      : `Saved ${result.orderCount} ${result.orderCount === 1 ? "order" : "orders"} to ${result.path}. In BasketTrader, click Browse, select this file, then Load. Scheduled for ${result.label}. Verify the activation time before transmitting.`;
+    ibkrStatus.textContent = `Saved ${result.orderCount} ${result.orderCount === 1 ? "order" : "orders"}. IBKR Lite: in Risk Navigator, choose Portfolio → Import, select ${result.riskNavigatorPath}, select every row, right-click, and choose Add Portfolio. IBKR Pro: load ${result.path} in BasketTrader (scheduled for ${result.label}). Review the orders before transmitting.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally { savingBasket = false; document.querySelector("#calculateIbkr").disabled = false; renderIbkrOrders(); }
-}
-saveIbkrButton.addEventListener("click", () => saveIbkrFile("basket"));
-saveRiskNavigatorButton.addEventListener("click", () => saveIbkrFile("risk-navigator"));
+});
 
 const PORTFOLIO_PREVIEW_STORAGE_KEY = "ai-stock-scorer-portfolio-preview-v1";
 const statusEl = document.querySelector("#portfolioStatus");

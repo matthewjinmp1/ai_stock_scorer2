@@ -2706,8 +2706,6 @@ def export_ibkr_basket(payload):
     """Save reviewed stock orders locally; this does not contact a broker."""
     if not isinstance(payload, dict):
         raise ValueError("Expected an order basket.")
-    # Risk Navigator's "Add Portfolio" orders each imported quantity as-is, so it gets the buy amounts.
-    risk_navigator = payload.get("format") == "risk-navigator"
     orders = payload.get("orders")
     if not isinstance(orders, list) or not 1 <= len(orders) <= 10000:
         raise ValueError("Include between 1 and 10,000 orders.")
@@ -2744,9 +2742,6 @@ def export_ibkr_basket(payload):
         if row[-1] != fresh[source_symbol]:
             raise ValueError("Prices changed. Fetch prices and calculate shares again before saving.")
         row[-1] = fresh[source_symbol]
-    if risk_navigator:
-        path = _write_jts_csv("ibkr_risk_navigator.csv", ["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency"], [row[:6] for row in rows])
-        return {"path": str(path), "filename": path.name, "orderCount": len(rows)}
     schedule = next_basket_schedule()
     if payload.get("scheduledAt") and payload["scheduledAt"] != schedule["scheduledAt"]:
         raise ValueError("The trading date changed. Fetch prices and calculate again to review the new schedule.")
@@ -2757,12 +2752,14 @@ def export_ibkr_basket(payload):
         limit = Decimal(-(-cents * (100 + IBKR_LIMIT_BUFFER_PERCENT) // 100)) / 100
         row[7:] = ["LMT", f"{limit:.2f}", schedule["goodAfter"], "FALSE"]
         total += Decimal(row[1]) * limit
+    # Risk Navigator (IBKR Lite has no BasketTrader) orders each imported quantity as-is via Add Portfolio.
+    risk_navigator_path = _write_jts_csv("ibkr_risk_navigator.csv", ["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency"], [row[:6] for row in rows])
     path = _write_jts_csv("ibkr_basket.csv", ["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "LmtPrice", "GoodAfterTime", "OutsideRth"], rows)
     filename = path.name
     for old_path in IBKR_EXPORT_DIR.glob("ibkr_*.csv"):
         if old_path.name == "ibkr_basket_example.csv" or re.fullmatch(r"ibkr_.+_\d{8}_\d{6}_[0-9a-f]{8}\.csv", old_path.name):
             old_path.unlink()
-    return {"path": str(path), "filename": filename, "orderCount": len(rows), "estimatedValue": str(total), **schedule}
+    return {"path": str(path), "riskNavigatorPath": str(risk_navigator_path), "filename": filename, "orderCount": len(rows), "estimatedValue": str(total), **schedule}
 
 
 def _run_result_sort_value(result, key):

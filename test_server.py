@@ -1832,20 +1832,20 @@ class PortfolioTests(ServerTestCase):
         self.assertEqual(first["estimatedValue"], "707.52")
         self.assertEqual(first["orderCount"], 2)
 
-    def test_risk_navigator_export_writes_buy_amounts(self):
+    def test_export_also_writes_risk_navigator_buy_amounts(self):
         destination = self.root / "Jts"
-        payload = {"format": "risk-navigator", "orders": [
+        payload = {"orders": [
             {"symbol": "AAPL", "quantity": 0.5, "limitPrice": "150.25"},
             {"symbol": "BRK B", "quantity": 1, "limitPrice": "400.00"},
         ]}
         with mock.patch.object(server, "IBKR_EXPORT_DIR", destination):
             result = server.export_ibkr_basket(payload)
-            with open(result["path"], newline="") as handle:
+            with open(result["riskNavigatorPath"], newline="") as handle:
                 rows = list(csv.DictReader(handle))
-        self.assertEqual(Path(result["path"]).name, "ibkr_risk_navigator.csv")
+        self.assertEqual(Path(result["riskNavigatorPath"]).name, "ibkr_risk_navigator.csv")
         self.assertEqual(rows[0], dict(Action="BUY", Quantity="0.5", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD"))
         self.assertEqual(rows[1]["Symbol"], "BRK B")
-        self.assertFalse((destination / "ibkr_basket.csv").exists())
+        self.assertTrue((destination / "ibkr_basket.csv").exists())
 
     def test_ibkr_export_blocks_stale_schedule_before_replacing_file(self):
         destination = self.root / "scheduled"
@@ -1888,7 +1888,7 @@ class PortfolioTests(ServerTestCase):
         payload = {"orders": [{"symbol": "AAPL", "quantity": 1, "limitPrice": "150.25"}]}
         with mock.patch.object(server, "IBKR_EXPORT_DIR", destination):
             server.export_ibkr_basket(payload)
-            self.assertEqual(sorted(path.name for path in destination.iterdir()), ["ibkr_basket.csv", "unrelated.csv"])
+            self.assertEqual(sorted(path.name for path in destination.iterdir()), ["ibkr_basket.csv", "ibkr_risk_navigator.csv", "unrelated.csv"])
             original = (destination / "ibkr_basket.csv").read_text()
             payload["orders"][0]["quantity"] = 2
             with mock.patch.object(Path, "replace", side_effect=OSError("write failed")):
@@ -1904,7 +1904,7 @@ class PortfolioTests(ServerTestCase):
             result = server.export_ibkr_basket({"orders": [
                 {"symbol": "GOOG", "quantity": 0.064, "limitPrice": "341.76"}
             ]})
-            files = list((self.root / "fractional").glob("*.csv"))
+            files = list((self.root / "fractional").glob("ibkr_basket.csv"))
             self.assertEqual(len(files), 1)
             self.assertIn("BUY,0.064,GOOG", files[0].read_text())
 
