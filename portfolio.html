@@ -56,7 +56,7 @@
           <h2 id="ibkrExportTitle" tabindex="-1">Export to IBKR</h2>
           <p>Create US stock BUY limit orders using SMART routing, USD and DAY, scheduled for 10:30 a.m. Eastern on the next trading day. Prices are freshly fetched from CompaniesMarketCap and may be delayed. Non-US holdings are excluded.</p>
           <p id="ibkrSchedule" role="status">The exact trading date appears after calculating. Weekends and NYSE holidays are skipped.</p>
-          <p>Each limit is 3% above the fetched price, rounded up to the cent, so orders fill like market orders unless the price rises more than 3%; unfilled orders expire at the close. Limit orders can be submitted on weekends and stay commission-free on IBKR Lite, unlike market orders placed before the open.</p>
+          <p>Each limit is 1% above the fetched price, rounded up to the cent, so orders fill like market orders unless the price rises more than 1%; unfilled orders expire at the close. Limit orders can be submitted on weekends and stay commission-free on IBKR Lite, unlike market orders placed before the open.</p>
           <div class="actions ibkr-budget-controls">
             <label>Budget (USD)<input id="ibkrBudget" type="number" min="0.01" max="1000000000000" step="0.01" placeholder="Enter amount" /></label>
             <button id="allCashIbkr" class="secondary-button" type="button">All cash</button>

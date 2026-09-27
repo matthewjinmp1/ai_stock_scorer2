@@ -29,7 +29,7 @@ from openrouter_transport import ConnectionDeadline, fetch_completion
 
 ROOT = Path(__file__).resolve().parent
 IBKR_EXPORT_DIR = Path.home() / "Jts"
-IBKR_LIMIT_BUFFER_PERCENT = 3
+IBKR_LIMIT_BUFFER_PERCENT = 1
 SOURCE_URL = "https://companiesmarketcap.com/"
 COMPANY_UNIVERSE_LIMIT = 2000
 COMPANIESMARKETCAP_PAGE_SIZE = 100

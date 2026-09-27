@@ -1826,10 +1826,10 @@ class PortfolioTests(ServerTestCase):
         self.assertEqual(Path(first["path"]).parent, destination)
         with open(first["path"], newline="") as handle:
             rows = list(csv.DictReader(handle))
-        self.assertEqual(rows[0], dict(Action="BUY", Quantity="2", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD", TimeInForce="DAY", OrderType="LMT", LmtPrice="154.76", GoodAfterTime=first["goodAfter"], OutsideRth="FALSE"))
+        self.assertEqual(rows[0], dict(Action="BUY", Quantity="2", Symbol="AAPL", SecType="STK", Exchange="SMART", Currency="USD", TimeInForce="DAY", OrderType="LMT", LmtPrice="151.76", GoodAfterTime=first["goodAfter"], OutsideRth="FALSE"))
         self.assertEqual(rows[1]["Symbol"], "BRK B")
-        self.assertEqual(rows[1]["LmtPrice"], "412.00")
-        self.assertEqual(first["estimatedValue"], "721.52")
+        self.assertEqual(rows[1]["LmtPrice"], "404.00")
+        self.assertEqual(first["estimatedValue"], "707.52")
         self.assertEqual(first["orderCount"], 2)
 
     def test_ibkr_export_blocks_stale_schedule_before_replacing_file(self):

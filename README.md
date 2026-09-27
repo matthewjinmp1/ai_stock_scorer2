@@ -8,9 +8,9 @@ click **Fetch prices & calculate shares**. Fresh CompaniesMarketCap US prices
 are used only for sizing; stored prices are never substituted.
 
 Exports contain BUY / LMT / DAY orders, SMART routing, and fractional quantities
-rounded down to four decimal places. Each **LmtPrice** is 3% above the freshly
+rounded down to four decimal places. Each **LmtPrice** is 1% above the freshly
 fetched price, rounded up to the cent, so orders fill like market orders unless
-the price rises more than 3% by activation; unfilled orders expire at the close.
+the price rises more than 1% by activation; unfilled orders expire at the close.
 **GoodAfterTime** schedules activation at 10:30 Eastern on the next trading day
 (strictly after today), skipping weekends and NYSE holidays. **OutsideRth** is
 FALSE. The exact date appears before saving. This is a one-time schedule, not a

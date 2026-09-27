@@ -15,7 +15,7 @@ export function draftOrders(holdings) {
 
 // Limits sit above the fetched price so scheduled orders fill like market orders. IBKR Lite
 // treats market orders placed before the open as OnOpen orders, which lose commission-free pricing.
-export const LIMIT_BUFFER_PERCENT = 3;
+export const LIMIT_BUFFER_PERCENT = 1;
 
 export function limitPriceFor(price) {
   return Math.ceil(Math.round(Number(price) * 100) * (100 + LIMIT_BUFFER_PERCENT) / 100) / 100;
