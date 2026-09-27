@@ -2684,10 +2684,31 @@ def fetch_ibkr_prices(symbols):
     raise ValueError("No fresh US price found for: " + ", ".join(sorted(wanted - prices.keys())))
 
 
+def _write_jts_csv(filename, header, rows):
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(header)
+    writer.writerows(rows)
+    IBKR_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    path = IBKR_EXPORT_DIR / filename
+    temporary = IBKR_EXPORT_DIR / f".{path.stem}_{uuid.uuid4().hex}.tmp"
+    try:
+        with temporary.open("x", encoding="utf-8", newline="") as handle:
+            handle.write(output.getvalue())
+        # Replace only after a complete write; failures preserve the previous file.
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return path
+
+
 def export_ibkr_basket(payload):
     """Save reviewed stock orders locally; this does not contact a broker."""
     if not isinstance(payload, dict):
         raise ValueError("Expected an order basket.")
+    # Risk Navigator imports target positions and orders the difference from current holdings.
+    risk_navigator = payload.get("format") == "risk-navigator"
+    targets = []
     orders = payload.get("orders")
     if not isinstance(orders, list) or not 1 <= len(orders) <= 10000:
         raise ValueError("Include between 1 and 10,000 orders.")
@@ -2715,6 +2736,14 @@ def export_ibkr_basket(payload):
         if not price.is_finite() or not Decimal("0.01") <= price <= Decimal("1000000000") or price != price.quantize(Decimal("0.01")):
             raise ValueError(f"{symbol}: limit price must be positive with at most two decimal places.")
         rows.append(["BUY", format(quantity.normalize(), "f"), symbol, "STK", "SMART", "USD", "DAY", "LMT", f"{price:.2f}"])
+        if risk_navigator:
+            try:
+                current = Decimal(str(order.get("currentQuantity", "")))
+            except InvalidOperation:
+                current = Decimal("NaN")
+            if not current.is_finite() or current < 0:
+                raise ValueError(f"{symbol}: current position is required. Enable position balancing and calculate again.")
+            targets.append(["BUY", format((current + quantity).normalize(), "f"), symbol, "STK", "SMART", "USD"])
     source_symbols = [order.get("sourceSymbol", order["symbol"].strip().upper().replace(" ", "-").replace(".", "-")) for order in orders]
     for order, source_symbol in zip(orders, source_symbols):
         if not isinstance(source_symbol, str) or source_symbol.replace(".", "-") != order["symbol"].strip().upper().replace(" ", "-").replace(".", "-"):
@@ -2724,6 +2753,9 @@ def export_ibkr_basket(payload):
         if row[-1] != fresh[source_symbol]:
             raise ValueError("Prices changed. Fetch prices and calculate shares again before saving.")
         row[-1] = fresh[source_symbol]
+    if risk_navigator:
+        path = _write_jts_csv("ibkr_risk_navigator.csv", ["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency"], targets)
+        return {"path": str(path), "filename": path.name, "orderCount": len(targets)}
     schedule = next_basket_schedule()
     if payload.get("scheduledAt") and payload["scheduledAt"] != schedule["scheduledAt"]:
         raise ValueError("The trading date changed. Fetch prices and calculate again to review the new schedule.")
@@ -2734,21 +2766,8 @@ def export_ibkr_basket(payload):
         limit = Decimal(-(-cents * (100 + IBKR_LIMIT_BUFFER_PERCENT) // 100)) / 100
         row[7:] = ["LMT", f"{limit:.2f}", schedule["goodAfter"], "FALSE"]
         total += Decimal(row[1]) * limit
-    output = io.StringIO(newline="")
-    writer = csv.writer(output)
-    writer.writerow(["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "LmtPrice", "GoodAfterTime", "OutsideRth"])
-    writer.writerows(rows)
-    filename = "ibkr_basket.csv"
-    IBKR_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    path = IBKR_EXPORT_DIR / filename
-    temporary = IBKR_EXPORT_DIR / f".ibkr_basket_{uuid.uuid4().hex}.tmp"
-    try:
-        with temporary.open("x", encoding="utf-8", newline="") as handle:
-            handle.write(output.getvalue())
-        # Replace only after a complete write; failures preserve the previous basket.
-        temporary.replace(path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    path = _write_jts_csv("ibkr_basket.csv", ["Action", "Quantity", "Symbol", "SecType", "Exchange", "Currency", "TimeInForce", "OrderType", "LmtPrice", "GoodAfterTime", "OutsideRth"], rows)
+    filename = path.name
     for old_path in IBKR_EXPORT_DIR.glob("ibkr_*.csv"):
         if old_path.name == "ibkr_basket_example.csv" or re.fullmatch(r"ibkr_.+_\d{8}_\d{6}_[0-9a-f]{8}\.csv", old_path.name):
             old_path.unlink()

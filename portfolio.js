@@ -8,6 +8,7 @@ let basketSchedule = null;
 const ibkrRows = document.querySelector("#ibkrOrders");
 const ibkrStatus = document.querySelector("#ibkrStatus");
 const saveIbkrButton = document.querySelector("#saveIbkr");
+const saveRiskNavigatorButton = document.querySelector("#saveRiskNavigator");
 
 function showPortfolioView() {
   const exporting = Boolean(exportPortfolio) && window.location.hash === "#ibkr";
@@ -80,7 +81,7 @@ function reviewedIbkrOrders() {
   return selected.filter(order => Number(order.quantity) > 0).map(order => {
     const price = Number(order.limitPrice);
     if (!Number.isFinite(price) || price < 0.01 || price > 1e9 || Math.abs(price * 100 - Math.round(price * 100)) > 1e-6) throw new Error(`${order.symbol}: fetch a valid source price before saving.`);
-    return { symbol: order.symbol, sourceSymbol: order.sourceSymbol, quantity: Number(order.quantity), limitPrice: price.toFixed(2) };
+    return { symbol: order.symbol, sourceSymbol: order.sourceSymbol, quantity: Number(order.quantity), limitPrice: price.toFixed(2), currentQuantity: order.currentQuantity };
   });
 }
 
@@ -94,9 +95,11 @@ function updateIbkrSummary() {
     const omitted = exportOrders.length - orders.length;
     summary.textContent = `${orders.length} ${orders.length === 1 ? "order" : "orders"} · $${formatNumber(total)} maximum at limit prices.${remaining} ${omitted} ${omitted === 1 ? "holding" : "holdings"} omitted (excluded or zero shares).`;
     saveIbkrButton.disabled = savingBasket || !orders.length || !basketSchedule;
+    saveRiskNavigatorButton.disabled = saveIbkrButton.disabled || orders.some(order => order.currentQuantity == null);
   } catch (error) {
     summary.textContent = error.message;
     saveIbkrButton.disabled = true;
+    saveRiskNavigatorButton.disabled = true;
   }
 }
 
@@ -170,24 +173,29 @@ document.querySelector("#calculateIbkr").addEventListener("click", async () => {
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally { savingBasket = false; button.disabled = false; document.querySelector("#balanceIbkr").disabled = false; document.querySelector("#ibkrBudget").disabled = false; renderIbkrOrders(); }
 });
-saveIbkrButton.addEventListener("click", async () => {
+async function saveIbkrFile(format) {
   if (savingBasket) return;
   savingBasket = true;
   document.querySelector("#calculateIbkr").disabled = true;
   saveIbkrButton.disabled = true;
+  saveRiskNavigatorButton.disabled = true;
   ibkrStatus.textContent = "Rechecking fresh US prices and saving CSV…";
   try {
     const response = await fetch("/api/portfolios/export-ibkr", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: exportPortfolio.name, orders: reviewedIbkrOrders(), scheduledAt: basketSchedule?.scheduledAt }),
+      body: JSON.stringify({ name: exportPortfolio.name, orders: reviewedIbkrOrders(), scheduledAt: basketSchedule?.scheduledAt, format }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Could not save IBKR CSV.");
-    ibkrStatus.textContent = `Saved ${result.orderCount} ${result.orderCount === 1 ? "order" : "orders"} to ${result.path}. In BasketTrader, click Browse, select this file, then Load. Scheduled for ${result.label}. Verify the activation time before transmitting.`;
+    ibkrStatus.textContent = format === "risk-navigator"
+      ? `Saved ${result.orderCount} target ${result.orderCount === 1 ? "position" : "positions"} to ${result.path}. In Risk Navigator, choose Portfolio → Import, select this file, then trade the positions. Orders are the difference from your holdings, so only trade if positions haven't changed since the last Flex report.`
+      : `Saved ${result.orderCount} ${result.orderCount === 1 ? "order" : "orders"} to ${result.path}. In BasketTrader, click Browse, select this file, then Load. Scheduled for ${result.label}. Verify the activation time before transmitting.`;
   } catch (error) { ibkrStatus.textContent = error.message; }
   finally { savingBasket = false; document.querySelector("#calculateIbkr").disabled = false; renderIbkrOrders(); }
-});
+}
+saveIbkrButton.addEventListener("click", () => saveIbkrFile("basket"));
+saveRiskNavigatorButton.addEventListener("click", () => saveIbkrFile("risk-navigator"));
 
 const PORTFOLIO_PREVIEW_STORAGE_KEY = "ai-stock-scorer-portfolio-preview-v1";
 const statusEl = document.querySelector("#portfolioStatus");
